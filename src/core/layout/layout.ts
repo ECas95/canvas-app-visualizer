@@ -1,5 +1,6 @@
 import type { CanvasControl } from "../../types/canvas";
 import {
+  staticBoolean,
   staticNumber,
   staticString,
   type StaticPowerFxValue
@@ -20,6 +21,11 @@ export interface LayoutContext {
   appHeight: number;
   templateWidth?: number;
   templateHeight?: number;
+}
+
+export interface PositionedControl {
+  control: CanvasControl;
+  rect: VisualRect;
 }
 
 const DEFAULTS: Record<string, { width: number; height: number }> = {
@@ -96,7 +102,9 @@ export function rgba(value: unknown): string | null {
   );
 }
 
-function defaultsFor(type: string): { width: number; height: number } {
+export function defaultControlSize(
+  type: string
+): { width: number; height: number } {
   const lower = type.toLowerCase();
   const key = Object.keys(DEFAULTS).find(candidate =>
     lower.includes(candidate)
@@ -111,12 +119,23 @@ function resolvedNumber(
   return staticNumber(value, symbols);
 }
 
+function clamp(
+  value: number,
+  min: number | null,
+  max: number | null
+): number {
+  let result = value;
+  if (min !== null) result = Math.max(result, min);
+  if (max !== null) result = Math.min(result, max);
+  return Math.max(0, result);
+}
+
 export function controlRect(
   control: CanvasControl,
   index: number,
   context?: LayoutContext
 ): VisualRect {
-  const defaults = defaultsFor(control.controlType);
+  const defaults = defaultControlSize(control.controlType);
   const baseSymbols = layoutSymbols(context);
 
   const width = resolvedNumber(control.properties.Width, baseSymbols);
@@ -145,4 +164,199 @@ export function controlRect(
       width === null ||
       height === null
   };
+}
+
+export function isAutoLayout(control: CanvasControl | undefined): boolean {
+  return (
+    control?.controlType.toLowerCase().includes("groupcontainer") === true &&
+    control.variant?.toLowerCase() === "autolayout"
+  );
+}
+
+function enumTail(value: string | null): string | null {
+  if (!value) return null;
+  return value.split(".").at(-1)?.toLowerCase() ?? null;
+}
+
+export function autoLayoutChildren(
+  parent: CanvasControl,
+  context: LayoutContext
+): PositionedControl[] {
+  const children = parent.children;
+  if (children.length === 0) return [];
+
+  const symbols = layoutSymbols(context) ?? {};
+  const direction =
+    enumTail(staticString(parent.properties.LayoutDirection, symbols)) ??
+    parent.layout?.toLowerCase() ??
+    "vertical";
+  const horizontal = direction.includes("horizontal");
+
+  const gap = staticNumber(parent.properties.LayoutGap, symbols) ?? 0;
+  const paddingLeft = staticNumber(parent.properties.PaddingLeft, symbols) ?? 0;
+  const paddingRight = staticNumber(parent.properties.PaddingRight, symbols) ?? 0;
+  const paddingTop = staticNumber(parent.properties.PaddingTop, symbols) ?? 0;
+  const paddingBottom = staticNumber(parent.properties.PaddingBottom, symbols) ?? 0;
+
+  const innerWidth = Math.max(
+    0,
+    context.parentWidth - paddingLeft - paddingRight
+  );
+  const innerHeight = Math.max(
+    0,
+    context.parentHeight - paddingTop - paddingBottom
+  );
+  const mainAvailable =
+    (horizontal ? innerWidth : innerHeight) -
+    Math.max(0, children.length - 1) * gap;
+  const crossAvailable = horizontal ? innerHeight : innerWidth;
+
+  const sizing = children.map(control => {
+    const defaults = defaultControlSize(control.controlType);
+    const width = staticNumber(control.properties.Width, symbols);
+    const height = staticNumber(control.properties.Height, symbols);
+    const fill = Math.max(
+      0,
+      staticNumber(control.properties.FillPortions, symbols) ?? 0
+    );
+
+    const minWidth = staticNumber(control.properties.LayoutMinWidth, symbols);
+    const minHeight = staticNumber(control.properties.LayoutMinHeight, symbols);
+    const maxWidth = staticNumber(control.properties.LayoutMaxWidth, symbols);
+    const maxHeight = staticNumber(control.properties.LayoutMaxHeight, symbols);
+
+    const baseWidth = clamp(width ?? defaults.width, minWidth, maxWidth);
+    const baseHeight = clamp(height ?? defaults.height, minHeight, maxHeight);
+
+    return {
+      control,
+      fill,
+      width,
+      height,
+      minWidth,
+      minHeight,
+      maxWidth,
+      maxHeight,
+      baseWidth,
+      baseHeight
+    };
+  });
+
+  const fixedMain = sizing.reduce((sum, item) => {
+    if (item.fill > 0) return sum;
+    return sum + (horizontal ? item.baseWidth : item.baseHeight);
+  }, 0);
+  const fillTotal = sizing.reduce((sum, item) => sum + item.fill, 0);
+  const remainingForFill = Math.max(0, mainAvailable - fixedMain);
+
+  const provisional = sizing.map(item => {
+    let width = item.baseWidth;
+    let height = item.baseHeight;
+    let fallback = false;
+
+    if (item.fill > 0 && fillTotal > 0) {
+      const allocated = remainingForFill * (item.fill / fillTotal);
+      if (horizontal) {
+        width = clamp(allocated, item.minWidth, item.maxWidth);
+      } else {
+        height = clamp(allocated, item.minHeight, item.maxHeight);
+      }
+    } else if (
+      (horizontal ? item.width : item.height) === null &&
+      item.fill === 0
+    ) {
+      fallback = true;
+    }
+
+    const parentAlign =
+      enumTail(staticString(parent.properties.LayoutAlignItems, symbols)) ??
+      "start";
+    const childAlign =
+      enumTail(staticString(item.control.properties.AlignInContainer, symbols)) ??
+      parentAlign;
+
+    if (childAlign === "stretch") {
+      if (horizontal) {
+        height = clamp(
+          crossAvailable,
+          item.minHeight,
+          item.maxHeight
+        );
+      } else {
+        width = clamp(
+          crossAvailable,
+          item.minWidth,
+          item.maxWidth
+        );
+      }
+    } else if (
+      (horizontal ? item.height : item.width) === null
+    ) {
+      fallback = true;
+    }
+
+    return {
+      ...item,
+      width: Math.max(8, width),
+      height: Math.max(8, height),
+      fallback,
+      childAlign
+    };
+  });
+
+  const usedMain = provisional.reduce(
+    (sum, item) => sum + (horizontal ? item.width : item.height),
+    0
+  );
+  const extra = Math.max(0, mainAvailable - usedMain);
+  const justify =
+    enumTail(staticString(parent.properties.LayoutJustifyContent, symbols)) ??
+    "start";
+
+  let leading = 0;
+  let effectiveGap = gap;
+
+  if (fillTotal === 0) {
+    if (justify === "center") leading = extra / 2;
+    else if (justify === "end") leading = extra;
+    else if (justify === "spacebetween" && children.length > 1) {
+      effectiveGap = gap + extra / (children.length - 1);
+    }
+  }
+
+  let cursor = (horizontal ? paddingLeft : paddingTop) + leading;
+
+  return provisional.map(item => {
+    let x = horizontal ? cursor : paddingLeft;
+    let y = horizontal ? paddingTop : cursor;
+
+    if (item.childAlign === "center") {
+      if (horizontal) y += (crossAvailable - item.height) / 2;
+      else x += (crossAvailable - item.width) / 2;
+    } else if (item.childAlign === "end") {
+      if (horizontal) y += crossAvailable - item.height;
+      else x += crossAvailable - item.width;
+    }
+
+    const rect: VisualRect = {
+      x,
+      y,
+      width: item.width,
+      height: item.height,
+      dynamic: item.fallback
+    };
+
+    cursor +=
+      (horizontal ? item.width : item.height) + effectiveGap;
+
+    return { control: item.control, rect };
+  });
+}
+
+export function layoutWrapEnabled(
+  control: CanvasControl,
+  context: LayoutContext
+): boolean {
+  const symbols = layoutSymbols(context);
+  return staticBoolean(control.properties.LayoutWrap, symbols) ?? false;
 }
