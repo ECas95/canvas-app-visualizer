@@ -220,15 +220,21 @@ Implemented now:
 - iterative sibling geometry resolution for expressions such as `Parent.Height - Header.Height`;
 - approximate AutoLayout flow for supported, statically resolvable properties.
 
+Authoritative syntax layer:
+
+- a pinned .NET 10 WebAssembly build of Microsoft.PowerFx.Core 1.8.1 is produced in CI;
+- the deployed site lazy-loads that runtime locally and batch-parses Canvas formulas;
+- official parser errors/warnings are mapped back to file, control/property, formula, and source span;
+- the TypeScript lexer becomes fallback/indexing infrastructure when the WebAssembly engine is unavailable.
+
 Not yet authoritative:
 
-- full official Power Fx parsing;
-- binding/type checking;
+- app-aware binding/type checking;
 - complete expression evaluation;
 - Canvas control/runtime emulation;
 - connector/delegation runtime equivalence.
 
-These belong to the official-engine WebAssembly phase, not to additional TypeScript regex rules.
+These remaining layers require a Canvas-aware symbol/runtime model and must not be approximated by adding more TypeScript regex rules.
 
 ## Upstream references
 

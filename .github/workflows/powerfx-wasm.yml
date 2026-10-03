@@ -41,6 +41,7 @@ jobs:
         run: |
           test -d powerfx-wasm/artifacts/publish/wwwroot/_framework
           test -f powerfx-wasm/artifacts/publish/wwwroot/_framework/blazor.webassembly.js
+          test -f powerfx-wasm/artifacts/publish/wwwroot/_framework/dotnet.js
 
       - name: Upload semantic engine artifact
         uses: actions/upload-artifact@v4
