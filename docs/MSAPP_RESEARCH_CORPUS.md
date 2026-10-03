@@ -22,6 +22,31 @@ Upstream references:
 - https://github.com/microsoft/PowerApps-Tooling/tree/master/schemas/pa-yaml/v3.0
 - https://github.com/microsoft/power-platform-skills/tree/main/plugins/canvas-apps
 
+
+## Official current-source corpus
+
+Microsoft publishes a substantial current Canvas source tree in:
+
+https://github.com/microsoft/scmsamples-EnterpriseAssetManagement/tree/main/CanvasAppSource/Src
+
+This corpus contains a large `App.pa.yaml`, many real screen files, reusable components, and `_EditorState.pa.yaml`. It is useful because it exercises current serialization at a scale far beyond minimal documentation snippets.
+
+Patterns observed during this research pass include:
+
+- versioned controls such as `GroupContainer@1.3.0`, `Label@2.5.1`, and `Classic/Button@2.2.0`;
+- `CanvasComponent` instances with `ComponentName`;
+- AutoLayout containers using `LayoutDirection`, `LayoutGap`, padding, alignment, and justification;
+- formulas that depend on sibling control geometry, for example a body height derived from a header's `.Height`;
+- formulas that depend on `Parent`, `Self`, and `App` geometry;
+- multiline formulas containing comments;
+- behavior chains separated with semicolons;
+- quoted enum/font identifiers such as `Font.'Open Sans'`;
+- percent literals such as `-15%`;
+- large app-level record constants and style/configuration structures created in `App.OnStart`;
+- `EditorState.ScreensOrder` and `ComponentDefinitionsOrder`.
+
+These patterns directly drive regression tests and renderer work. In particular, the preview now resolves a safe subset of `Parent`/`Self`/`App` arithmetic and iteratively resolves statically known sibling geometry before falling back to dashed dynamic controls.
+
 ## Public PnP Power Fx sample packages
 
 The public `pnp/powerfx-samples` repository contains downloadable historical `.msapp` packages together with unpacked source trees. Examples found during the research pass include:
