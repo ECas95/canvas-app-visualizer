@@ -1,5 +1,6 @@
 import type { CanvasControl, CanvasScreen } from "../types/canvas";
 import { controlRect, literalText, rgba } from "../core/layout/layout";
+import { Icon } from "./Icon";
 
 interface Props {
   screen?: CanvasScreen;
@@ -48,88 +49,109 @@ function flatten(
 
 function colorFor(type: string): string {
   const lower = type.toLowerCase();
-  if (lower.includes("button")) return "#6648d8";
-  if (lower.includes("gallery")) return "#0e7490";
-  if (lower.includes("input")) return "#8b5e00";
-  if (lower.includes("image") || lower.includes("icon")) return "#9f3567";
-  if (lower.includes("container")) return "#3f5d45";
-  return "#3e4b66";
+  if (lower.includes("button")) return "#0f6cbd";
+  if (lower.includes("gallery")) return "#107c6c";
+  if (lower.includes("input")) return "#8a5d00";
+  if (lower.includes("image") || lower.includes("icon")) return "#8b4a85";
+  if (lower.includes("container")) return "#4f6b57";
+  return "#5c667a";
 }
 
 export function CanvasPreview({ screen, selectedId, onSelect }: Props) {
   if (!screen) {
-    return <main className="preview empty">Select a screen.</main>;
+    return (
+      <main className="preview empty">
+        <Icon name="screen" size={28} />
+        <strong>No screen selected</strong>
+        <span>Choose a screen from App explorer.</span>
+      </main>
+    );
   }
 
   const width = 1366;
   const height = 768;
   const items = flatten(screen.children);
-  const fill = rgba(screen.properties.Fill) ?? "#f5f6fa";
+  const fill = rgba(screen.properties.Fill) ?? "#f7f7f7";
 
   return (
     <main className="preview">
       <div className="preview-toolbar">
-        <div>
+        <div className="preview-breadcrumb">
+          <span>Screens</span>
+          <Icon name="chevron" size={12} />
           <strong>{screen.name}</strong>
-          <span>Approximate preview</span>
         </div>
-        <span>{items.length} visual nodes</span>
+        <div className="preview-toolbar-meta">
+          <span className="subtle-badge">Approximate preview</span>
+          <span>{items.length} nodes</span>
+          <span>1366 × 768</span>
+        </div>
       </div>
+
       <div className="canvas-stage">
-        <svg viewBox={"0 0 " + width + " " + height} role="img" aria-label={screen.name}>
-          <rect x="0" y="0" width={width} height={height} fill={fill} />
-          {items.map(item => {
-            const selected = selectedId === item.control.id;
-            const text =
-              literalText(item.control.properties.Text) ??
-              item.control.name;
-            return (
-              <g
-                key={item.control.id}
-                onClick={event => {
-                  event.stopPropagation();
-                  onSelect(item.control);
-                }}
-                className="visual-control"
-              >
-                <rect
-                  x={item.x}
-                  y={item.y}
-                  width={item.width}
-                  height={item.height}
-                  rx="6"
-                  fill={colorFor(item.control.controlType)}
-                  fillOpacity={selected ? 0.28 : 0.12}
-                  stroke={selected ? "#7c5cff" : colorFor(item.control.controlType)}
-                  strokeWidth={selected ? 4 : 2}
-                  strokeDasharray={item.dynamic ? "9 6" : undefined}
-                />
-                <text
-                  x={item.x + 8}
-                  y={item.y + Math.min(24, item.height / 2 + 5)}
-                  fontSize="14"
-                  fill="#1f2633"
+        <div className="canvas-frame">
+          <div className="canvas-frame-bar">
+            <span>{screen.name}</span>
+            <span>Canvas source preview</span>
+          </div>
+          <svg viewBox={"0 0 " + width + " " + height} role="img" aria-label={screen.name}>
+            <rect x="0" y="0" width={width} height={height} fill={fill} />
+            {items.map(item => {
+              const selected = selectedId === item.control.id;
+              const text =
+                literalText(item.control.properties.Text) ??
+                item.control.name;
+              return (
+                <g
+                  key={item.control.id}
+                  onClick={event => {
+                    event.stopPropagation();
+                    onSelect(item.control);
+                  }}
+                  className="visual-control"
                 >
-                  {text.slice(0, 44)}
-                </text>
-                {item.dynamic && (
+                  <rect
+                    x={item.x}
+                    y={item.y}
+                    width={item.width}
+                    height={item.height}
+                    rx="4"
+                    fill={colorFor(item.control.controlType)}
+                    fillOpacity={selected ? 0.2 : 0.08}
+                    stroke={selected ? "#0f6cbd" : colorFor(item.control.controlType)}
+                    strokeWidth={selected ? 3 : 1.5}
+                    strokeDasharray={item.dynamic ? "8 5" : undefined}
+                  />
                   <text
                     x={item.x + 8}
-                    y={item.y + item.height - 8}
-                    fontSize="10"
-                    fill="#6b7280"
+                    y={item.y + Math.min(24, item.height / 2 + 5)}
+                    fontSize="14"
+                    fontFamily='"Segoe UI", system-ui, sans-serif'
+                    fill="#242424"
                   >
-                    dynamic layout
+                    {text.slice(0, 44)}
                   </text>
-                )}
-              </g>
-            );
-          })}
-        </svg>
+                  {item.dynamic && (
+                    <text
+                      x={item.x + 8}
+                      y={item.y + item.height - 8}
+                      fontSize="10"
+                      fontFamily='"Segoe UI", system-ui, sans-serif'
+                      fill="#616161"
+                    >
+                      dynamic layout
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+        </div>
       </div>
+
       <div className="preview-note">
-        Dashed controls use fallback geometry because one or more layout properties are
-        formula-driven and cannot be resolved statically.
+        <span className="dynamic-swatch" />
+        Dashed outlines indicate formula-driven geometry that cannot be resolved statically.
       </div>
     </main>
   );
