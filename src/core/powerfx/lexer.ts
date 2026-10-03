@@ -62,13 +62,18 @@ export function lexPowerFx(input: string): PowerFxLexResult {
 
   function scanExpression(startIndex: number, stopAtInterpolationBrace = false): number {
     let index = startIndex;
+    let interpolationBraceDepth = 0;
 
     while (index < input.length) {
       const start = index;
       const char = input[index];
       const next = input[index + 1] ?? "";
 
-      if (stopAtInterpolationBrace && char === "}") {
+      if (
+        stopAtInterpolationBrace &&
+        char === "}" &&
+        interpolationBraceDepth === 0
+      ) {
         return index;
       }
 
@@ -230,6 +235,16 @@ export function lexPowerFx(input: string): PowerFxLexResult {
       }
 
       if ("()[]{}.,;:@%".includes(char)) {
+        if (stopAtInterpolationBrace && char === "{") {
+          interpolationBraceDepth += 1;
+        } else if (
+          stopAtInterpolationBrace &&
+          char === "}" &&
+          interpolationBraceDepth > 0
+        ) {
+          interpolationBraceDepth -= 1;
+        }
+
         index += 1;
         push(tokens, "punctuation", char, start, index);
         continue;
