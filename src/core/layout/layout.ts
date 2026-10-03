@@ -21,6 +21,7 @@ export interface LayoutContext {
   appHeight: number;
   templateWidth?: number;
   templateHeight?: number;
+  symbols?: Record<string, StaticPowerFxValue>;
 }
 
 export interface PositionedControl {
@@ -52,6 +53,7 @@ function layoutSymbols(
   if (!context) return undefined;
 
   const symbols: Record<string, StaticPowerFxValue> = {
+    ...(context.symbols ?? {}),
     "Parent.Width": context.parentWidth,
     "Parent.Height": context.parentHeight,
     "App.Width": context.appWidth,
@@ -128,6 +130,60 @@ function clamp(
   if (min !== null) result = Math.max(result, min);
   if (max !== null) result = Math.min(result, max);
   return Math.max(0, result);
+}
+
+export function buildSiblingGeometrySymbols(
+  controls: CanvasControl[],
+  context: LayoutContext
+): Record<string, StaticPowerFxValue> {
+  const resolved: Record<string, StaticPowerFxValue> = {
+    ...(context.symbols ?? {})
+  };
+
+  const maxPasses = Math.max(2, controls.length * 4);
+
+  for (let pass = 0; pass < maxPasses; pass += 1) {
+    let changed = false;
+
+    for (const control of controls) {
+      const baseContext: LayoutContext = {
+        ...context,
+        symbols: resolved
+      };
+      const baseSymbols = layoutSymbols(baseContext) ?? {};
+
+      const width = staticNumber(control.properties.Width, baseSymbols);
+      const height = staticNumber(control.properties.Height, baseSymbols);
+
+      const setNumber = (key: string, value: number | null): void => {
+        if (value === null || resolved[key] === value) return;
+        resolved[key] = value;
+        changed = true;
+      };
+
+      setNumber(control.name + ".Width", width);
+      setNumber(control.name + ".Height", height);
+
+      const selfSymbols: Record<string, StaticPowerFxValue> = {
+        ...baseSymbols,
+        ...(width !== null ? { "Self.Width": width } : {}),
+        ...(height !== null ? { "Self.Height": height } : {})
+      };
+
+      setNumber(
+        control.name + ".X",
+        staticNumber(control.properties.X, selfSymbols)
+      );
+      setNumber(
+        control.name + ".Y",
+        staticNumber(control.properties.Y, selfSymbols)
+      );
+    }
+
+    if (!changed) break;
+  }
+
+  return resolved;
 }
 
 export function controlRect(
