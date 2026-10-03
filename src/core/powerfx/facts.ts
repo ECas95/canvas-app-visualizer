@@ -98,12 +98,12 @@ export function analyzePowerFx(formula: string): PowerFxFacts {
     }
   });
 
-  if (!delimiterError && stack.length > 0) {
+  const firstLexError = lexed.diagnostics[0]?.message;
+  if (!delimiterError && firstLexError) {
+    delimiterError = firstLexError;
+  } else if (!delimiterError && stack.length > 0) {
     delimiterError = "One or more delimiters are not closed.";
   }
-
-  const firstLexError = lexed.diagnostics[0]?.message;
-  if (!delimiterError && firstLexError) delimiterError = firstLexError;
 
   return {
     tokens,

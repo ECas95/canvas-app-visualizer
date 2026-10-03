@@ -416,3 +416,54 @@ export function layoutWrapEnabled(
   const symbols = layoutSymbols(context);
   return staticBoolean(control.properties.LayoutWrap, symbols) ?? false;
 }
+
+
+export interface GalleryTemplateLayout {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  orientation: "vertical" | "horizontal";
+  variableHeight: boolean;
+  padding: number;
+  dynamic: boolean;
+}
+
+export function isGallery(control: CanvasControl | undefined): boolean {
+  return control?.controlType.toLowerCase().includes("gallery") === true;
+}
+
+export function galleryTemplateLayout(
+  control: CanvasControl,
+  rect: VisualRect
+): GalleryTemplateLayout | null {
+  if (!isGallery(control)) return null;
+
+  const variant = (control.variant ?? "").toLowerCase();
+  const horizontal = variant.includes("horizontal");
+  const variableHeight = variant.includes("variableheight");
+  const templateSize =
+    staticNumber(control.properties.TemplateSize) ??
+    staticNumber(control.properties.TemplateHeight) ??
+    null;
+  const padding = Math.max(
+    0,
+    staticNumber(control.properties.TemplatePadding) ?? 0
+  );
+
+  const fallbackSize = horizontal
+    ? Math.min(160, rect.width)
+    : Math.min(72, rect.height);
+  const size = Math.max(8, templateSize ?? fallbackSize);
+
+  return {
+    x: rect.x,
+    y: rect.y,
+    width: horizontal ? Math.min(rect.width, size) : rect.width,
+    height: horizontal ? rect.height : Math.min(rect.height, size),
+    orientation: horizontal ? "horizontal" : "vertical",
+    variableHeight,
+    padding,
+    dynamic: templateSize === null || variableHeight
+  };
+}

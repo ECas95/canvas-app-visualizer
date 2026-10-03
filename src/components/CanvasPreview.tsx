@@ -3,11 +3,12 @@ import {
   autoLayoutChildren,
   buildSiblingGeometrySymbols,
   controlRect,
+  galleryTemplateLayout,
   isAutoLayout,
+  isGallery,
   literalText,
   rgba
 } from "../core/layout/layout";
-import { staticNumber } from "../core/powerfx/staticEval";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -78,25 +79,31 @@ function flatten(
     });
 
     if (depth < 5 && control.children.length > 0) {
-      const isGallery = control.controlType.toLowerCase().includes("gallery");
-      const childTemplateHeight = isGallery
-        ? staticNumber(control.properties.TemplateSize) ??
-          staticNumber(control.properties.TemplateHeight) ??
-          64
-        : undefined;
+      const galleryTemplate = isGallery(control)
+        ? galleryTemplateLayout(control, {
+            x: 0,
+            y: 0,
+            width: rect.width,
+            height: rect.height,
+            dynamic: rect.dynamic
+          })
+        : null;
+
+      const childParentWidth = galleryTemplate?.width ?? rect.width;
+      const childParentHeight = galleryTemplate?.height ?? rect.height;
 
       output.push(
         ...flatten(
           control.children,
-          x,
-          y,
-          rect.width,
-          rect.height,
+          x + (galleryTemplate?.x ?? 0),
+          y + (galleryTemplate?.y ?? 0),
+          childParentWidth,
+          childParentHeight,
           appWidth,
           appHeight,
           depth + 1,
-          isGallery ? rect.width : undefined,
-          childTemplateHeight,
+          galleryTemplate?.width,
+          galleryTemplate?.height,
           control
         )
       );
@@ -160,6 +167,13 @@ export function CanvasPreview({ screen, selectedId, onSelect }: Props) {
               const text =
                 literalText(item.control.properties.Text) ??
                 item.control.name;
+              const template = galleryTemplateLayout(item.control, {
+                x: item.x,
+                y: item.y,
+                width: item.width,
+                height: item.height,
+                dynamic: item.dynamic
+              });
               return (
                 <g
                   key={item.control.id}
@@ -181,6 +195,36 @@ export function CanvasPreview({ screen, selectedId, onSelect }: Props) {
                     strokeWidth={selected ? 3 : 1.5}
                     strokeDasharray={item.dynamic ? "8 5" : undefined}
                   />
+                  {template && (
+                    <>
+                      <rect
+                        x={template.x + 2}
+                        y={template.y + 2}
+                        width={Math.max(4, template.width - 4)}
+                        height={Math.max(4, template.height - 4)}
+                        rx="2"
+                        fill="none"
+                        stroke="#0f6cbd"
+                        strokeOpacity="0.45"
+                        strokeWidth="1"
+                        strokeDasharray="5 4"
+                        pointerEvents="none"
+                      />
+                      <text
+                        x={template.x + 8}
+                        y={template.y + template.height - 8}
+                        fontSize="9"
+                        fontFamily='"Segoe UI", system-ui, sans-serif'
+                        fill="#0f6cbd"
+                        opacity="0.8"
+                        pointerEvents="none"
+                      >
+                        {template.variableHeight
+                          ? "variable-height template preview"
+                          : template.orientation + " gallery template"}
+                      </text>
+                    </>
+                  )}
                   <text
                     x={item.x + 8}
                     y={item.y + Math.min(24, item.height / 2 + 5)}
