@@ -4,11 +4,27 @@ import { Icon } from "./Icon";
 
 interface Props {
   findings: Finding[];
+  powerFxStatus: "idle" | "loading" | "ready" | "unavailable";
 }
 
 type Filter = "all" | FindingSeverity;
 
-export function DiagnosticsPanel({ findings }: Props) {
+function engineStatusLabel(
+  status: Props["powerFxStatus"]
+): string {
+  switch (status) {
+    case "loading":
+      return "Power Fx engine · loading";
+    case "ready":
+      return "Official Power Fx · ready";
+    case "unavailable":
+      return "Power Fx engine · fallback";
+    default:
+      return "Power Fx engine · idle";
+  }
+}
+
+export function DiagnosticsPanel({ findings, powerFxStatus }: Props) {
   const [filter, setFilter] = useState<Filter>("all");
 
   const counts = {
@@ -29,7 +45,21 @@ export function DiagnosticsPanel({ findings }: Props) {
           <span className="panel-kicker">STATIC ANALYSIS</span>
           <strong>{findings.length === 0 ? "No findings" : findings.length + " findings"}</strong>
         </div>
-        <span className="analysis-note">Advisory</span>
+        <div className="analysis-status">
+          <span
+            className={
+              "engine-note " +
+              (powerFxStatus === "ready"
+                ? "ready"
+                : powerFxStatus === "unavailable"
+                  ? "fallback"
+                  : "")
+            }
+          >
+            {engineStatusLabel(powerFxStatus)}
+          </span>
+          <span className="analysis-note">Advisory</span>
+        </div>
       </div>
 
       <div className="diagnostic-filters" role="group" aria-label="Filter diagnostics">
