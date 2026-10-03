@@ -1,4 +1,4 @@
-import type { SVGProps } from "react";
+import type { ReactNode, SVGProps } from "react";
 
 export type IconName =
   | "open"
@@ -30,7 +30,7 @@ export function Icon({ name, size = 16, ...props }: Props) {
     "aria-hidden": true
   };
 
-  const paths: Record<IconName, JSX.Element> = {
+  const paths: Record<IconName, ReactNode> = {
     open: (
       <>
         <path d="M3.5 7.5h6l1.6 2h9.4v8.8a2.2 2.2 0 0 1-2.2 2.2H5.7a2.2 2.2 0 0 1-2.2-2.2Z" />
