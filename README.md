@@ -21,7 +21,8 @@ Open a modern `.msapp` package or current `.pa.yaml` source and inspect screens,
 - display a searchable control hierarchy;
 - render an approximate screen preview with safe evaluation of common `Parent`, `Self`, `App`, gallery-template, sibling-geometry, and AutoLayout formulas;
 - inspect serialized formulas and properties;
-- lex Power Fx with awareness of strings, quoted identifiers, comments, operators, records/tables, and qualified function calls;
+- lex Power Fx with awareness of strings, interpolation islands, quoted identifiers, comments, operators, records/tables, and qualified function calls;
+- load Microsoft's official Power Fx parser locally through browser WebAssembly for authoritative syntax diagnostics when available;
 - surface structural, performance, delegation, maintainability, startup, and accessibility review hints;
 - classify analyzer findings by severity and confidence;
 - process files locally with no application upload API;
@@ -132,9 +133,10 @@ See [Security Policy](SECURITY.md).
 
 The intended product is a web application with a desktop distribution using the same core parser/analyzer.
 
+The deployed web application now bundles a local WebAssembly build of Microsoft's open-source Power Fx engine. Official parsing is used for syntax diagnostics; the TypeScript lexer remains a fast indexer/fallback.
+
 Planned work includes:
 
-- Microsoft Power Fx Core/Interpreter integration through local browser WebAssembly;
 - app-aware Power Fx binding and type checking;
 - connector-aware delegation profiles;
 - dependency/call graphs;
