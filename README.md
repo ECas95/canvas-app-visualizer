@@ -1,6 +1,9 @@
 # Canvas App Visualizer
 
 [![CI](https://github.com/ECas95/canvas-app-visualizer/actions/workflows/ci.yml/badge.svg)](https://github.com/ECas95/canvas-app-visualizer/actions/workflows/ci.yml)
+[![Deploy GitHub Pages](https://github.com/ECas95/canvas-app-visualizer/actions/workflows/pages.yml/badge.svg)](https://github.com/ECas95/canvas-app-visualizer/actions/workflows/pages.yml)
+
+**Live web app:** https://ecas95.github.io/canvas-app-visualizer/
 
 Open-source, local-first visualizer and static analyzer for Microsoft Power Apps Canvas Apps.
 
