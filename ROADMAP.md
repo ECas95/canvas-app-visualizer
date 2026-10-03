@@ -19,6 +19,7 @@
 - precise source locations for schema findings;
 - Microsoft Power Fx Core/Interpreter browser WebAssembly integration;
 - [x] lightweight lexical function-call indexing;
+- [x] interpolated-string island indexing from real current Canvas source;
 - authoritative formula call tree from Microsoft Power Fx;
 - app-aware symbol/dependency extraction and type binding;
 - cross-control dependency graph;
@@ -39,7 +40,9 @@
 - [x] initial AutoLayout + safe responsive formula resolution;
 - full responsive containers and wrapping;
 - richer AutoLayout alignment, wrapping, overflow, and nested sizing;
-- galleries/templates;
+- [x] initial single-template gallery preview for Vertical/Horizontal/VariableHeight;
+- repeated gallery-item simulation with synthetic data;
+- richer gallery/template semantics;
 - forms/cards;
 - components;
 - theme/default-property profiles;
