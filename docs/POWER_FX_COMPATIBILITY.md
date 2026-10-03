@@ -178,6 +178,34 @@ For Canvas-style formula analysis, the official host examples use parser options
 
 The project must test its host options against real Canvas formulas before claiming equivalence.
 
+
+## Locale and serialization context
+
+Power Fx itself is locale-sensitive: the decimal separator, list separator, and behavior chaining separator can change with the authoring language.
+
+Canvas source analysis must therefore keep two concepts separate:
+
+- the formula text serialized in the inspected source;
+- interactive formulas typed by a maker in a localized formula bar.
+
+The lightweight TypeScript layer does not claim full localized parsing. The official Microsoft Power Fx host must receive explicit `ParserOptions` / culture context when locale-sensitive input is analyzed.
+
+Until that semantic host is integrated, locale-dependent syntax outside the observed Canvas source form should be reported as requiring official-parser verification rather than normalized by guesswork.
+
+## Interpolated strings
+
+Power Fx interpolation uses `$"...{formula}..."`. Literal braces are escaped by doubling them, and interpolation can be nested.
+
+The fast lexer treats literal interpolation text as opaque text while recursively tokenizing formula islands. This allows dependency/function indexing to see expressions such as:
+
+```powerfx
+=$"data:application/octet-stream;base64,{locAttachmentData}"
+```
+
+without incorrectly treating words in the surrounding text as function calls.
+
+This remains a lexical/indexing feature. Authoritative parse, coercion, typing, and evaluation belong to Microsoft.PowerFx.Core / Interpreter.
+
 ## Current status
 
 Implemented now:
@@ -185,6 +213,7 @@ Implemented now:
 - current/legacy source separation;
 - official Canvas v3 structural schema validation;
 - a comment/string-aware Power Fx lexer;
+- interpolated-string islands, escaped braces, and nested interpolation in the fast lexer;
 - function-call and structural facts used by static analyzer rules;
 - a deliberately limited static evaluator for known pure values;
 - safe layout evaluation for numeric/string/boolean expressions whose dependencies are known;
