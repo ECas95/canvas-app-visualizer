@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { Icon } from "./Icon";
 
 interface Props {
   busy: boolean;
@@ -25,20 +26,51 @@ export function FileDrop({ busy, onFiles, onDemo }: Props) {
         onFiles(Array.from(event.dataTransfer.files));
       }}
     >
-      <div className="drop-mark">CA</div>
-      <h1>Canvas App Visualizer</h1>
-      <p>
-        Inspect a <strong>.msapp</strong> package or active <strong>.pa.yaml</strong>
-        source locally in your browser.
+      <div className="drop-zone-header">
+        <div className="product-mark" aria-hidden="true">
+          <span />
+          <span />
+        </div>
+        <div>
+          <span className="eyebrow">OPEN-SOURCE CANVAS TOOLING</span>
+          <h1>Canvas App Visualizer</h1>
+        </div>
+      </div>
+
+      <p className="hero-copy">
+        Open a Canvas app package, inspect its source, and review the app structure
+        without starting Power Apps Studio.
       </p>
-      <div className="drop-actions">
-        <button disabled={busy} onClick={() => inputRef.current?.click()}>
-          {busy ? "Opening…" : "Open Canvas source"}
-        </button>
-        <button className="secondary" disabled={busy} onClick={onDemo}>
-          Load demo
+
+      <div className="drop-surface">
+        <div className="drop-surface-icon">
+          <Icon name="open" size={26} />
+        </div>
+        <div className="drop-surface-copy">
+          <strong>Drop a .msapp or .pa.yaml file here</strong>
+          <span>Modern Canvas source is parsed locally in this browser.</span>
+        </div>
+        <button
+          className="primary-button"
+          disabled={busy}
+          onClick={() => inputRef.current?.click()}
+        >
+          <Icon name="open" />
+          {busy ? "Opening…" : "Choose file"}
         </button>
       </div>
+
+      <div className="landing-command-row">
+        <button className="text-button" disabled={busy} onClick={onDemo}>
+          <Icon name="screen" />
+          Explore with sample app
+        </button>
+        <span className="privacy-inline">
+          <Icon name="shield" />
+          Local processing · no upload API
+        </span>
+      </div>
+
       <input
         ref={inputRef}
         hidden
@@ -47,9 +79,6 @@ export function FileDrop({ busy, onFiles, onDemo }: Props) {
         accept=".msapp,.pa.yaml,.yaml,.yml"
         onChange={event => onFiles(Array.from(event.target.files ?? []))}
       />
-      <small>
-        Files are processed locally. No upload API is used by the application.
-      </small>
     </section>
   );
 }
