@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { autoLayoutChildren, controlRect, literalNumber, literalText, rgba } from "./layout";
+import {
+  autoLayoutChildren,
+  buildSiblingGeometrySymbols,
+  controlRect,
+  literalNumber,
+  literalText,
+  rgba
+} from "./layout";
 import type { CanvasControl } from "../../types/canvas";
 
 describe("layout literal helpers", () => {
@@ -158,5 +165,58 @@ describe("layout literal helpers", () => {
 
     expect(narrow[0].rect.y).toBe(0);
     expect(narrow[1].rect.y).toBe(52);
+  });
+
+  it("resolves sibling geometry dependencies from current Canvas source", () => {
+    const controls: CanvasControl[] = [
+      {
+        id: "body",
+        name: "Body",
+        controlType: "GroupContainer",
+        variant: "AutoLayout",
+        properties: {
+          Width: "=Parent.Width",
+          Height: "=Parent.Height - Header.Height",
+          Y: "=Header.Height"
+        },
+        children: [],
+        sourceFile: "Src/Home.pa.yaml",
+        sourcePath: "Screens/Home/Body",
+        zIndex: 1,
+        sourceFormat: "pa-yaml-v3"
+      },
+      {
+        id: "header",
+        name: "Header",
+        controlType: "CanvasComponent",
+        componentName: "SubScreenHeader",
+        properties: {
+          Width: "=App.Width",
+          Height: "=54",
+          X: "=0",
+          Y: "=0"
+        },
+        children: [],
+        sourceFile: "Src/Home.pa.yaml",
+        sourcePath: "Screens/Home/Header",
+        zIndex: 2,
+        sourceFormat: "pa-yaml-v3"
+      }
+    ];
+
+    const context = {
+      parentWidth: 1366,
+      parentHeight: 768,
+      appWidth: 1366,
+      appHeight: 768
+    };
+    const symbols = buildSiblingGeometrySymbols(controls, context);
+    const body = controlRect(controls[0], 0, { ...context, symbols });
+
+    expect(symbols["Header.Height"]).toBe(54);
+    expect(symbols["Header.Width"]).toBe(1366);
+    expect(body.height).toBe(714);
+    expect(body.y).toBe(54);
+    expect(body.dynamic).toBe(false);
   });
 });
