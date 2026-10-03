@@ -15,11 +15,12 @@
 
 ## v0.2 — richer validation
 
-- official v3 schema validation;
-- precise source locations for structural findings;
-- Microsoft Power Fx parser/binder integration;
-- formula call tree;
-- symbol/dependency extraction;
+- [x] official v3 schema validation;
+- precise source locations for schema findings;
+- Microsoft Power Fx Core/Interpreter browser WebAssembly integration;
+- [x] lightweight lexical function-call indexing;
+- authoritative formula call tree from Microsoft Power Fx;
+- app-aware symbol/dependency extraction and type binding;
 - cross-control dependency graph;
 - duplicate formula analysis across screens.
 
@@ -35,8 +36,9 @@
 
 ## v0.4 — renderer
 
-- responsive containers;
-- auto-layout;
+- [x] initial AutoLayout + safe responsive formula resolution;
+- full responsive containers and wrapping;
+- richer AutoLayout alignment, wrapping, overflow, and nested sizing;
 - galleries/templates;
 - forms/cards;
 - components;

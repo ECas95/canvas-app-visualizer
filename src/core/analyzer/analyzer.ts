@@ -5,6 +5,12 @@ import type {
   FormulaRef
 } from "../../types/canvas";
 import { collectFormulaRefs } from "../model/formulas";
+import {
+  analyzePowerFx,
+  countFunction,
+  hasFunction,
+  hasIdentifier
+} from "../powerfx/facts";
 
 function finding(
   ref: FormulaRef,
@@ -32,73 +38,31 @@ function finding(
   };
 }
 
-function countMatches(input: string, pattern: RegExp): number {
-  return [...input.matchAll(pattern)].length;
-}
-
 export function checkBalancedDelimiters(formula: string): string | null {
-  const stack: string[] = [];
-  const pairs: Record<string, string> = {
-    ")": "(",
-    "]": "[",
-    "}": "{"
-  };
-
-  let quoted = false;
-
-  for (let index = 0; index < formula.length; index += 1) {
-    const char = formula[index];
-
-    if (char === '"') {
-      if (quoted && formula[index + 1] === '"') {
-        index += 1;
-        continue;
-      }
-      quoted = !quoted;
-      continue;
-    }
-
-    if (quoted) continue;
-
-    if ("([{".includes(char)) {
-      stack.push(char);
-      continue;
-    }
-
-    if (")]}".includes(char)) {
-      const expected = pairs[char];
-      if (stack.pop() !== expected) {
-        return "Unbalanced delimiter near character " + String(index + 1) + ".";
-      }
-    }
-  }
-
-  if (quoted) return "Unterminated text literal.";
-  if (stack.length > 0) return "One or more delimiters are not closed.";
-  return null;
+  return analyzePowerFx(formula).delimiterError ?? null;
 }
 
 function analyzeFormula(ref: FormulaRef): Finding[] {
   const formula = ref.formula;
+  const facts = analyzePowerFx(formula);
   const findings: Finding[] = [];
-  const balanceProblem = checkBalancedDelimiters(formula);
 
-  if (balanceProblem) {
+  if (facts.delimiterError) {
     findings.push(
       finding(
         ref,
-        "powerfx.syntax.delimiters",
+        "powerfx.syntax.lexical-structure",
         "error",
         "syntax",
-        "Potential Power Fx syntax error",
-        balanceProblem,
-        "Validate the expression in Power Apps Studio or a Power Fx parser before deployment.",
+        "Potential Power Fx lexical or delimiter error",
+        facts.delimiterError,
+        "Validate the expression with the Microsoft Power Fx parser/binder or Power Apps Studio before deployment.",
         "high"
       )
     );
   }
 
-  const lookupCount = countMatches(formula, /\bLookUp\s*\(/gi);
+  const lookupCount = countFunction(facts, "LookUp");
   if (lookupCount >= 3) {
     findings.push(
       finding(
@@ -107,14 +71,16 @@ function analyzeFormula(ref: FormulaRef): Finding[] {
         "warning",
         "performance",
         "Repeated LookUp calls",
-        "This formula contains " + lookupCount + " LookUp calls. Repeated remote lookups can multiply round trips.",
-        "Reuse an already retrieved record, pre-shape a small lookup dataset, or move reusable logic to a named formula when appropriate.",
+        "This formula contains " +
+          lookupCount +
+          " LookUp calls outside comments and text literals. Repeated remote lookups can multiply round trips.",
+        "Reuse an already retrieved record, pre-shape a small lookup dataset, or centralize reusable logic when doing so preserves behavior.",
         "medium"
       )
     );
   }
 
-  if (/\bForAll\s*\(/i.test(formula) && /\bPatch\s*\(/i.test(formula)) {
+  if (hasFunction(facts, "ForAll") && hasFunction(facts, "Patch")) {
     findings.push(
       finding(
         ref,
@@ -122,14 +88,14 @@ function analyzeFormula(ref: FormulaRef): Finding[] {
         "warning",
         "performance",
         "ForAll + Patch requires review",
-        "The formula combines ForAll and Patch. Row-oriented writes can create many server operations.",
-        "Compare this implementation with a supported table-oriented write pattern and validate error semantics before changing it.",
+        "The formula combines ForAll and Patch. Depending on the source and formula shape, this can result in row-oriented server work.",
+        "Compare this implementation with supported table-oriented write patterns and validate correctness, errors, and connector behavior before changing it.",
         "medium"
       )
     );
   }
 
-  if (/\bClearCollect\s*\(/i.test(formula)) {
+  if (hasFunction(facts, "ClearCollect")) {
     findings.push(
       finding(
         ref,
@@ -138,13 +104,18 @@ function analyzeFormula(ref: FormulaRef): Finding[] {
         "delegation",
         "ClearCollect can materialize data locally",
         "If the collected source is remote, only the rows actually retrieved by the client become available to later local formulas.",
-        "Confirm delegation on the source query and test above the nondelegable row limit.",
+        "Confirm delegation on the source query and test beyond the configured nondelegable row limit.",
         "high"
       )
     );
   }
 
-  if (/\b(?:Search|Distinct)\s*\(/i.test(formula) || /\s+in\s+/i.test(formula)) {
+  if (
+    hasFunction(facts, "Search") ||
+    hasFunction(facts, "Distinct") ||
+    hasIdentifier(facts, "in") ||
+    hasIdentifier(facts, "exactin")
+  ) {
     findings.push(
       finding(
         ref,
@@ -152,17 +123,22 @@ function analyzeFormula(ref: FormulaRef): Finding[] {
         "info",
         "delegation",
         "Connector-dependent delegation",
-        "This expression contains operations whose delegation behavior can depend on the connector, column type, and expression shape.",
-        "Select a data-source profile and confirm the expression against current connector delegation documentation and runtime warnings.",
+        "This expression contains operations whose delegation behavior can depend on the connector, column type, and exact expression shape.",
+        "Confirm the expression against the selected connector profile, current Microsoft delegation documentation, and runtime/Studio warnings.",
         "medium"
       )
     );
   }
 
-  if (
-    /\b(?:Patch|Remove|RemoveIf)\s*\(/i.test(formula) &&
-    !/\bIfError\s*\(/i.test(formula)
-  ) {
+  const hasWrite =
+    hasFunction(facts, "Patch") ||
+    hasFunction(facts, "Remove") ||
+    hasFunction(facts, "RemoveIf") ||
+    hasFunction(facts, "Update") ||
+    hasFunction(facts, "UpdateIf") ||
+    hasFunction(facts, "SubmitForm");
+
+  if (hasWrite && !hasFunction(facts, "IfError")) {
     findings.push(
       finding(
         ref,
@@ -170,8 +146,8 @@ function analyzeFormula(ref: FormulaRef): Finding[] {
         "info",
         "maintainability",
         "Write operation has no local IfError wrapper",
-        "A data-changing operation is present without an IfError wrapper in the same formula.",
-        "Review the app's error-handling strategy. Errors might already be handled elsewhere, so this is a review hint rather than a defect.",
+        "A data-changing operation is present without an IfError call in the same formula.",
+        "Review the app's complete error-handling strategy. Errors might be handled elsewhere, so this is a review hint rather than a defect.",
         "low"
       )
     );
@@ -186,7 +162,26 @@ function analyzeFormula(ref: FormulaRef): Finding[] {
         "maintainability",
         "Large formula",
         "This formula is over 1,200 characters, which can make review and repeated logic harder to maintain.",
-        "Consider With, named formulas, components, or server-side logic where those choices preserve behavior and improve clarity.",
+        "Consider With, named formulas, user-defined functions, components, or server-side logic where those choices preserve behavior and improve clarity.",
+        "medium"
+      )
+    );
+  }
+
+  if (facts.functions.length >= 24 || facts.maxNesting >= 10) {
+    findings.push(
+      finding(
+        ref,
+        "powerfx.maintainability.structural-complexity",
+        "info",
+        "maintainability",
+        "Structurally complex formula",
+        "Static analysis found " +
+          facts.functions.length +
+          " function-call expressions with maximum delimiter nesting of " +
+          facts.maxNesting +
+          ".",
+        "Review the formula for repeated subexpressions and separable concerns. Complexity alone is not a performance defect.",
         "medium"
       )
     );
@@ -195,7 +190,7 @@ function analyzeFormula(ref: FormulaRef): Finding[] {
   if (
     ref.ownerType === "app" &&
     ref.property === "OnStart" &&
-    /\bNavigate\s*\(/i.test(formula)
+    hasFunction(facts, "Navigate")
   ) {
     findings.push(
       finding(
@@ -204,30 +199,39 @@ function analyzeFormula(ref: FormulaRef): Finding[] {
         "warning",
         "performance",
         "Navigation is coupled to App.OnStart",
-        "Startup navigation is coupled to imperative initialization work.",
-        "Review whether App.StartScreen can select the initial screen without waiting on unrelated startup work.",
-        "medium"
+        "App.OnStart contains Navigate. Current Canvas source guidance uses App.StartScreen for initial screen selection.",
+        "Use App.StartScreen for initial navigation and keep unrelated initialization work separate.",
+        "high"
       )
     );
   }
 
-  if (
-    ref.ownerType === "app" &&
-    ref.property === "OnStart" &&
-    countMatches(formula, /\b(?:ClearCollect|Collect|Patch|LookUp|Filter)\s*\(/gi) >= 4
-  ) {
-    findings.push(
-      finding(
-        ref,
-        "canvas.startup.heavy-onstart",
-        "warning",
-        "performance",
-        "Potentially heavy App.OnStart",
-        "App.OnStart contains several data-oriented operations.",
-        "Measure initial-screen readiness and move secondary work to lazy/on-demand loading where functional behavior allows.",
-        "medium"
-      )
-    );
+  if (ref.ownerType === "app" && ref.property === "OnStart") {
+    const dataOperationCount = [
+      "ClearCollect",
+      "Collect",
+      "Patch",
+      "LookUp",
+      "Filter",
+      "Refresh"
+    ].reduce((sum, name) => sum + countFunction(facts, name), 0);
+
+    if (dataOperationCount >= 4) {
+      findings.push(
+        finding(
+          ref,
+          "canvas.startup.heavy-onstart",
+          "warning",
+          "performance",
+          "Potentially heavy App.OnStart",
+          "App.OnStart contains " +
+            dataOperationCount +
+            " data-oriented call expressions.",
+          "Measure initial-screen readiness and move secondary work to lazy/on-demand loading where functional behavior allows.",
+          "medium"
+        )
+      );
+    }
   }
 
   return findings;
@@ -249,6 +253,7 @@ function analyzeAccessibility(app: CanvasAppModel): Finding[] {
   for (const screen of app.screens) {
     walkControls(screen.children, control => {
       const type = control.controlType.toLowerCase();
+
       if (
         (type.includes("icon") || type === "image") &&
         control.properties.AccessibleLabel === undefined
@@ -262,7 +267,7 @@ function analyzeAccessibility(app: CanvasAppModel): Finding[] {
           message:
             "This visual control does not include an AccessibleLabel property in the inspected source.",
           suggestion:
-            "Review whether the control is decorative or needs an accessible name. Default/inherited values are not reconstructed by this tool.",
+            "Review whether the control is decorative or requires an accessible name. Default/inherited runtime values are not reconstructed by this tool.",
           confidence: "medium",
           sourceFile: control.sourceFile,
           controlPath: control.sourcePath
@@ -280,14 +285,17 @@ function analyzeDuplicateFormulas(refs: FormulaRef[]): Finding[] {
   for (const ref of refs) {
     const normalized = ref.formula.replace(/\s+/g, " ").trim();
     if (normalized.length < 80) continue;
+
     const group = groups.get(normalized) ?? [];
     group.push(ref);
     groups.set(normalized, group);
   }
 
   const findings: Finding[] = [];
+
   for (const refsForFormula of groups.values()) {
     if (refsForFormula.length < 3) continue;
+
     const ref = refsForFormula[0];
     findings.push(
       finding(
@@ -296,12 +304,15 @@ function analyzeDuplicateFormulas(refs: FormulaRef[]): Finding[] {
         "info",
         "maintainability",
         "Repeated formula",
-        "An equivalent formula appears in " + refsForFormula.length + " inspected properties.",
+        "An equivalent formula appears in " +
+          refsForFormula.length +
+          " inspected properties.",
         "Review whether the logic can be centralized without changing evaluation context or behavior.",
         "medium"
       )
     );
   }
+
   return findings;
 }
 
@@ -314,20 +325,36 @@ export function analyzeCanvasApp(app: CanvasAppModel): Finding[] {
   ];
 
   for (const problem of app.problems) {
+    const schema = problem.source === "schema";
     findings.push({
-      id: "source:" + problem.file + ":" + problem.message,
-      ruleId: "source.yaml",
+      id:
+        "source:" +
+        problem.file +
+        ":" +
+        (problem.path ?? "") +
+        ":" +
+        problem.message,
+      ruleId: schema ? "source.pa-yaml-v3-schema" : "source.yaml",
       severity: problem.severity === "error" ? "error" : "warning",
       category: "structure",
-      title: problem.severity === "error" ? "YAML parse error" : "Source warning",
+      title:
+        problem.severity === "error"
+          ? schema
+            ? "Canvas source schema error"
+            : "Source parse error"
+          : "Source warning",
       message: problem.message,
       confidence: "high",
-      sourceFile: problem.file
+      sourceFile: problem.file,
+      controlPath: problem.path
     });
   }
 
   return findings.sort((a, b) => {
     const rank = { error: 0, warning: 1, info: 2 };
-    return rank[a.severity] - rank[b.severity] || a.ruleId.localeCompare(b.ruleId);
+    return (
+      rank[a.severity] - rank[b.severity] ||
+      a.ruleId.localeCompare(b.ruleId)
+    );
   });
 }

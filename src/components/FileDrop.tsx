@@ -47,7 +47,7 @@ export function FileDrop({ busy, onFiles, onDemo }: Props) {
           <Icon name="open" size={26} />
         </div>
         <div className="drop-surface-copy">
-          <strong>Drop a .msapp or .pa.yaml file here</strong>
+          <strong>Drop a .msapp, .pa.yaml, or legacy .fx.yaml file here</strong>
           <span>Modern Canvas source is parsed locally in this browser.</span>
         </div>
         <button
@@ -76,7 +76,7 @@ export function FileDrop({ busy, onFiles, onDemo }: Props) {
         hidden
         multiple
         type="file"
-        accept=".msapp,.pa.yaml,.yaml,.yml"
+        accept=".msapp,.pa.yaml,.fx.yaml,.yaml,.yml"
         onChange={event => onFiles(Array.from(event.target.files ?? []))}
       />
     </section>

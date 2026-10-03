@@ -9,12 +9,11 @@ import { analyzeCanvasApp } from "./core/analyzer/analyzer";
 import { importCanvasFiles } from "./core/importers/source";
 import { collectFormulaRefs, countControls } from "./core/model/formulas";
 import { buildCanvasModel } from "./core/model/normalize";
-import { DEMO_SOURCE } from "./sample/demo";
+import { DEMO_FILES } from "./sample/demo";
 import type {
   CanvasAppModel,
   CanvasControl,
-  CanvasScreen,
-  SourceFile
+  CanvasScreen
 } from "./types/canvas";
 
 type Selection =
@@ -23,9 +22,24 @@ type Selection =
 
 function appNameFromFiles(files: File[]): string {
   if (files.length === 1) {
-    return files[0].name.replace(/\.msapp$/i, "").replace(/\.pa\.yaml$/i, "");
+    return files[0].name
+      .replace(/\.msapp$/i, "")
+      .replace(/\.(?:pa|fx)\.yaml$/i, "");
   }
   return "Canvas App";
+}
+
+function sourceFormatLabel(app: CanvasAppModel): string {
+  switch (app.sourceFormat) {
+    case "pa-yaml-v3":
+      return "Canvas v3";
+    case "fx-yaml-legacy":
+      return "Legacy FX YAML";
+    case "mixed":
+      return "Mixed source";
+    default:
+      return "Unknown YAML";
+  }
 }
 
 export default function App() {
@@ -76,13 +90,10 @@ export default function App() {
   }
 
   function loadDemo() {
-    const source: SourceFile = {
-      path: "Src/Home.pa.yaml",
-      name: "Home.pa.yaml",
-      content: DEMO_SOURCE,
-      origin: "yaml"
-    };
-    installModel(buildCanvasModel([source], "yaml", "Synthetic Inventory Demo"), []);
+    installModel(
+      buildCanvasModel(DEMO_FILES, "yaml", "Synthetic Inventory Demo"),
+      []
+    );
   }
 
   function reset() {
@@ -142,7 +153,7 @@ export default function App() {
               <Icon name="code" size={20} />
               <div>
                 <strong>Source-aware</strong>
-                <span>Inspects active .pa.yaml from modern Canvas packages.</span>
+                <span>Inspects current .pa.yaml and historical .fx.yaml Canvas source.</span>
               </div>
             </div>
             <div>
@@ -195,6 +206,7 @@ export default function App() {
             {app.sourceKind === "msapp" ? "MSAPP" : "YAML"}
           </span>
           <span>{app.files.length} source files</span>
+          <span className="format-label">{sourceFormatLabel(app)}</span>
         </div>
 
         <div className="stats">
@@ -273,7 +285,9 @@ export default function App() {
       <footer className="statusbar">
         <div>
           <span className="status-ready">Ready</span>
-          <span>{app.sourceKind === "msapp" ? ".msapp package" : "Canvas YAML source"}</span>
+          <span>
+            {app.sourceKind === "msapp" ? ".msapp package" : "Canvas YAML source"} · {sourceFormatLabel(app)}
+          </span>
         </div>
         <span>
           Preview is approximate · runtime formulas and defaults are not executed

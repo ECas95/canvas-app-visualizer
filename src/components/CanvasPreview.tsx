@@ -1,5 +1,13 @@
 import type { CanvasControl, CanvasScreen } from "../types/canvas";
-import { controlRect, literalText, rgba } from "../core/layout/layout";
+import {
+  autoLayoutChildren,
+  buildSiblingGeometrySymbols,
+  controlRect,
+  isAutoLayout,
+  literalText,
+  rgba
+} from "../core/layout/layout";
+import { staticNumber } from "../core/powerfx/staticEval";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -21,12 +29,42 @@ function flatten(
   controls: CanvasControl[],
   offsetX = 0,
   offsetY = 0,
-  depth = 0
+  parentWidth = 1366,
+  parentHeight = 768,
+  appWidth = 1366,
+  appHeight = 768,
+  depth = 0,
+  templateWidth?: number,
+  templateHeight?: number,
+  parentControl?: CanvasControl
 ): DrawItem[] {
   const output: DrawItem[] = [];
+  const baseContext = {
+    parentWidth,
+    parentHeight,
+    appWidth,
+    appHeight,
+    templateWidth,
+    templateHeight
+  };
+  const siblingSymbols = buildSiblingGeometrySymbols(
+    controls,
+    baseContext
+  );
+  const context = {
+    ...baseContext,
+    symbols: siblingSymbols
+  };
 
-  controls.forEach((control, index) => {
-    const rect = controlRect(control, index);
+  const positioned =
+    parentControl && isAutoLayout(parentControl)
+      ? autoLayoutChildren(parentControl, context)
+      : controls.map((control, index) => ({
+          control,
+          rect: controlRect(control, index, context)
+        }));
+
+  positioned.forEach(({ control, rect }) => {
     const x = offsetX + rect.x;
     const y = offsetY + rect.y;
 
@@ -39,8 +77,29 @@ function flatten(
       dynamic: rect.dynamic
     });
 
-    if (depth < 4 && control.children.length > 0) {
-      output.push(...flatten(control.children, x, y, depth + 1));
+    if (depth < 5 && control.children.length > 0) {
+      const isGallery = control.controlType.toLowerCase().includes("gallery");
+      const childTemplateHeight = isGallery
+        ? staticNumber(control.properties.TemplateSize) ??
+          staticNumber(control.properties.TemplateHeight) ??
+          64
+        : undefined;
+
+      output.push(
+        ...flatten(
+          control.children,
+          x,
+          y,
+          rect.width,
+          rect.height,
+          appWidth,
+          appHeight,
+          depth + 1,
+          isGallery ? rect.width : undefined,
+          childTemplateHeight,
+          control
+        )
+      );
     }
   });
 

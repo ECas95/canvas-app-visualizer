@@ -7,27 +7,26 @@
 
 Open-source, local-first visualizer and static analyzer for Microsoft Power Apps Canvas Apps.
 
-Open a modern `.msapp` package or active `.pa.yaml` source and inspect screens, controls, serialized properties, Power Fx formulas, static diagnostics, delegation risks, and technical optimization opportunities without requiring an active Power Apps Studio session.
+Open a modern `.msapp` package or current `.pa.yaml` source and inspect screens, controls, serialized properties, Power Fx formulas, static diagnostics, delegation risks, and technical optimization opportunities without requiring an active Power Apps Studio session. Historical `.fx.yaml` packages are also supported in read-only compatibility mode.
 
 > Canvas App Visualizer is an independent project and is not affiliated with or endorsed by Microsoft. It does not replace Power Apps Studio or the Power Apps runtime.
 
 ## Current MVP
 
-- open one modern `.msapp` directly in the browser;
-- extract only active `Src/*.pa.yaml` source;
-- open one or more `.pa.yaml` files directly;
-- parse App, Screens, Components, DataSources, Controls, Properties, and nested Children;
-- display a searchable-style control hierarchy;
-- render an approximate screen preview;
+- open modern `.msapp` packages directly in the browser;
+- prefer active `Src/*.pa.yaml` source and open historical `Src/*.fx.yaml` in read-only compatibility mode;
+- validate current Canvas source against Microsoft's public v3 schema locally;
+- normalize App, Screens, Components, DataSources, EditorState, Controls, Properties, and nested Children;
+- preserve control version, variant, layout, component, and source-format metadata;
+- display a searchable control hierarchy;
+- render an approximate screen preview with safe evaluation of common `Parent`, `Self`, `App`, gallery-template, sibling-geometry, and AutoLayout formulas;
 - inspect serialized formulas and properties;
-- identify YAML parser problems;
-- detect basic Power Fx delimiter/string errors;
-- surface static performance, delegation, maintainability, startup, and accessibility review hints;
+- lex Power Fx with awareness of strings, quoted identifiers, comments, operators, records/tables, and qualified function calls;
+- surface structural, performance, delegation, maintainability, startup, and accessibility review hints;
 - classify analyzer findings by severity and confidence;
 - process files locally with no application upload API;
 - enforce package/source size safety limits;
-- load a synthetic demo immediately;
-- test parser, analyzer, and layout helpers with Vitest.
+- test current/legacy package import, schema validation, Power Fx lexical behavior, and layout logic with Vitest.
 
 ## Why approximate?
 
@@ -39,7 +38,7 @@ Power Apps formulas can calculate layout at runtime:
 
 A static viewer cannot resolve that expression correctly without recreating the Power Apps runtime, control defaults, parent state, themes, data, and other dependencies.
 
-Canvas App Visualizer therefore renders literal geometry exactly when possible and marks unresolved geometry with dashed controls and fallback positions.
+Canvas App Visualizer therefore resolves only formulas whose dependencies are known locally. It can already evaluate a safe subset of arithmetic, responsive `If` expressions, `Parent`/`Self`/`App` geometry, sibling dimensions, gallery template dimensions, and supported AutoLayout properties. Everything else remains explicitly unresolved and is rendered with fallback geometry.
 
 It does **not** claim to be a pixel-perfect Power Apps emulator.
 
@@ -47,9 +46,11 @@ It does **not** claim to be a pixel-perfect Power Apps emulator.
 
 Microsoft's active Canvas source uses `.pa.yaml`. Modern `.msapp` packages contain those files under `Src/`, which this project extracts locally.
 
-Package JSON outside `Src/` is deliberately ignored as source material.
+The project also opens the retired experimental `.fx.yaml` source found in many public historical Canvas samples, but only for read-only inspection and migration research.
 
-See [Format Support](docs/FORMAT_SUPPORT.md).
+Package JSON outside selected Canvas source is deliberately ignored as unstable source material.
+
+See [Format Support](docs/FORMAT_SUPPORT.md) and the [Public .msapp Research Corpus](docs/MSAPP_RESEARCH_CORPUS.md).
 
 ## Architecture
 
@@ -133,8 +134,8 @@ The intended product is a web application with a desktop distribution using the 
 
 Planned work includes:
 
-- official Canvas v3 schema validation;
-- Microsoft Power Fx parser/binder integration;
+- Microsoft Power Fx Core/Interpreter integration through local browser WebAssembly;
+- app-aware Power Fx binding and type checking;
 - connector-aware delegation profiles;
 - dependency/call graphs;
 - richer responsive-container, gallery, form, and component rendering;
@@ -148,7 +149,7 @@ See [Roadmap](ROADMAP.md).
 
 The project follows Microsoft's current Canvas source-code documentation and schema rather than the retired `.fx.yaml` format.
 
-Relevant upstream references are documented in [docs/FORMAT_SUPPORT.md](docs/FORMAT_SUPPORT.md).
+Relevant upstream references are documented in [docs/FORMAT_SUPPORT.md](docs/FORMAT_SUPPORT.md). The semantic Power Fx strategy is documented in [docs/POWER_FX_COMPATIBILITY.md](docs/POWER_FX_COMPATIBILITY.md).
 
 ## Contributing
 
