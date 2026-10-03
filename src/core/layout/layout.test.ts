@@ -3,6 +3,7 @@ import {
   autoLayoutChildren,
   buildSiblingGeometrySymbols,
   controlRect,
+  galleryTemplateLayout,
   literalNumber,
   literalText,
   rgba
@@ -221,4 +222,95 @@ describe("layout literal helpers", () => {
     // X is not serialized in this fixture, so the preview still marks the
     // control as partially unresolved even though Height and Y were solved.
   });
+  it("models a vertical gallery template from TemplateSize", () => {
+    const gallery: CanvasControl = {
+      id: "gallery",
+      name: "Gallery1",
+      controlType: "Gallery",
+      variant: "Vertical",
+      properties: {
+        TemplateSize: "=73",
+        TemplatePadding: "=4"
+      },
+      children: [],
+      sourceFile: "Src/Home.pa.yaml",
+      sourcePath: "Screens/Home/Gallery1",
+      zIndex: 1,
+      sourceFormat: "pa-yaml-v3"
+    };
+
+    const template = galleryTemplateLayout(gallery, {
+      x: 40,
+      y: 100,
+      width: 600,
+      height: 400,
+      dynamic: false
+    });
+
+    expect(template).not.toBeNull();
+    expect(template?.orientation).toBe("vertical");
+    expect(template?.width).toBe(600);
+    expect(template?.height).toBe(73);
+    expect(template?.padding).toBe(4);
+    expect(template?.dynamic).toBe(false);
+  });
+
+  it("marks VariableHeight gallery templates as dynamic", () => {
+    const gallery: CanvasControl = {
+      id: "gallery",
+      name: "Gallery1",
+      controlType: "Gallery",
+      variant: "VariableHeight",
+      properties: {
+        TemplateSize: "=200"
+      },
+      children: [],
+      sourceFile: "Src/Home.pa.yaml",
+      sourcePath: "Screens/Home/Gallery1",
+      zIndex: 1,
+      sourceFormat: "pa-yaml-v3"
+    };
+
+    const template = galleryTemplateLayout(gallery, {
+      x: 0,
+      y: 0,
+      width: 500,
+      height: 600,
+      dynamic: false
+    });
+
+    expect(template?.height).toBe(200);
+    expect(template?.variableHeight).toBe(true);
+    expect(template?.dynamic).toBe(true);
+  });
+
+  it("models a horizontal gallery template along the horizontal axis", () => {
+    const gallery: CanvasControl = {
+      id: "gallery",
+      name: "Gallery1",
+      controlType: "Gallery",
+      variant: "Horizontal",
+      properties: {
+        TemplateSize: "=180"
+      },
+      children: [],
+      sourceFile: "Src/Home.pa.yaml",
+      sourcePath: "Screens/Home/Gallery1",
+      zIndex: 1,
+      sourceFormat: "pa-yaml-v3"
+    };
+
+    const template = galleryTemplateLayout(gallery, {
+      x: 20,
+      y: 30,
+      width: 700,
+      height: 220,
+      dynamic: false
+    });
+
+    expect(template?.orientation).toBe("horizontal");
+    expect(template?.width).toBe(180);
+    expect(template?.height).toBe(220);
+  });
+
 });
