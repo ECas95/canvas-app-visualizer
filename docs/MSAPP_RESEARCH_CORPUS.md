@@ -47,6 +47,25 @@ Patterns observed during this research pass include:
 
 These patterns directly drive regression tests and renderer work. In particular, the preview now resolves a safe subset of `Parent`/`Self`/`App` arithmetic and iteratively resolves statically known sibling geometry before falling back to dashed dynamic controls.
 
+
+### Additional current-source patterns confirmed
+
+A second pass over the current Microsoft Enterprise Asset Management Canvas source confirmed several runtime-relevant shapes that the visualizer must treat explicitly:
+
+- `Gallery@2.15.0` with `Vertical` and `VariableHeight` variants;
+- `TemplateSize`, `TemplatePadding`, `Parent.TemplateWidth`, and `Parent.TemplateHeight`;
+- `CanvasComponent` instances using `ComponentName`;
+- `CodeComponent` instances for PCF controls;
+- `FillPortions`, AutoLayout min/max sizing, and parent-relative geometry;
+- `Min`, `Max`, and responsive `If` formulas in Width/Height;
+- geometry that depends on `ThisItem`, which cannot be resolved without gallery data;
+- string interpolation such as `$"data:...{locAttachmentData}"`;
+- large behavior formulas combining comments, regular-expression strings, `IsMatch`, `LookUp`, `With`, `UpdateContext`, `Trace`, `Notify`, `DateAdd`, `TimeZoneOffset`, inline tables, and chained behavior expressions.
+
+The renderer now represents one gallery template explicitly instead of positioning gallery children against the full gallery viewport. Variable-height templates are marked dynamic rather than assigned false runtime certainty.
+
+The Power Fx lexer now understands interpolated-string formula islands, including escaped braces, nested interpolation, and record literals inside an interpolation expression. Literal text inside the interpolation is not mistaken for executable Power Fx.
+
 ## Public PnP Power Fx sample packages
 
 The public `pnp/powerfx-samples` repository contains downloadable historical `.msapp` packages together with unpacked source trees. Examples found during the research pass include:
