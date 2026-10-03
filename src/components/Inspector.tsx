@@ -1,4 +1,5 @@
 import type { CanvasControl, CanvasScreen } from "../types/canvas";
+import { Icon } from "./Icon";
 
 type Selection =
   | { kind: "screen"; value: CanvasScreen }
@@ -13,24 +14,35 @@ function valueText(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function isFormula(value: unknown): boolean {
+  return typeof value === "string" && value.trimStart().startsWith("=");
+}
+
 export function Inspector({ selection }: Props) {
   if (!selection) {
     return (
       <div className="inspector-empty">
-        Select a screen or control to inspect its serialized properties.
+        <Icon name="properties" size={22} />
+        <strong>Nothing selected</strong>
+        <span>Select a screen or control to inspect its serialized properties.</span>
       </div>
     );
   }
 
   const properties = selection.value.properties;
+  const propertyEntries = Object.entries(properties).sort(([a], [b]) => a.localeCompare(b));
+  const formulaCount = propertyEntries.filter(([, value]) => isFormula(value)).length;
   const type =
     selection.kind === "screen" ? "Screen" : selection.value.controlType;
 
   return (
     <div className="inspector">
       <div className="inspector-title">
-        <span>{type}</span>
+        <span className="panel-kicker">{type}</span>
         <strong>{selection.value.name}</strong>
+        <span className="inspector-subtitle">
+          {propertyEntries.length} serialized properties · {formulaCount} formulas
+        </span>
       </div>
 
       {selection.kind === "control" && (
@@ -40,24 +52,25 @@ export function Inspector({ selection }: Props) {
           <dt>Source</dt>
           <dd>{selection.value.sourceFile}</dd>
           <dt>Version</dt>
-          <dd>{selection.value.version ?? "not serialized"}</dd>
+          <dd>{selection.value.version ?? "Not serialized"}</dd>
           <dt>Variant</dt>
           <dd>{selection.value.variant ?? "—"}</dd>
         </dl>
       )}
 
       <div className="property-list">
-        {Object.keys(properties).length === 0 && (
+        {propertyEntries.length === 0 && (
           <p className="muted">No serialized properties.</p>
         )}
-        {Object.entries(properties)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([name, value]) => (
-            <div className="property-row" key={name}>
+        {propertyEntries.map(([name, value]) => (
+          <div className={"property-row" + (isFormula(value) ? " formula" : "")} key={name}>
+            <div className="property-name-row">
               <strong>{name}</strong>
-              <code>{valueText(value)}</code>
+              {isFormula(value) && <span>Power Fx</span>}
             </div>
-          ))}
+            <code>{valueText(value)}</code>
+          </div>
+        ))}
       </div>
     </div>
   );
