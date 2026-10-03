@@ -94,6 +94,17 @@ describe("Power Fx lexer", () => {
     expect(hasIdentifier(facts, "UserName")).toBe(true);
   });
 
+  it("keeps record literals inside interpolation formula islands", () => {
+    const facts = analyzePowerFx(
+      '=$"value={With({x: 1, y: 2}, x + y)}"'
+    );
+
+    expect(facts.delimiterError).toBeUndefined();
+    expect(countFunction(facts, "With")).toBe(1);
+    expect(hasIdentifier(facts, "x")).toBe(true);
+    expect(hasIdentifier(facts, "y")).toBe(true);
+  });
+
   it("parses the data-uri interpolation shape observed in current Microsoft Canvas source", () => {
     const facts = analyzePowerFx(
       '=$"data:application/octet-stream;base64,{locAttachmentData}"'
