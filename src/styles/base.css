@@ -1,0 +1,23 @@
+:root{
+  font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+  color:#242424;background:#f5f5f5;font-synthesis:none;text-rendering:optimizeLegibility;
+  --bg:#f5f5f5;--surface:#fff;--surface2:#fafafa;--border:#e1e1e1;--border2:#c7c7c7;
+  --text:#242424;--text2:#616161;--text3:#8a8886;--accent:#0f6cbd;--accent2:#115ea3;
+  --accent-soft:#ebf3fc;--success:#107c10;--warning:#8a5d00;--danger:#c50f1f
+}
+*{box-sizing:border-box}html,body,#root{margin:0;min-width:320px;min-height:100%;height:100%}
+body{min-height:100vh;background:var(--bg)}button,input{font:inherit}button{cursor:pointer}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.eyebrow,.panel-kicker{color:var(--text3);font-size:10px;font-weight:700;letter-spacing:.08em}
+.product-mark{position:relative;flex:0 0 auto;width:42px;height:42px;border-radius:9px;background:linear-gradient(145deg,#1769a8,#0f6cbd);overflow:hidden}
+.product-mark:before,.product-mark:after,.product-mark span{content:"";position:absolute;border-radius:2px;background:rgba(255,255,255,.94)}
+.product-mark:before{left:9px;top:9px;width:10px;height:24px}.product-mark:after{left:22px;top:9px;width:11px;height:10px}
+.product-mark span:first-child{left:22px;top:22px;width:11px;height:11px;opacity:.72}.product-mark span:last-child{display:none}
+.product-mark.small{width:34px;height:34px;border-radius:7px}.product-mark.small:before{left:7px;top:7px;width:8px;height:20px}
+.product-mark.small:after{left:18px;top:7px;width:9px;height:8px}.product-mark.small span:first-child{left:18px;top:18px;width:9px;height:9px}
+.product-mark.tiny{width:30px;height:30px;border-radius:6px}.product-mark.tiny:before{left:6px;top:6px;width:7px;height:18px}
+.product-mark.tiny:after{left:16px;top:6px;width:8px;height:7px}.product-mark.tiny span:first-child{left:16px;top:16px;width:8px;height:8px}
+.primary-button,.command-button,.text-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:32px;border-radius:4px;font-weight:600}
+.primary-button{padding:7px 14px;border:1px solid var(--accent);background:var(--accent);color:#fff}.primary-button:hover:not(:disabled){background:var(--accent2)}
+.primary-button:disabled,.command-button:disabled,.text-button:disabled{opacity:.55;cursor:default}.text-button{padding:6px 8px;border:0;background:transparent;color:var(--accent)}
+.text-button:hover:not(:disabled){background:var(--accent-soft)}.muted{color:var(--text3);font-size:10px}

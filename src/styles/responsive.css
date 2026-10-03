@@ -1,0 +1,7 @@
+@media(max-width:1160px){.workspace{grid-template-columns:230px minmax(380px,1fr) 330px}.stats{gap:10px}}
+@media(max-width:940px){.workspace{grid-template-columns:210px minmax(360px,1fr) 300px}.contextbar .stats span:nth-child(2),.contextbar .stats span:nth-child(3){display:none}.local-chip{display:none}}
+@media(max-width:760px){
+  .landing{grid-template-rows:52px 1fr auto}.landing-topbar{padding:0 16px}.landing-main{width:min(100% - 28px,940px);padding:38px 0}.drop-zone{padding:18px}
+  .drop-surface{grid-template-columns:40px minmax(0,1fr)}.drop-surface .primary-button{grid-column:1/-1}.landing-command-row{align-items:flex-start;flex-direction:column}.landing-details{grid-template-columns:1fr}.landing-footer{gap:8px;padding:10px 16px}
+  .workbench{height:auto;min-height:100vh;overflow:visible;grid-template-rows:48px auto auto auto}.contextbar{min-height:36px}.workspace{display:block}.app-tree,.right-panel{min-height:360px}.preview{min-height:620px}.statusbar{display:none}
+}
