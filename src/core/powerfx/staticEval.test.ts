@@ -40,6 +40,12 @@ describe("static Power Fx evaluator", () => {
     ).toBe(true);
   });
 
+  it("implements Power Fx postfix percent semantics", () => {
+    expect(staticNumber("=20%")).toBeCloseTo(0.2);
+    expect(staticNumber("=-15%")).toBeCloseTo(-0.15);
+    expect(staticNumber("=100 * 20%")).toBeCloseTo(20);
+  });
+
   it("does not invent values for unknown runtime symbols", () => {
     expect(
       evaluateStaticPowerFx("=User().Email", { symbols })
