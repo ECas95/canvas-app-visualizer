@@ -55,6 +55,12 @@ export function Inspector({ selection }: Props) {
           <dd>{selection.value.version ?? "Not serialized"}</dd>
           <dt>Variant</dt>
           <dd>{selection.value.variant ?? "—"}</dd>
+          <dt>Layout</dt>
+          <dd>{selection.value.layout ?? "—"}</dd>
+          <dt>Component</dt>
+          <dd>{selection.value.componentName ?? "—"}</dd>
+          <dt>Format</dt>
+          <dd>{selection.value.sourceFormat}</dd>
         </dl>
       )}
 
