@@ -22,9 +22,24 @@ type Selection =
 
 function appNameFromFiles(files: File[]): string {
   if (files.length === 1) {
-    return files[0].name.replace(/\.msapp$/i, "").replace(/\.pa\.yaml$/i, "");
+    return files[0].name
+      .replace(/\.msapp$/i, "")
+      .replace(/\.(?:pa|fx)\.yaml$/i, "");
   }
   return "Canvas App";
+}
+
+function sourceFormatLabel(app: CanvasAppModel): string {
+  switch (app.sourceFormat) {
+    case "pa-yaml-v3":
+      return "Canvas v3";
+    case "fx-yaml-legacy":
+      return "Legacy FX YAML";
+    case "mixed":
+      return "Mixed source";
+    default:
+      return "Unknown YAML";
+  }
 }
 
 export default function App() {
@@ -138,7 +153,7 @@ export default function App() {
               <Icon name="code" size={20} />
               <div>
                 <strong>Source-aware</strong>
-                <span>Inspects active .pa.yaml from modern Canvas packages.</span>
+                <span>Inspects current .pa.yaml and historical .fx.yaml Canvas source.</span>
               </div>
             </div>
             <div>
@@ -191,6 +206,7 @@ export default function App() {
             {app.sourceKind === "msapp" ? "MSAPP" : "YAML"}
           </span>
           <span>{app.files.length} source files</span>
+          <span className="format-label">{sourceFormatLabel(app)}</span>
         </div>
 
         <div className="stats">
@@ -269,7 +285,9 @@ export default function App() {
       <footer className="statusbar">
         <div>
           <span className="status-ready">Ready</span>
-          <span>{app.sourceKind === "msapp" ? ".msapp package" : "Canvas YAML source"}</span>
+          <span>
+            {app.sourceKind === "msapp" ? ".msapp package" : "Canvas YAML source"} · {sourceFormatLabel(app)}
+          </span>
         </div>
         <span>
           Preview is approximate · runtime formulas and defaults are not executed
