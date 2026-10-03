@@ -217,6 +217,8 @@ describe("layout literal helpers", () => {
     expect(symbols["Header.Width"]).toBe(1366);
     expect(body.height).toBe(714);
     expect(body.y).toBe(54);
-    expect(body.dynamic).toBe(false);
+    expect(body.dynamic).toBe(true);
+    // X is not serialized in this fixture, so the preview still marks the
+    // control as partially unresolved even though Height and Y were solved.
   });
 });
