@@ -1,5 +1,6 @@
 import type { CanvasControl, CanvasScreen } from "../types/canvas";
 import { controlRect, literalText, rgba } from "../core/layout/layout";
+import { staticNumber } from "../core/powerfx/staticEval";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -21,12 +22,25 @@ function flatten(
   controls: CanvasControl[],
   offsetX = 0,
   offsetY = 0,
-  depth = 0
+  parentWidth = 1366,
+  parentHeight = 768,
+  appWidth = 1366,
+  appHeight = 768,
+  depth = 0,
+  templateWidth?: number,
+  templateHeight?: number
 ): DrawItem[] {
   const output: DrawItem[] = [];
 
   controls.forEach((control, index) => {
-    const rect = controlRect(control, index);
+    const rect = controlRect(control, index, {
+      parentWidth,
+      parentHeight,
+      appWidth,
+      appHeight,
+      templateWidth,
+      templateHeight
+    });
     const x = offsetX + rect.x;
     const y = offsetY + rect.y;
 
@@ -39,8 +53,28 @@ function flatten(
       dynamic: rect.dynamic
     });
 
-    if (depth < 4 && control.children.length > 0) {
-      output.push(...flatten(control.children, x, y, depth + 1));
+    if (depth < 5 && control.children.length > 0) {
+      const isGallery = control.controlType.toLowerCase().includes("gallery");
+      const childTemplateHeight = isGallery
+        ? staticNumber(control.properties.TemplateSize) ??
+          staticNumber(control.properties.TemplateHeight) ??
+          64
+        : undefined;
+
+      output.push(
+        ...flatten(
+          control.children,
+          x,
+          y,
+          rect.width,
+          rect.height,
+          appWidth,
+          appHeight,
+          depth + 1,
+          isGallery ? rect.width : undefined,
+          childTemplateHeight
+        )
+      );
     }
   });
 
