@@ -9,12 +9,11 @@ import { analyzeCanvasApp } from "./core/analyzer/analyzer";
 import { importCanvasFiles } from "./core/importers/source";
 import { collectFormulaRefs, countControls } from "./core/model/formulas";
 import { buildCanvasModel } from "./core/model/normalize";
-import { DEMO_SOURCE } from "./sample/demo";
+import { DEMO_FILES } from "./sample/demo";
 import type {
   CanvasAppModel,
   CanvasControl,
-  CanvasScreen,
-  SourceFile
+  CanvasScreen
 } from "./types/canvas";
 
 type Selection =
@@ -76,13 +75,10 @@ export default function App() {
   }
 
   function loadDemo() {
-    const source: SourceFile = {
-      path: "Src/Home.pa.yaml",
-      name: "Home.pa.yaml",
-      content: DEMO_SOURCE,
-      origin: "yaml"
-    };
-    installModel(buildCanvasModel([source], "yaml", "Synthetic Inventory Demo"), []);
+    installModel(
+      buildCanvasModel(DEMO_FILES, "yaml", "Synthetic Inventory Demo"),
+      []
+    );
   }
 
   function reset() {
