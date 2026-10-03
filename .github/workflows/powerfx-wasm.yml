@@ -1,0 +1,50 @@
+name: Validate Power Fx WebAssembly
+
+on:
+  pull_request:
+    paths:
+      - "powerfx-wasm/**"
+      - ".github/workflows/powerfx-wasm.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "powerfx-wasm/**"
+      - ".github/workflows/powerfx-wasm.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore powerfx-wasm/CanvasAppVisualizer.PowerFxWasm.csproj
+
+      - name: Publish browser WebAssembly host
+        run: >
+          dotnet publish powerfx-wasm/CanvasAppVisualizer.PowerFxWasm.csproj
+          --configuration Release
+          --no-restore
+          --output powerfx-wasm/artifacts/publish
+
+      - name: Verify WebAssembly framework output
+        shell: bash
+        run: |
+          test -d powerfx-wasm/artifacts/publish/wwwroot/_framework
+          test -f powerfx-wasm/artifacts/publish/wwwroot/_framework/blazor.webassembly.js
+
+      - name: Upload semantic engine artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: powerfx-wasm
+          path: powerfx-wasm/artifacts/publish/wwwroot
+          if-no-files-found: error
