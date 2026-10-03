@@ -1,4 +1,4 @@
-import Ajv, { type ErrorObject } from "ajv";
+import Ajv, { type AnySchema, type ErrorObject } from "ajv";
 import { parse } from "yaml";
 import schemaText from "../../schema/pa.schema.yaml?raw";
 import type { ParseProblem, SourceFile } from "../../types/canvas";
@@ -53,7 +53,9 @@ const ajv = new Ajv({
   strict: false,
   allowUnionTypes: true
 });
-const validate = ajv.compile(schemaForAjv(bundledSchema));
+const validate = ajv.compile(
+  schemaForAjv(bundledSchema) as AnySchema
+);
 
 const MODERN_TOP_LEVEL = new Set([
   "App",
@@ -129,6 +131,6 @@ export function getBundledSchemaInfo(): {
   return {
     id: typed.$id,
     title: typed.title,
-    skippedInvalidPatterns
+    skippedInvalidPatterns: skippedUpstreamPatterns
   };
 }
