@@ -1,6 +1,7 @@
 import type { CanvasControl, CanvasScreen } from "../types/canvas";
 import {
   autoLayoutChildren,
+  buildSiblingGeometrySymbols,
   controlRect,
   isAutoLayout,
   literalText,
@@ -38,13 +39,21 @@ function flatten(
   parentControl?: CanvasControl
 ): DrawItem[] {
   const output: DrawItem[] = [];
-  const context = {
+  const baseContext = {
     parentWidth,
     parentHeight,
     appWidth,
     appHeight,
     templateWidth,
     templateHeight
+  };
+  const siblingSymbols = buildSiblingGeometrySymbols(
+    controls,
+    baseContext
+  );
+  const context = {
+    ...baseContext,
+    symbols: siblingSymbols
   };
 
   const positioned =
