@@ -1,0 +1,41 @@
+App:
+  Properties:
+    StartScreen: =Home
+
+Screens:
+  Home:
+    Properties:
+      Fill: =RGBA(248, 249, 252, 1)
+    Children:
+      - Title:
+          Control: Label
+          Properties:
+            Text: ="Synthetic inventory"
+            X: =48
+            Y: =32
+            Width: =360
+            Height: =52
+      - SearchInput:
+          Control: TextInput
+          Properties:
+            X: =48
+            Y: =104
+            Width: =320
+            Height: =44
+      - InventoryGallery:
+          Control: Gallery
+          Properties:
+            X: =48
+            Y: =176
+            Width: =700
+            Height: =430
+            Items: =Filter(Inventory, StartsWith(Name, SearchInput.Text))
+      - RefreshButton:
+          Control: Button
+          Properties:
+            Text: ="Refresh"
+            X: =780
+            Y: =176
+            Width: =160
+            Height: =44
+            OnSelect: =ClearCollect(colInventory, Inventory)
