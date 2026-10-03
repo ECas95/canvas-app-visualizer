@@ -11,7 +11,11 @@ async function msapp(
   }
 
   const bytes = await zip.generateAsync({ type: "uint8array" });
-  return new File([bytes], "sample.msapp", {
+  const buffer = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength
+  ) as ArrayBuffer;
+  return new File([buffer], "sample.msapp", {
     type: "application/octet-stream"
   });
 }
