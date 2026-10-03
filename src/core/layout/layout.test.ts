@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { controlRect, literalNumber, literalText, rgba } from "./layout";
+import { autoLayoutChildren, controlRect, literalNumber, literalText, rgba } from "./layout";
 import type { CanvasControl } from "../../types/canvas";
 
 describe("layout literal helpers", () => {
@@ -45,5 +45,118 @@ describe("layout literal helpers", () => {
     expect(rect.width).toBe(500);
     expect(rect.x).toBe(250);
     expect(rect.dynamic).toBe(false);
+  });
+  it("lays out horizontal AutoLayout children with FillPortions", () => {
+    const parent: CanvasControl = {
+      id: "root",
+      name: "Root",
+      controlType: "GroupContainer",
+      variant: "AutoLayout",
+      properties: {
+        LayoutDirection: "=LayoutDirection.Horizontal",
+        LayoutGap: "=10",
+        PaddingLeft: "=10",
+        PaddingRight: "=10"
+      },
+      children: [
+        {
+          id: "a",
+          name: "A",
+          controlType: "Label",
+          properties: {
+            FillPortions: "=1",
+            Height: "=40"
+          },
+          children: [],
+          sourceFile: "Src/Home.pa.yaml",
+          sourcePath: "Screens/Home/Root/A",
+          zIndex: 1,
+          sourceFormat: "pa-yaml-v3"
+        },
+        {
+          id: "b",
+          name: "B",
+          controlType: "Label",
+          properties: {
+            FillPortions: "=1",
+            Height: "=40"
+          },
+          children: [],
+          sourceFile: "Src/Home.pa.yaml",
+          sourcePath: "Screens/Home/Root/B",
+          zIndex: 2,
+          sourceFormat: "pa-yaml-v3"
+        }
+      ],
+      sourceFile: "Src/Home.pa.yaml",
+      sourcePath: "Screens/Home/Root",
+      zIndex: 1,
+      sourceFormat: "pa-yaml-v3"
+    };
+
+    const items = autoLayoutChildren(parent, {
+      parentWidth: 1000,
+      parentHeight: 100,
+      appWidth: 1000,
+      appHeight: 600
+    });
+
+    expect(items).toHaveLength(2);
+    expect(items[0].rect.x).toBe(10);
+    expect(items[0].rect.width).toBe(485);
+    expect(items[1].rect.x).toBe(505);
+    expect(items[1].rect.width).toBe(485);
+  });
+
+  it("resolves responsive AutoLayout direction with known parent width", () => {
+    const parent: CanvasControl = {
+      id: "root",
+      name: "Root",
+      controlType: "GroupContainer",
+      variant: "AutoLayout",
+      properties: {
+        LayoutDirection:
+          "=If(Parent.Width < 640, LayoutDirection.Vertical, LayoutDirection.Horizontal)",
+        LayoutGap: "=8"
+      },
+      children: [
+        {
+          id: "a",
+          name: "A",
+          controlType: "Button",
+          properties: { Width: "=100", Height: "=44", FillPortions: "=0" },
+          children: [],
+          sourceFile: "Src/Home.pa.yaml",
+          sourcePath: "Screens/Home/Root/A",
+          zIndex: 1,
+          sourceFormat: "pa-yaml-v3"
+        },
+        {
+          id: "b",
+          name: "B",
+          controlType: "Button",
+          properties: { Width: "=100", Height: "=44", FillPortions: "=0" },
+          children: [],
+          sourceFile: "Src/Home.pa.yaml",
+          sourcePath: "Screens/Home/Root/B",
+          zIndex: 2,
+          sourceFormat: "pa-yaml-v3"
+        }
+      ],
+      sourceFile: "Src/Home.pa.yaml",
+      sourcePath: "Screens/Home/Root",
+      zIndex: 1,
+      sourceFormat: "pa-yaml-v3"
+    };
+
+    const narrow = autoLayoutChildren(parent, {
+      parentWidth: 390,
+      parentHeight: 400,
+      appWidth: 390,
+      appHeight: 844
+    });
+
+    expect(narrow[0].rect.y).toBe(0);
+    expect(narrow[1].rect.y).toBe(52);
   });
 });
