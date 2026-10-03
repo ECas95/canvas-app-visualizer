@@ -95,9 +95,11 @@ Microsoft has already demonstrated the relevant architecture in public code.
 - `ParserOptions`;
 - `[JSExport]` for JavaScript interop.
 
-Microsoft has also publicly described Copilot Studio running .NET/Power Fx validation and expression processing in WebAssembly inside the browser.
+Microsoft has also publicly described Copilot Studio running .NET and Power Fx validation/expression processing in WebAssembly inside the browser, with work moved to Web Workers so the main UI thread stays responsive.
 
 That makes a local WebAssembly semantic engine the preferred direction for this project.
+
+For the first official-engine implementation, the project should pin stable package versions rather than floating builds. The current stable NuGet line researched for this design is `Microsoft.PowerFx.Core 1.8.1` and `Microsoft.PowerFx.Interpreter 1.8.1`. The browser host should target .NET 10 and load lazily because the WebAssembly runtime is materially heavier than the TypeScript indexer.
 
 ## Proposed semantic engine
 
@@ -183,14 +185,19 @@ Implemented now:
 - current/legacy source separation;
 - official Canvas v3 structural schema validation;
 - a comment/string-aware Power Fx lexer;
-- function-call and structural facts used by static analyzer rules.
+- function-call and structural facts used by static analyzer rules;
+- a deliberately limited static evaluator for known pure values;
+- safe layout evaluation for numeric/string/boolean expressions whose dependencies are known;
+- iterative sibling geometry resolution for expressions such as `Parent.Height - Header.Height`;
+- approximate AutoLayout flow for supported, statically resolvable properties.
 
 Not yet authoritative:
 
-- full Power Fx parsing;
+- full official Power Fx parsing;
 - binding/type checking;
-- formula evaluation;
-- Canvas runtime emulation.
+- complete expression evaluation;
+- Canvas control/runtime emulation;
+- connector/delegation runtime equivalence.
 
 These belong to the official-engine WebAssembly phase, not to additional TypeScript regex rules.
 
@@ -198,6 +205,7 @@ These belong to the official-engine WebAssembly phase, not to additional TypeScr
 
 - https://github.com/microsoft/Power-Fx
 - https://github.com/microsoft/PowerApps-TestEngine/tree/main/src/blazor/powerfx
+- https://devblogs.microsoft.com/dotnet/copilot-studio-dotnet-wasm/
 - https://www.nuget.org/packages/Microsoft.PowerFx.Core/
 - https://www.nuget.org/packages/Microsoft.PowerFx.Interpreter/
 - https://learn.microsoft.com/power-platform/power-fx/overview
