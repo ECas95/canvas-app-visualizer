@@ -3,13 +3,57 @@ import { parse } from "yaml";
 import schemaText from "../../schema/pa.schema.yaml?raw";
 import type { ParseProblem, SourceFile } from "../../types/canvas";
 
-const schema = parse(schemaText) as object;
+type JsonObject = Record<string, unknown>;
+
+const bundledSchema = parse(schemaText) as JsonObject;
+const skippedUpstreamPatterns: Array<{ path: string; pattern: string }> = [];
+
+function schemaForAjv(
+  value: unknown,
+  path = "$"
+): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item, index) =>
+      schemaForAjv(item, path + "[" + index + "]")
+    );
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const source = value as JsonObject;
+  const output: JsonObject = {};
+
+  for (const [key, child] of Object.entries(source)) {
+    if (key === "pattern" && typeof child === "string") {
+      try {
+        // Ajv compiles schema patterns to ECMAScript RegExp. Keep the
+        // vendored upstream schema byte-for-byte and skip only patterns
+        // that are not valid ECMAScript regular expressions.
+        new RegExp(child, "u");
+        output[key] = child;
+      } catch {
+        skippedUpstreamPatterns.push({
+          path: path + ".pattern",
+          pattern: child
+        });
+      }
+      continue;
+    }
+
+    output[key] = schemaForAjv(child, path + "." + key);
+  }
+
+  return output;
+}
+
 const ajv = new Ajv({
   allErrors: true,
   strict: false,
   allowUnionTypes: true
 });
-const validate = ajv.compile(schema);
+const validate = ajv.compile(schemaForAjv(bundledSchema));
 
 const MODERN_TOP_LEVEL = new Set([
   "App",
@@ -76,7 +120,15 @@ export function validatePaYamlObject(
 export function getBundledSchemaInfo(): {
   id?: string;
   title?: string;
+  skippedInvalidPatterns: ReadonlyArray<{
+    path: string;
+    pattern: string;
+  }>;
 } {
-  const typed = schema as { $id?: string; title?: string };
-  return { id: typed.$id, title: typed.title };
+  const typed = bundledSchema as { $id?: string; title?: string };
+  return {
+    id: typed.$id,
+    title: typed.title,
+    skippedInvalidPatterns
+  };
 }
