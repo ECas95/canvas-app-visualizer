@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FileDrop } from "./components/FileDrop";
 import { AppTree } from "./components/AppTree";
 import { CanvasPreview } from "./components/CanvasPreview";
@@ -9,11 +9,13 @@ import { analyzeCanvasApp } from "./core/analyzer/analyzer";
 import { importCanvasFiles } from "./core/importers/source";
 import { collectFormulaRefs, countControls } from "./core/model/formulas";
 import { buildCanvasModel } from "./core/model/normalize";
+import { analyzeOfficialPowerFxSyntax } from "./core/powerfx/officialEngine";
 import { DEMO_FILES } from "./sample/demo";
 import type {
   CanvasAppModel,
   CanvasControl,
-  CanvasScreen
+  CanvasScreen,
+  Finding
 } from "./types/canvas";
 
 type Selection =
@@ -50,8 +52,61 @@ export default function App() {
   const [selectedScreenId, setSelectedScreenId] = useState<string>();
   const [selectedControl, setSelectedControl] = useState<CanvasControl>();
   const [rightTab, setRightTab] = useState<"inspect" | "diagnostics">("diagnostics");
+  const [officialFindings, setOfficialFindings] = useState<Finding[]>([]);
+  const [powerFxStatus, setPowerFxStatus] = useState<
+    "idle" | "loading" | "ready" | "unavailable"
+  >("idle");
 
-  const findings = useMemo(() => (app ? analyzeCanvasApp(app) : []), [app]);
+  const staticFindings = useMemo(
+    () => (app ? analyzeCanvasApp(app) : []),
+    [app]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!app) {
+      setOfficialFindings([]);
+      setPowerFxStatus("idle");
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setOfficialFindings([]);
+    setPowerFxStatus("loading");
+
+    analyzeOfficialPowerFxSyntax(app)
+      .then(result => {
+        if (cancelled) return;
+        setOfficialFindings(result);
+        setPowerFxStatus("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setOfficialFindings([]);
+        setPowerFxStatus("unavailable");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [app]);
+
+  const findings = useMemo(() => {
+    const fallback =
+      powerFxStatus === "ready"
+        ? staticFindings.filter(
+            finding => finding.ruleId !== "powerfx.syntax.delimiters"
+          )
+        : staticFindings;
+
+    return [...officialFindings, ...fallback].sort((a, b) => {
+      const rank = { error: 0, warning: 1, info: 2 };
+      return rank[a.severity] - rank[b.severity] ||
+        a.ruleId.localeCompare(b.ruleId);
+    });
+  }, [officialFindings, powerFxStatus, staticFindings]);
   const formulaCount = useMemo(
     () => (app ? collectFormulaRefs(app).length : 0),
     [app]
@@ -102,6 +157,8 @@ export default function App() {
     setSelectedScreenId(undefined);
     setWarnings([]);
     setError(undefined);
+    setOfficialFindings([]);
+    setPowerFxStatus("idle");
   }
 
   if (!app) {
@@ -276,7 +333,10 @@ export default function App() {
             {rightTab === "inspect" ? (
               <Inspector selection={selection} />
             ) : (
-              <DiagnosticsPanel findings={findings} />
+              <DiagnosticsPanel
+                findings={findings}
+                powerFxStatus={powerFxStatus}
+              />
             )}
           </div>
         </aside>
