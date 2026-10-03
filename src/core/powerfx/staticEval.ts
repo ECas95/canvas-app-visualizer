@@ -180,8 +180,7 @@ class Parser {
 
     while (
       this.peek()?.value === "*" ||
-      this.peek()?.value === "/" ||
-      this.peek()?.value === "%"
+      this.peek()?.value === "/"
     ) {
       const op = this.take()?.value;
       const right = this.parsePower();
@@ -190,8 +189,7 @@ class Parser {
       }
 
       if (op === "*") left *= right;
-      else if (op === "/") left /= right;
-      else left %= right;
+      else left /= right;
     }
 
     return left;
@@ -229,7 +227,19 @@ class Parser {
       return !value;
     }
 
-    return this.parsePrimary();
+    return this.parsePostfix();
+  }
+
+  private parsePostfix(): StaticPowerFxValue | null {
+    let value = this.parsePrimary();
+
+    while (this.peek()?.value === "%") {
+      this.take();
+      if (typeof value !== "number") return this.fail();
+      value /= 100;
+    }
+
+    return value;
   }
 
   private parsePrimary(): StaticPowerFxValue | null {
