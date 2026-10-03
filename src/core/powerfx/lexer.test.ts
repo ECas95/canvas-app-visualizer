@@ -72,4 +72,41 @@ describe("Power Fx lexer", () => {
     );
     expect(facts.maxNesting).toBeGreaterThanOrEqual(3);
   });
+  it("lexes formulas inside interpolated strings without treating literal text as code", () => {
+    const facts = analyzePowerFx(
+      '=With({value: 42}, $"LookUp(Data) is text; result={Text(value)}")'
+    );
+
+    expect(facts.delimiterError).toBeUndefined();
+    expect(countFunction(facts, "With")).toBe(1);
+    expect(countFunction(facts, "Text")).toBe(1);
+    expect(countFunction(facts, "LookUp")).toBe(0);
+    expect(hasIdentifier(facts, "value")).toBe(true);
+  });
+
+  it("supports escaped braces and nested string interpolation", () => {
+    const formula =
+      '=$"literal {{brace}} {Coalesce(Name, $"user={UserName}")}"';
+    const facts = analyzePowerFx(formula);
+
+    expect(facts.delimiterError).toBeUndefined();
+    expect(countFunction(facts, "Coalesce")).toBe(1);
+    expect(hasIdentifier(facts, "UserName")).toBe(true);
+  });
+
+  it("parses the data-uri interpolation shape observed in current Microsoft Canvas source", () => {
+    const facts = analyzePowerFx(
+      '=$"data:application/octet-stream;base64,{locAttachmentData}"'
+    );
+
+    expect(facts.delimiterError).toBeUndefined();
+    expect(hasIdentifier(facts, "locAttachmentData")).toBe(true);
+    expect(facts.diagnostics).toEqual([]);
+  });
+
+  it("reports malformed interpolation islands", () => {
+    const facts = analyzePowerFx('=$"value={If(true, 1, 2)"');
+    expect(facts.delimiterError).toContain("Unterminated");
+  });
+
 });
