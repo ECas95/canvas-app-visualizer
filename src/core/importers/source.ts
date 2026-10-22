@@ -48,10 +48,16 @@ function aggregateFormat(files: SourceFile[]): AppSourceFormat {
 }
 
 async function readYamlFiles(files: File[]): Promise<ImportResult> {
+  if (files.length > MAX_SOURCE_FILES) {
+    throw new Error("Too many YAML source files for safe browser inspection.");
+  }
   const sourceFiles: SourceFile[] = [];
   let total = 0;
 
   for (const file of files) {
+    if (file.size > MAX_SINGLE_SOURCE_TEXT) {
+      throw new Error("Source file is too large: " + file.name);
+    }
     const content = await file.text();
     if (content.length > MAX_SINGLE_SOURCE_TEXT) {
       throw new Error("Source file is too large: " + file.name);
