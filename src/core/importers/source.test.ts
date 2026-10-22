@@ -21,6 +21,18 @@ async function msapp(
 }
 
 describe("Canvas source importer", () => {
+  it("rejects excessive individual YAML files before reading", async () => {
+    const large = new File([""], "Large.pa.yaml");
+    Object.defineProperty(large, "size", { value: 6 * 1024 * 1024 });
+    await expect(importCanvasFiles([large])).rejects.toThrow("Source file is too large");
+  });
+
+  it("rejects more than 250 source files", async () => {
+    const files = Array.from({ length: 251 }, (_, index) =>
+      new File([""], `Screen${index}.pa.yaml`)
+    );
+    await expect(importCanvasFiles(files)).rejects.toThrow("Too many YAML source files");
+  });
   it("prefers current pa.yaml when a package contains current and retired source", async () => {
     const file = await msapp({
       "Src/App.pa.yaml": "App:\n  Properties:\n    StartScreen: =Home\n",
