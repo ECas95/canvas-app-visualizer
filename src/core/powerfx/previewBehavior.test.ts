@@ -100,6 +100,43 @@ describe("safe local Power Fx behavior preview", () => {
     expect(res.changes).toEqual([]);
   });
 
+  it("rejects disallowed calls in dead If branches without executing anything", () => {
+    const initial = { ready: false, count: 7 };
+    const formulas = [
+      '=Set(ready, If(true, true, Patch(Source, Defaults(Source), {ID: 1})))',
+      '=Set(ready, If(true, true, Navigate(OtherScreen)))',
+      '=Set(ready, If(true, true, Connector.Max(1, 2)))',
+      '=Set(ready, If(true, true, User().Email))',
+      '=Set(ready, If(true, true, UnknownFunction(1)))'
+    ];
+    for (const formula of formulas) {
+      const result = simulatePreviewBehavior(formula, initial);
+      expect(result.ok, formula).toBe(false);
+      expect(result.message).toContain("Unsupported nested function");
+      expect(result.variables).toEqual(initial);
+      expect(result.changes).toEqual([]);
+    }
+  });
+
+  it("rolls back earlier actions when a later dead branch contains a blocked call", () => {
+    const initial = { ready: false };
+    const result = simulatePreviewBehavior(
+      '=Set(ready, true); UpdateContext({count: If(true, 1, ClearCollect(x, y))})',
+      initial
+    );
+    expect(result.ok).toBe(false);
+    expect(result.variables).toEqual(initial);
+    expect(result.changes).toEqual([]);
+  });
+
+  it("still allows nested pure functions and parenthesized expressions", () => {
+    const result = simulatePreviewBehavior(
+      '=Set(count, If(true, RoundDown(Max(2, 10 / 3), 0), (1 + 2)))'
+    );
+    expect(result.ok).toBe(true);
+    expect(result.variables.count).toBe(3);
+  });
+
   it("never runs a partial UpdateContext record", () => {
     const res = simulatePreviewBehavior(
       "=UpdateContext({known: true, unsupported: SQLView.Value})",
