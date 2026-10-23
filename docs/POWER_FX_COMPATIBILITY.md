@@ -228,6 +228,7 @@ Authoritative syntax layer:
 - the TypeScript lexer becomes fallback/indexing infrastructure when the WebAssembly engine is unavailable.
 - incomplete, duplicate, or malformed WASM batch results are rejected as unavailable so provisional TypeScript syntax diagnostics remain visible; successful parses can still carry official warnings.
 - the response must identify the Microsoft Power Fx batch parser; diagnostic UTF-16 spans must be complete, integral, ordered, and within the normalized Canvas expression (or both absent). Invalid metadata preserves the TypeScript fallback instead of displaying misleading source positions.
+- malformed diagnostic warning flags or severity metadata are also rejected instead of being coerced by JavaScript; this preserves fallback diagnostics rather than mislabeling official errors as warnings.
 
 Not yet authoritative:
 
