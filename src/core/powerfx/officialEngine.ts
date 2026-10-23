@@ -265,7 +265,14 @@ export function findingsFromOfficialBatch(
 
     // Power Fx can return warnings even when the parse succeeds.
     for (const [diagnosticIndex, diagnostic] of item.result.errors.entries()) {
-      if (!diagnostic || typeof diagnostic.message !== "string") {
+      if (
+        !diagnostic ||
+        typeof diagnostic.message !== "string" ||
+        // A malformed warning flag must not be coerced to truthy/falsy.
+        // Otherwise an error can be mislabeled and the lexical fallback hidden.
+        (diagnostic.warning !== undefined && typeof diagnostic.warning !== "boolean") ||
+        (diagnostic.severity !== undefined && typeof diagnostic.severity !== "string")
+      ) {
         throw invalidBatch();
       }
 
