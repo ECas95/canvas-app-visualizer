@@ -340,11 +340,18 @@ class Parser {
     const name = qualifiedName.toLowerCase();
 
     if (name === "if") {
-      const condition = args[0];
-      if (condition === null) return null;
-      if (typeof condition !== "boolean") return this.fail();
-      if (condition) return args[1] ?? null;
-      return args.length >= 3 ? args[2] ?? null : false;
+      // Power Fx If accepts condition/result pairs followed by an optional
+      // default. Only a proven-true branch may be selected; unknown
+      // conditions or missing/Blank defaults remain unresolved in preview.
+      // https://learn.microsoft.com/power-platform/power-fx/reference/function-if
+      if (args.length < 2) return this.fail();
+      for (let i = 0; i + 1 < args.length; i += 2) {
+        const condition = args[i];
+        if (condition === null) return null;
+        if (typeof condition !== "boolean") return this.fail();
+        if (condition) return args[i + 1] ?? null;
+      }
+      return args.length % 2 === 1 ? args[args.length - 1] ?? null : null;
     }
 
     if (args.some(value => value === null)) return null;
