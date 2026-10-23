@@ -334,7 +334,10 @@ class Parser {
     qualifiedName: string,
     args: Array<StaticPowerFxValue | null>
   ): StaticPowerFxValue | null {
-    const name = qualifiedName.split(".").at(-1)?.toLowerCase() ?? "";
+    // Qualified calls can refer to connectors or user-defined functions.
+    // Never interpret Connector.If(...) or Source.Min(...) as a pure built-in.
+    if (qualifiedName.includes(".")) return null;
+    const name = qualifiedName.toLowerCase();
 
     if (name === "if") {
       const condition = args[0];
