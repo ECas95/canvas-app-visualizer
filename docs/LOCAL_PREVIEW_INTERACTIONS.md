@@ -20,6 +20,15 @@ A simulated `OnSelect` is allowed only when the control's `DisplayMode` is absen
 
 Microsoft documents that a disabled button does not trigger `OnSelect`: https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-button
 
+## Host-object name safety
+
+The preview conservatively rejects variable names that collide with JavaScript
+object-prototype members (for example, `__proto__`, `constructor`,
+`toString`) rather than reporting a successful assignment that the
+in-memory JavaScript record cannot safely represent. This is a simulator
+implementation guard, **not** a restriction asserted by Microsoft Power Fx.
+The entire action batch rolls back when such a target is encountered.
+
 ## Explicitly blocked and out of scope
 
 `Patch`, `SubmitForm`, `ClearCollect`, `Collect`, `Remove`, `Refresh`, `Navigate`, flow invocation, `User()`, SQL, Dataverse, external connector calls, custom functions, arbitrary browser/JS code and all other non-allowlisted functions are **never executed**. Missing runtime values are not invented.
