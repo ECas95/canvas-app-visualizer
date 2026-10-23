@@ -19,6 +19,21 @@ describe("safe local Power Fx behavior preview", () => {
     expect(next.variables.varStatus).toBe("Open");
   });
 
+  it("uses the matching branch of multi-condition If inside local Set", () => {
+    const result = simulatePreviewBehavior(
+      '=Set(varLabel, If(false, "wrong", true, "correct", "fallback"))'
+    );
+    expect(result.ok).toBe(true);
+    expect(result.variables.varLabel).toBe("correct");
+
+    const unresolved = simulatePreviewBehavior(
+      '=Set(varLabel, If(false, "wrong", varUnknown, "other", "fallback"))',
+      { varLabel: "original" }
+    );
+    expect(unresolved.ok).toBe(false);
+    expect(unresolved.variables.varLabel).toBe("original");
+  });
+
   it("keeps values case insensitive like Power Fx variables", () => {
     const res = simulatePreviewBehavior("=Set(VAROPEN, true)", { varOpen: false });
     expect(res.variables).toEqual({ varOpen: true });
