@@ -14,7 +14,8 @@ The workbench is an inspector, **not** a Power Apps emulator. No behavior proper
 - Distinct visual/structural modes with simulated desktop/tablet/phone viewport profiles.
 - Fit, 50%, 75%, 100%, and 125% zoom; isolate selected control and its containing hierarchy.
 - Preserve child layout positioning from the existing safe geometry evaluator and constrain drawn children in layout hosts.
-- Unknown control types remain visible as placeholders. Package images intentionally do not load in this phase.
+- Unknown control types remain visible as placeholders.
+- The browser locally reads bounded PNG, JPEG, GIF and WebP resources stored in recognized `.msapp` resource folders, and displays only images linked by statically resolvable YAML names (`Media.Name`, `Name` or a literal filename). Other image formulas remain placeholders. External URLs are never loaded.
 
 ## Source-first rendering contract
 
@@ -38,7 +39,7 @@ The v3 YAML schema deliberately serializes properties that differ from defaults,
 ## Next iterations
 
 1. **Control registry:** version/variant-aware rendering and default-property profiles for classic vs modern controls; tabular test fixtures.
-2. **Source package resources:** safe local extraction and rendering of supported embedded image assets, with cleanup and size limits; no untrusted network requests.
+2. **Source package resources:** raster extraction and direct-name matching are implemented; future work includes complex package image manifests, media aliases, component media and embedded vector replacements without external network requests.
 3. **Layout semantics:** container flex/wrap/alignment, containers versus editor groups, form cards, responsive flow, and simulated gallery rows from explicitly synthetic records.
 4. **Power Fx integration:** use the official parser from PR #13 as authoritative for syntax; add app-symbol binding before relying on calculated runtime-like values.
 5. **Scale and navigation:** on-demand tree expansion (#14), diagnostic-to-control selection, per-screen caching and Web Worker analysis.
