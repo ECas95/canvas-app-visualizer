@@ -44,6 +44,24 @@ describe("safe local Power Fx behavior preview", () => {
     expect(result.changes).toEqual([]);
   });
 
+  it("uses corrected rounding in safe local Set and UpdateContext", () => {
+    const result = simulatePreviewBehavior(
+      "=Set(offset, Round(-7.5, 0)); UpdateContext({rounded: RoundUp(-7.1, 0), decimal: Round(1.005, 2)})"
+    );
+    expect(result.ok).toBe(true);
+    expect(result.variables).toEqual({ offset: -8, rounded: -8, decimal: 1.01 });
+  });
+
+  it("rolls back a behavior batch when rounding precision is unsupported", () => {
+    const initial = { offset: 12 };
+    const result = simulatePreviewBehavior(
+      "=Set(offset, 5); Set(offset, Round(1.005, 20))", initial
+    );
+    expect(result.ok).toBe(false);
+    expect(result.variables).toEqual(initial);
+    expect(result.changes).toEqual([]);
+  });
+
   it("supports repeated toggles and If with known state", () => {
     const first = simulatePreviewBehavior("=Set(varOpen, !varOpen)", { varOpen: false });
     expect(first.ok).toBe(true);
