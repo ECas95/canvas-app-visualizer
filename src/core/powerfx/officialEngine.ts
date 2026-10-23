@@ -225,6 +225,8 @@ export function findingsFromOfficialBatch(
     new Error("The local Microsoft Power Fx parser returned an incomplete or invalid batch response.");
 
   if (
+    response.engine !== "Microsoft.PowerFx" ||
+    response.mode !== "parseBatch" ||
     response.success !== true ||
     !Array.isArray(response.results) ||
     response.results.length !== refs.length
@@ -265,6 +267,24 @@ export function findingsFromOfficialBatch(
     for (const [diagnosticIndex, diagnostic] of item.result.errors.entries()) {
       if (!diagnostic || typeof diagnostic.message !== "string") {
         throw invalidBatch();
+      }
+
+      // .NET Power Fx spans use UTF-16 offsets, like JavaScript strings.
+      // Never publish misleading positions or suppress the lexical fallback
+      // if the host returns incomplete or out-of-bounds span metadata.
+      const { start, end } = diagnostic;
+      if (start != null || end != null) {
+        if (
+          typeof start !== "number" ||
+          typeof end !== "number" ||
+          !Number.isSafeInteger(start) ||
+          !Number.isSafeInteger(end) ||
+          start < 0 ||
+          end < start ||
+          end > normalized.expression.length
+        ) {
+          throw invalidBatch();
+        }
       }
       findings.push(
         diagnosticToFinding(
