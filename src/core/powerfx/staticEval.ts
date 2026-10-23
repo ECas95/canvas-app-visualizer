@@ -370,15 +370,31 @@ class Parser {
       return Math.abs(values[0]);
     }
 
-    if (
-      ["round", "roundup", "rounddown"].includes(name) &&
-      typeof values[0] === "number"
-    ) {
-      const digits = typeof values[1] === "number" ? values[1] : 0;
-      const scale = Math.pow(10, digits);
-      if (name === "round") return Math.round(values[0] * scale) / scale;
-      if (name === "roundup") return Math.ceil(values[0] * scale) / scale;
-      return Math.floor(values[0] * scale) / scale;
+    if (["round", "roundup", "rounddown"].includes(name)) {
+      // Microsoft Power Fx: Round breaks .5 ties away from zero; RoundUp
+      // moves away from zero and RoundDown moves toward zero for both signs.
+      // DecimalPlaces is required. Decline values beyond this conservative
+      // JS-number preview range rather than inventing a precise result.
+      // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-round
+      if (values.length !== 2 ||
+          typeof values[0] !== "number" ||
+          typeof values[1] !== "number" ||
+          !Number.isInteger(values[1]) || Math.abs(values[1]) > 12) return null;
+      const digits = values[1];
+      // Decimal exponent shifting avoids common binary scaling artifacts
+      // (e.g. 1.005 * 100 is slightly below 100.5 in JavaScript).
+      const shift = (number: number, exponent: number): number => {
+        const [coefficient, existingExponent = "0"] = String(number).split("e");
+        return Number(`${coefficient}e${Number(existingExponent) + exponent}`);
+      };
+      const scaled = shift(values[0], digits);
+      if (!Number.isFinite(scaled) ||
+          Math.abs(scaled) > Number.MAX_SAFE_INTEGER) return null;
+      const magnitude = Math.abs(scaled);
+      const roundedMagnitude = name === "round" ? Math.round(magnitude) :
+        name === "roundup" ? Math.ceil(magnitude) : Math.floor(magnitude);
+      const result = shift(Math.sign(scaled) * roundedMagnitude, -digits);
+      return Number.isFinite(result) ? result : null;
     }
 
     if (name === "coalesce") {
