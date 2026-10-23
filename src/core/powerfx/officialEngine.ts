@@ -111,10 +111,11 @@ export function normalizeCanvasFormula(formula: string): NormalizedCanvasFormula
     return { expression: formula, offset: 0 };
   }
 
+  // The official parser sees the expression without the Canvas '=' prefix.
+  // Strip preceding whitespace as well: every parser span can then be mapped
+  // back to the original source by adding the same offset.
   return {
-    expression:
-      formula.slice(0, firstNonWhitespace) +
-      formula.slice(firstNonWhitespace + 1),
+    expression: formula.slice(firstNonWhitespace + 1),
     offset: firstNonWhitespace + 1
   };
 }
