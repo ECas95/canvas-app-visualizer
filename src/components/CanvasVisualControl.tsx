@@ -1,7 +1,9 @@
 import type { CanvasControl } from "../types/canvas";
 import { literalNumber } from "../core/layout/layout";
 import {
-  previewColor, previewFontSize, previewIsChecked, previewKind, previewText
+  previewColor, previewFontSize, previewFontWeight, previewHorizontalAlign,
+  previewIsChecked, previewItalic, previewKind, previewText, previewTextDecoration,
+  previewVerticalAlign
 } from "../core/layout/previewAppearance";
 
 interface Props {
@@ -30,8 +32,31 @@ export function CanvasVisualControl({
   const fontSize = previewFontSize(control);
   const text = label?.slice(0, 240);
   const inset = Math.min(12, Math.max(3, width * 0.04));
-  const radius = Math.min(8, Math.max(0, literalNumber(props.RadiusTopLeft) ?? 4));
+  const radius = Math.min(width / 2, height / 2,
+    Math.max(0, literalNumber(props.RadiusTopLeft) ?? 4));
   const selected = previewIsChecked(control);
+  const horizontalAlign = previewHorizontalAlign(control);
+  const verticalAlign = previewVerticalAlign(control);
+  const fontWeight = previewFontWeight(control);
+  const italic = previewItalic(control);
+  const textDecoration = previewTextDecoration(control);
+
+  function alignedTextPoint(defaultX: number, defaultAnchor: "start" | "middle" | "end") {
+    const anchor = horizontalAlign ?? defaultAnchor;
+    if (!horizontalAlign) return { x: defaultX, anchor };
+    if (anchor === "middle") return { x: x + width / 2, anchor };
+    if (anchor === "end") return { x: x + width - inset, anchor };
+    return { x: x + inset, anchor };
+  }
+
+  function alignedY(defaultY: number): number {
+    const topPadding = Math.max(0, literalNumber(props.PaddingTop) ?? 0);
+    const bottomPadding = Math.max(0, literalNumber(props.PaddingBottom) ?? 0);
+    if (verticalAlign === "top") return y + topPadding + fontSize / 2;
+    if (verticalAlign === "bottom") return y + height - bottomPadding - fontSize / 2;
+    if (verticalAlign === "middle") return y + height / 2;
+    return defaultY;
+  }
 
   const isContainer = kind === "container" || kind === "gallery" || kind === "form";
   const defaultFill =
@@ -53,13 +78,32 @@ export function CanvasVisualControl({
     />
   );
 
-  const svgText = (value: string, atX = x + inset, anchor: "start" | "middle" = "start",
-    color = foreground, atY = y + height / 2) => (
-    <text x={atX} y={atY} dominantBaseline="middle" textAnchor={anchor}
-      fill={color} fontFamily={FAMILY} fontSize={Math.min(fontSize, Math.max(9, height * 0.67))}>
-      {value}
-    </text>
-  );
+  const svgText = (
+    value: string,
+    atX = x + inset,
+    anchor: "start" | "middle" | "end" = "start",
+    color = foreground,
+    atY = y + height / 2
+  ) => {
+    const point = alignedTextPoint(atX, anchor);
+    const lines = value.split(/\\r?\\n/).slice(0, 5);
+    const lineHeight = fontSize * 1.2;
+    const centralY = alignedY(atY);
+    const firstY = centralY - ((lines.length - 1) * lineHeight) / 2;
+    return (
+      <text x={point.x} y={firstY} dominantBaseline="middle"
+        textAnchor={point.anchor} fill={color} fontFamily={FAMILY}
+        fontSize={fontSize} fontWeight={fontWeight}
+        fontStyle={italic ? "italic" : undefined}
+        textDecoration={textDecoration}>
+        {lines.map((line, index) => (
+          <tspan key={index} x={point.x} dy={index === 0 ? 0 : lineHeight}>
+            {line}
+          </tspan>
+        ))}
+      </text>
+    );
+  };
 
   return (
     <g>
@@ -77,11 +121,12 @@ export function CanvasVisualControl({
         ) : basicRect}
 
       <g clipPath={`url(#${clipId})`}>
-        {kind === "button" && svgText(text ?? "Button", x + width / 2, "middle",
-          previewColor(props.Color) ?? (explicitFill ? "#242424" : "#ffffff"))}
+        {kind === "button" && svgText(text ?? (props.Text ? "…" : "Button"), x + width / 2, "middle",
+          previewColor(props.Color) ?? "#ffffff")}
         {kind === "label" && text && svgText(text)}
-        {kind === "input" && svgText(text ?? "", x + inset, "start",
-          previewColor(props.Color) ?? (label ? "#242424" : "#7f8792"))}
+        {kind === "input" && svgText(text ?? (props.Default || props.Value ? "…" : ""),
+          x + inset, "start", previewColor(props.Color) ??
+          (label ? "#242424" : "#7f8792"))}
         {kind === "select" && (
           <>
             {svgText(text ?? "", x + inset)}
