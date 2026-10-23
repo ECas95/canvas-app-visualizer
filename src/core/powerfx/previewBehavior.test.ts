@@ -11,6 +11,39 @@ describe("safe local Power Fx behavior preview", () => {
     expect(res.changes).toEqual(["varShown", "locOpen", "clicks"]);
   });
 
+  it("evaluates every UpdateContext record field against the pre-call snapshot", () => {
+    // The first field must not change the value read by the second field.
+    const result = simulatePreviewBehavior(
+      "=UpdateContext({first: 2, second: first + 1})",
+      { first: 10, second: 0 }
+    );
+    expect(result.ok).toBe(true);
+    expect(result.variables).toEqual({ first: 2, second: 11 });
+    expect(result.changes).toEqual(["first", "second"]);
+  });
+
+  it("does not resolve a new field from another field in the same record", () => {
+    const initial = { flag: false };
+    const result = simulatePreviewBehavior(
+      "=Set(flag, true); UpdateContext({newField: 1, derived: newField + 1})",
+      initial
+    );
+    expect(result.ok).toBe(false);
+    expect(result.variables).toEqual(initial);
+    expect(result.changes).toEqual([]);
+  });
+
+  it("rejects duplicate UpdateContext field names case-insensitively", () => {
+    const initial = { count: 9 };
+    const result = simulatePreviewBehavior(
+      "=UpdateContext({count: 1, COUNT: 2})", initial
+    );
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("Duplicate UpdateContext field");
+    expect(result.variables).toEqual(initial);
+    expect(result.changes).toEqual([]);
+  });
+
   it("supports repeated toggles and If with known state", () => {
     const first = simulatePreviewBehavior("=Set(varOpen, !varOpen)", { varOpen: false });
     expect(first.ok).toBe(true);
