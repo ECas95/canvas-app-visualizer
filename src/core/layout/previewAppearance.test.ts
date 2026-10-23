@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { CanvasControl } from "../../types/canvas";
 import {
-  isDefinitelyHidden, previewColor, previewFontSize, previewIsChecked,
-  previewKind, previewText
+  isDefinitelyHidden, previewColor, previewFontSize, previewFontWeight,
+  previewHorizontalAlign, previewIsChecked, previewItalic, previewKind,
+  previewText, previewTextDecoration, previewVerticalAlign
 } from "./previewAppearance";
 
 function control(type: string, properties: Record<string, unknown> = {}): CanvasControl {
@@ -39,13 +40,46 @@ describe("semantic preview classification", () => {
     expect(previewText(control("Label", { Text: '="Welcome"' }))).toBe("Welcome");
     expect(previewText(control("Label", { Text: "=varTitle" }))).toBeNull();
     expect(previewText(control("TextInput", { HintText: '="Search"' }))).toBe("Search");
-    expect(previewFontSize(control("Label", { Size: "=72" }))).toBe(32);
+    expect(previewFontSize(control("Label", { Size: "=72" }))).toBe(72);
   });
 
   it("honors only resolved false visibility", () => {
     expect(isDefinitelyHidden(control("Label", { Visible: "=false" }))).toBe(true);
     expect(isDefinitelyHidden(control("Label", { Visible: "=true" }))).toBe(false);
     expect(isDefinitelyHidden(control("Label", { Visible: "=varVisible" }))).toBe(false);
+  });
+
+  it("respects explicit serialized typography and alignment", () => {
+    const label = control("Label", {
+      Align: "=Align.Right",
+      VerticalAlign: "=VerticalAlign.Top",
+      FontWeight: "=FontWeight.Bold",
+      Italic: "=true",
+      Underline: "=true",
+      Strikethrough: "=false",
+      Size: "=24"
+    });
+    expect(previewHorizontalAlign(label)).toBe("end");
+    expect(previewVerticalAlign(label)).toBe("top");
+    expect(previewFontWeight(label)).toBe(700);
+    expect(previewItalic(label)).toBe(true);
+    expect(previewTextDecoration(label)).toBe("underline");
+    expect(previewFontSize(label)).toBe(24);
+  });
+
+  it("does not guess unsupported dynamic style formulas", () => {
+    const label = control("Label", {
+      Align: "=If(varCentered, Align.Center, Align.Left)",
+      VerticalAlign: "=varPosition",
+      FontWeight: "=If(varBold, FontWeight.Bold, FontWeight.Regular)",
+      Italic: "=varItalic",
+      Size: "=varSize"
+    });
+    expect(previewHorizontalAlign(label)).toBeNull();
+    expect(previewVerticalAlign(label)).toBeNull();
+    expect(previewFontWeight(label)).toBeUndefined();
+    expect(previewItalic(label)).toBe(false);
+    expect(previewFontSize(label)).toBe(14);
   });
 
   it("resolves serialized checkbox and toggle state", () => {
