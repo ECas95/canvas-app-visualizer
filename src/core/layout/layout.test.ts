@@ -218,10 +218,59 @@ describe("layout literal helpers", () => {
     expect(symbols["Header.Width"]).toBe(1366);
     expect(body.height).toBe(714);
     expect(body.y).toBe(54);
-    expect(body.dynamic).toBe(true);
-    // X is not serialized in this fixture, so the preview still marks the
-    // control as partially unresolved even though Height and Y were solved.
+    expect(body.x).toBe(0);
+    expect(body.dynamic).toBe(false);
+    // Omitted X uses the Canvas default instead of a fabricated offset.
   });
+  it("uses Canvas zero defaults instead of fabricated positions", () => {
+    const makeControl = (id: string, properties: Record<string, unknown>): CanvasControl => ({
+      id, name: id, controlType: "Label", properties, children: [],
+      sourceFile: "Src/Home.pa.yaml", sourcePath: "Screens/Home/" + id,
+      sourceFormat: "pa-yaml-v3", zIndex: 1
+    });
+    const context = { parentWidth: 600, parentHeight: 400, appWidth: 600, appHeight: 400 };
+    const omitted = controlRect(makeControl("Omitted", {
+      Width: "=120", Height: "=25"
+    }), 7, context);
+    expect(omitted.x).toBe(0);
+    expect(omitted.y).toBe(0);
+    expect(omitted.dynamic).toBe(false);
+
+    const explicit = controlRect(makeControl("Explicit", {
+      X: "=Parent.Width-150", Y: "=12", Width: "=100", Height: "=25"
+    }), 3, context);
+    expect(explicit.x).toBe(450);
+    expect(explicit.y).toBe(12);
+    expect(explicit.dynamic).toBe(false);
+
+    const unresolved = controlRect(makeControl("Dynamic", {
+      X: "=varMissing", Y: "=25", Width: "=90", Height: "=20"
+    }), 2, context);
+    expect(unresolved.x).toBe(404);
+    expect(unresolved.y).toBe(25);
+    expect(unresolved.dynamic).toBe(true);
+  });
+
+  it("makes omitted sibling X/Y defaults available to geometry expressions", () => {
+    const makeControl = (name: string, properties: Record<string, unknown>): CanvasControl => ({
+      id: name, name, controlType: "Label", properties, children: [],
+      sourceFile: "Src/Home.pa.yaml", sourcePath: "Screens/Home/" + name,
+      sourceFormat: "pa-yaml-v3", zIndex: 1
+    });
+    const controls = [
+      makeControl("Origin", { Width: "=100", Height: "=20" }),
+      makeControl("Dependent", { X: "=Origin.X + 15", Y: "=Origin.Y + 40", Width: "=100", Height: "=20" })
+    ];
+    const context = { parentWidth: 500, parentHeight: 400, appWidth: 500, appHeight: 400 };
+    const symbols = buildSiblingGeometrySymbols(controls, context);
+    expect(symbols["Origin.X"]).toBe(0);
+    expect(symbols["Origin.Y"]).toBe(0);
+    const rect = controlRect(controls[1], 1, { ...context, symbols });
+    expect(rect.x).toBe(15);
+    expect(rect.y).toBe(40);
+    expect(rect.dynamic).toBe(false);
+  });
+
   it("models a vertical gallery template from TemplateSize", () => {
     const gallery: CanvasControl = {
       id: "gallery",
