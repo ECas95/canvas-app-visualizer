@@ -172,11 +172,11 @@ export function buildSiblingGeometrySymbols(
 
       setNumber(
         control.name + ".X",
-        staticNumber(control.properties.X, selfSymbols)
+        control.properties.X === undefined ? 0 : staticNumber(control.properties.X, selfSymbols)
       );
       setNumber(
         control.name + ".Y",
-        staticNumber(control.properties.Y, selfSymbols)
+        control.properties.Y === undefined ? 0 : staticNumber(control.properties.Y, selfSymbols)
       );
     }
 
@@ -230,15 +230,15 @@ export function controlRect(
   const y = resolvedNumber(control.properties.Y, finalSymbols) ?? initialY;
 
   return {
-    x: x ?? 24 + (index % 4) * 190,
-    y: y ?? 24 + Math.floor(index / 4) * 72,
+    x: x ?? (control.properties.X === undefined ? 0 : 24 + (index % 4) * 190),
+    y: y ?? (control.properties.Y === undefined ? 0 : 24 + Math.floor(index / 4) * 72),
     width: effectiveWidth,
     height: effectiveHeight,
     dynamic:
-      x === null ||
-      y === null ||
-      resolvedWidth === null ||
-      resolvedHeight === null
+      (control.properties.X !== undefined && x === null) ||
+      (control.properties.Y !== undefined && y === null) ||
+      (control.properties.Width !== undefined && resolvedWidth === null) ||
+      (control.properties.Height !== undefined && resolvedHeight === null)
   };
 }
 
