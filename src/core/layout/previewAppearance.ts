@@ -160,11 +160,23 @@ export function previewFontSize(control: CanvasControl): number {
   return resolved !== null && resolved > 0 ? Math.min(256, resolved) : 14;
 }
 
+export type PreviewVisibility = "visible" | "hidden" | "unknown";
+
+/** Unknown runtime conditions are not interpreted as true or false. */
+export function previewVisibility(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): PreviewVisibility {
+  if (control.properties.Visible === undefined) return "visible";
+  const visible = staticBoolean(control.properties.Visible, symbols);
+  return visible === true ? "visible" : visible === false ? "hidden" : "unknown";
+}
+
 export function isDefinitelyHidden(
   control: CanvasControl,
   symbols?: Record<string, StaticPowerFxValue>
 ): boolean {
-  return staticBoolean(control.properties.Visible, symbols) === false;
+  return previewVisibility(control, symbols) === "hidden";
 }
 
 export function previewIsChecked(control: CanvasControl): boolean {
