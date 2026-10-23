@@ -11,7 +11,7 @@ import {
 } from "../core/layout/layout";
 import { isDefinitelyHidden, previewCanRunOnSelect, previewColor } from "../core/layout/previewAppearance";
 import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/layout/previewDataState";
-import { simulatePreviewBehavior, type PreviewVariables } from "../core/powerfx/previewBehavior";
+import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScopedState, type PreviewVariables } from "../core/powerfx/previewBehavior";
 import { CanvasVisualControl } from "./CanvasVisualControl";
 import { Icon } from "./Icon";
 
@@ -127,19 +127,20 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
   const [zoom, setZoom] = useState<Zoom>("fit");
   const [focusSelection, setFocusSelection] = useState(false);
   const [interactive, setInteractive] = useState(false);
-  const [variables, setVariables] = useState<PreviewVariables>({});
+  const [scopedState, setScopedState] = useState<PreviewScopedState>({ globals: {}, context: {} });
+  const variables = useMemo(() => previewScopedSymbols(scopedState), [scopedState]);
   const [simulationMessage, setSimulationMessage] = useState("Simulation off. No behavior formulas are executed.");
   const instanceId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
 
   useEffect(() => {
     setInteractive(false);
-    setVariables({});
+    setScopedState({ globals: {}, context: {} });
     setSimulationMessage("Simulation off. No behavior formulas are executed.");
   }, [screen]);
 
   function simulate(formula: unknown) {
-    const result = simulatePreviewBehavior(formula, variables);
-    if (result.ok) setVariables(result.variables);
+    const result = simulateScopedPreviewBehavior(formula, scopedState);
+    if (result.ok) setScopedState(result.state);
     setSimulationMessage(result.message);
   }
 
@@ -235,7 +236,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
           <label className="preview-focus" title="Enable local-only, reversible behavior simulation">
             <input type="checkbox" checked={interactive} onChange={event => {
               setInteractive(event.target.checked);
-              setVariables({});
+              setScopedState({ globals: {}, context: {} });
               setSimulationMessage(event.target.checked ? "Local simulator ready. Click a control or run OnVisible." : "Simulation off. No behavior formulas are executed.");
             }} />
             Simulate local state
@@ -244,7 +245,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
             onClick={() => simulate(screen.properties.OnVisible)}
             disabled={!screen.properties.OnVisible}>Run OnVisible</button>}
           {interactive && <button type="button" className="simulation-action"
-            onClick={() => { setVariables({}); setSimulationMessage("Local state reset."); }}>Reset</button>}
+            onClick={() => { setScopedState({ globals: {}, context: {} }); setSimulationMessage("Local state reset."); }}>Reset</button>}
           <span className="preview-dimensions">{width} × {height}</span>
         </div>
       </div>
