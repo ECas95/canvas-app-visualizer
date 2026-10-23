@@ -25,6 +25,35 @@ describe("static Power Fx evaluator", () => {
     expect(staticNumber("=RoundDown(19.99, 0)", symbols)).toBe(19);
   });
 
+  it("matches Microsoft Power Fx rounding for negative numbers and ties", () => {
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-round
+    expect(staticNumber("=Round(-7.5, 0)")).toBe(-8);
+    expect(staticNumber("=Round(-7.1, 0)")).toBe(-7);
+    expect(staticNumber("=RoundUp(-7.1, 0)")).toBe(-8);
+    expect(staticNumber("=RoundDown(-7.9, 0)")).toBe(-7);
+    expect(staticNumber("=Round(7.5, 0)")).toBe(8);
+    expect(staticNumber("=RoundUp(7.1, 0)")).toBe(8);
+    expect(staticNumber("=RoundDown(7.9, 0)")).toBe(7);
+  });
+
+  it("rounds fractional and negative decimal places without binary drift", () => {
+    expect(staticNumber("=Round(430.125, 2)")).toBe(430.13);
+    expect(staticNumber("=Round(1.005, 2)")).toBe(1.01);
+    expect(staticNumber("=Round(-1.005, 2)")).toBe(-1.01);
+    expect(staticNumber("=Round(450, -2)")).toBe(500);
+    expect(staticNumber("=Round(-450, -2)")).toBe(-500);
+    expect(staticNumber("=RoundDown(-450, -2)")).toBe(-400);
+    expect(staticNumber("=RoundUp(-430.123, -2)")).toBe(-500);
+  });
+
+  it("does not guess invalid or unsafe rounding arguments", () => {
+    expect(staticNumber("=Round(2.5)")).toBeNull();
+    expect(staticNumber("=Round(2.5, 0, 1)")).toBeNull();
+    expect(staticNumber('=Round(2.5, "0")')).toBeNull();
+    expect(staticNumber("=Round(2.5, 0.5)")).toBeNull();
+    expect(staticNumber("=Round(2.5, 20)")).toBeNull();
+  });
+
   it("evaluates responsive If formulas when the condition is known", () => {
     expect(
       staticString(
