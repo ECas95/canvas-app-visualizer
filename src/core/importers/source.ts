@@ -3,6 +3,7 @@ import type {
   AppSourceFormat,
   CanvasSourceFormat,
   ImportResult,
+  PreviewMediaAsset,
   SourceFile
 } from "../../types/canvas";
 
@@ -10,6 +11,16 @@ const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 const MAX_SOURCE_FILES = 250;
 const MAX_TOTAL_SOURCE_TEXT = 25 * 1024 * 1024;
 const MAX_SINGLE_SOURCE_TEXT = 5 * 1024 * 1024;
+const MAX_MEDIA_FILES = 60;
+const MAX_SINGLE_MEDIA_BYTES = 3 * 1024 * 1024;
+const MAX_TOTAL_MEDIA_BYTES = 12 * 1024 * 1024;
+const RASTER_MIME: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp"
+};
 
 function normalizedPath(name: string): string {
   return name.replaceAll("\\", "/");
@@ -100,6 +111,39 @@ async function readYamlFiles(files: File[]): Promise<ImportResult> {
   };
 }
 
+
+/** Only safe, bounded raster resources; never inspect SVG/HTML or load remote URLs. */
+async function readRasterMedia(entries: JSZip.JSZipObject[]): Promise<PreviewMediaAsset[]> {
+  const media: PreviewMediaAsset[] = [];
+  let total = 0;
+  for (const entry of entries) {
+    const path = normalizedPath(entry.name);
+    if (!/(^|\\/)(assets|resources|media)(\\/|$)/i.test(path) ||
+        /(^|\\/)src\\//i.test(path)) continue;
+    const extension = path.split(".").at(-1)?.toLowerCase() ?? "";
+    const mime = RASTER_MIME[extension];
+    if (!mime) continue;
+    // Limit decompression before expanding base64 data URLs.
+    const declared = (entry as typeof entry & {
+      _data?: { uncompressedSize?: number };
+    })._data?.uncompressedSize;
+    if (declared === undefined || declared > MAX_SINGLE_MEDIA_BYTES ||
+        total + declared > MAX_TOTAL_MEDIA_BYTES || media.length >= MAX_MEDIA_FILES) continue;
+    const content = await entry.async("uint8array");
+    if (content.byteLength > MAX_SINGLE_MEDIA_BYTES ||
+        total + content.byteLength > MAX_TOTAL_MEDIA_BYTES) continue;
+    const basename = path.split("/").at(-1) ?? path;
+    const stem = basename.replace(/\\.[^.]+$/, "");
+    const name = stem.toLowerCase();
+    if (media.some(asset => asset.name === name)) continue;
+    total += content.byteLength;
+    // Generated data URL is only consumed in an SVG image element in this browser.
+    const encoded = await entry.async("base64");
+    media.push({ name, path, dataUrl: `data:${mime};base64,${encoded}` });
+  }
+  return media;
+}
+
 async function readMsapp(file: File): Promise<ImportResult> {
   if (file.size > MAX_UPLOAD_BYTES) {
     throw new Error("The .msapp package exceeds the 100 MB local inspection limit.");
@@ -183,8 +227,10 @@ async function readMsapp(file: File): Promise<ImportResult> {
     );
   }
 
+  const mediaAssets = await readRasterMedia(allFiles);
   return {
     files: sourceFiles.sort((a, b) => a.path.localeCompare(b.path)),
+    mediaAssets,
     sourceKind: "msapp",
     sourceFormat: format,
     warnings
