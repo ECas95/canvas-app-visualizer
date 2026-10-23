@@ -172,11 +172,11 @@ export function buildSiblingGeometrySymbols(
 
       setNumber(
         control.name + ".X",
-        staticNumber(control.properties.X, selfSymbols)
+        control.properties.X === undefined ? 0 : staticNumber(control.properties.X, selfSymbols)
       );
       setNumber(
         control.name + ".Y",
-        staticNumber(control.properties.Y, selfSymbols)
+        control.properties.Y === undefined ? 0 : staticNumber(control.properties.Y, selfSymbols)
       );
     }
 
@@ -210,15 +210,18 @@ export function controlRect(
   const y = resolvedNumber(control.properties.Y, selfSymbols);
 
   return {
-    x: x ?? 24 + (index % 4) * 190,
-    y: y ?? 24 + Math.floor(index / 4) * 72,
+    // Omitted positions serialize the Canvas defaults (0, 0). Do not invent
+    // index-based offsets: every nested host would compound that displacement.
+    // An explicitly serialized but unresolved formula retains a visual fallback.
+    x: x ?? (control.properties.X === undefined ? 0 : 24 + (index % 4) * 190),
+    y: y ?? (control.properties.Y === undefined ? 0 : 24 + Math.floor(index / 4) * 72),
     width: finalWidth,
     height: finalHeight,
     dynamic:
-      x === null ||
-      y === null ||
-      width === null ||
-      height === null
+      (control.properties.X !== undefined && x === null) ||
+      (control.properties.Y !== undefined && y === null) ||
+      (control.properties.Width !== undefined && width === null) ||
+      (control.properties.Height !== undefined && height === null)
   };
 }
 
