@@ -1,8 +1,11 @@
 /* Source inspector and explorer widths are browser-local UI state only. */
 .workspace.resizable-workspace{
+  /* Reserve row 3 for the optional warning strip; keep preview in the 1fr row. */
+  grid-row:4;
   grid-template-columns:var(--explorer-width,266px) 8px minmax(340px,1fr) 8px var(--details-width,380px);
   gap:0;
 }
+.workbench>.statusbar{grid-row:5}
 .workspace-divider{
   position:relative;
   min-width:8px;
