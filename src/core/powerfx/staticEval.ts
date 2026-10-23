@@ -86,10 +86,11 @@ class Parser {
     ) {
       this.take();
       const right = this.parseAnd();
-      if (typeof left !== "boolean" || typeof right !== "boolean") {
-        return this.fail();
-      }
-      left = left || right;
+      if ((left !== null && typeof left !== "boolean") ||
+          (right !== null && typeof right !== "boolean")) return this.fail();
+      // The other branch cannot change true OR unknown.
+      left = left === true || right === true ? true :
+        left === null || right === null ? null : false;
     }
 
     return left;
@@ -104,10 +105,11 @@ class Parser {
     ) {
       this.take();
       const right = this.parseComparison();
-      if (typeof left !== "boolean" || typeof right !== "boolean") {
-        return this.fail();
-      }
-      left = left && right;
+      if ((left !== null && typeof left !== "boolean") ||
+          (right !== null && typeof right !== "boolean")) return this.fail();
+      // The other branch cannot change false AND unknown.
+      left = left === false || right === false ? false :
+        left === null || right === null ? null : true;
     }
 
     return left;
@@ -123,7 +125,7 @@ class Parser {
 
     this.take();
     const right = this.parseConcat();
-    if (left === null || right === null) return this.fail();
+    if (left === null || right === null) return null;
 
     switch (op) {
       case "=":
@@ -153,7 +155,10 @@ class Parser {
     while (this.peek()?.value === "&") {
       this.take();
       const right = this.parseAdditive();
-      if (left === null || right === null) return this.fail();
+      if (left === null || right === null) {
+        left = null;
+        continue;
+      }
       left = String(left) + String(right);
     }
 
@@ -166,9 +171,11 @@ class Parser {
     while (this.peek()?.value === "+" || this.peek()?.value === "-") {
       const op = this.take()?.value;
       const right = this.parseMultiplicative();
-      if (typeof left !== "number" || typeof right !== "number") {
-        return this.fail();
+      if (left === null || right === null) {
+        left = null;
+        continue;
       }
+      if (typeof left !== "number" || typeof right !== "number") return this.fail();
       left = op === "+" ? left + right : left - right;
     }
 
@@ -184,9 +191,11 @@ class Parser {
     ) {
       const op = this.take()?.value;
       const right = this.parsePower();
-      if (typeof left !== "number" || typeof right !== "number") {
-        return this.fail();
+      if (left === null || right === null) {
+        left = null;
+        continue;
       }
+      if (typeof left !== "number" || typeof right !== "number") return this.fail();
 
       if (op === "*") left *= right;
       else left /= right;
@@ -201,9 +210,8 @@ class Parser {
     if (this.peek()?.value === "^") {
       this.take();
       const right = this.parsePower();
-      if (typeof left !== "number" || typeof right !== "number") {
-        return this.fail();
-      }
+      if (left === null || right === null) return null;
+      if (typeof left !== "number" || typeof right !== "number") return this.fail();
       left = Math.pow(left, right);
     }
 
@@ -216,6 +224,7 @@ class Parser {
     if (token?.value === "+" || token?.value === "-") {
       this.take();
       const value = this.parseUnary();
+      if (value === null) return null;
       if (typeof value !== "number") return this.fail();
       return token.value === "-" ? -value : value;
     }
@@ -223,6 +232,7 @@ class Parser {
     if (token?.value === "!" || token?.value.toLowerCase() === "not") {
       this.take();
       const value = this.parseUnary();
+      if (value === null) return null;
       if (typeof value !== "boolean") return this.fail();
       return !value;
     }
@@ -235,6 +245,7 @@ class Parser {
 
     while (this.peek()?.value === "%") {
       this.take();
+      if (value === null) continue;
       if (typeof value !== "number") return this.fail();
       value /= 100;
     }
@@ -315,7 +326,8 @@ class Parser {
       return qualified;
     }
 
-    return this.fail();
+    // Unknown runtime symbol: valid expression, unresolved value.
+    return null;
   }
 
   private evaluateFunction(
@@ -326,12 +338,13 @@ class Parser {
 
     if (name === "if") {
       const condition = args[0];
+      if (condition === null) return null;
       if (typeof condition !== "boolean") return this.fail();
       if (condition) return args[1] ?? null;
       return args.length >= 3 ? args[2] ?? null : false;
     }
 
-    if (args.some(value => value === null)) return this.fail();
+    if (args.some(value => value === null)) return null;
 
     const values = args as StaticPowerFxValue[];
     const numbers = values.filter(
@@ -362,7 +375,8 @@ class Parser {
       return values.find(value => value !== null) ?? null;
     }
 
-    return this.fail();
+    // Unsupported pure/runtime function: preserve uncertainty, not a syntax error.
+    return null;
   }
 
   private fail(): null {

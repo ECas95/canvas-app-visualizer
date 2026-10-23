@@ -10,6 +10,7 @@ import {
   rgba
 } from "../core/layout/layout";
 import { isDefinitelyHidden, previewColor } from "../core/layout/previewAppearance";
+import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/layout/previewDataState";
 import { CanvasVisualControl } from "./CanvasVisualControl";
 import { Icon } from "./Icon";
 
@@ -70,7 +71,13 @@ function flatten(
   for (const { control, rect } of positioned) {
     // A proven-false parent hides its complete subtree; unresolved visibility
     // stays visible instead of guessing runtime state.
-    if (isDefinitelyHidden(control)) continue;
+    const visibilitySymbols = {
+      ...siblingSymbols,
+      "App.Width": appWidth, "App.Height": appHeight,
+      "Parent.Width": parentWidth, "Parent.Height": parentHeight
+    };
+    if (isDefinitelyHidden(control, visibilitySymbols) ||
+        dependsOnRuntimeGalleryItems(control)) continue;
     const x = offsetX + rect.x;
     const y = offsetY + rect.y;
     output.push({
@@ -82,7 +89,7 @@ function flatten(
     const template = isGallery(control)
       ? galleryTemplateLayout(control, {
           x: 0, y: 0, width: rect.width, height: rect.height, dynamic: rect.dynamic
-        })
+        }, context)
       : null;
     output.push(...flatten(
       control.children,
@@ -266,12 +273,44 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
               }, draw);
               return <g key={item.control.id}>{clipped}</g>;
             })}
+
+            {mode === "visual" && visibleItems.filter(item => galleryRecordsUnknown(item.control)).map(item => {
+              const template = galleryTemplateLayout(item.control, {
+                x: 0, y: 0, width: item.width, height: item.height, dynamic: item.dynamic
+              }, {
+                parentWidth: item.width, parentHeight: item.height,
+                appWidth: width, appHeight: height
+              });
+              if (!template) return null;
+              const slots = Math.min(6, template.wrapCount);
+              return (
+                <g key={item.control.id + "-template-legend"} pointerEvents="none">
+                  {Array.from({ length: Math.max(0, slots - 1) }, (_, index) => (
+                    <rect key={index} x={item.x + template.width * (index + 1) + template.padding}
+                      y={item.y + template.padding}
+                      width={Math.max(0, template.width - 2 * template.padding)}
+                      height={Math.max(0, template.height - 2 * template.padding)}
+                      rx={8} fill="none" stroke="#8194ac" strokeDasharray="6 5"
+                      strokeWidth={1} opacity={0.55} />
+                  ))}
+                  <rect x={item.x + 7} y={item.y + Math.max(0, Math.min(item.height - 25, template.height - 25))}
+                    width={Math.min(276, Math.max(0, item.width - 14))} height={22}
+                    rx={4} fill="#edf3fa" stroke="#ccd7e4" />
+                  <text x={item.x + 13}
+                    y={item.y + Math.max(0, Math.min(item.height - 25, template.height - 25)) + 15}
+                    fontSize={11} fill="#42536b">
+                    Template only — runtime records unavailable
+                  </text>
+                </g>
+              );
+            })}
           </svg>
         </div>
       </div>
       <div className="preview-note">
         <span>{mode === "visual" ? "Static visual approximation" : "Control structure"}</span>
         <span>{visibleItems.length} visible nodes · {unresolved} unresolved layouts</span>
+        <span>Gallery templates are illustrative; runtime records are not evaluated.</span>
         <span>Viewport profiles simulate dimensions; no formulas or connectors are executed.</span>
       </div>
     </main>

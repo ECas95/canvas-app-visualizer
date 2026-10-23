@@ -8,12 +8,14 @@ import { Icon } from "./components/Icon";
 import { analyzeCanvasApp } from "./core/analyzer/analyzer";
 import { importCanvasFiles } from "./core/importers/source";
 import { collectFormulaRefs, countControls } from "./core/model/formulas";
+import { buildFindingLocationIndex, locationForFinding } from "./core/model/findingNavigation";
 import { buildCanvasModel } from "./core/model/normalize";
 import { DEMO_FILES } from "./sample/demo";
 import type {
   CanvasAppModel,
   CanvasControl,
   CanvasScreen,
+  Finding,
   PreviewMediaAsset
 } from "./types/canvas";
 
@@ -60,12 +62,21 @@ export default function App() {
   );
   const controlCount = useMemo(() => (app ? countControls(app) : 0), [app]);
 
+  const findingLocations = useMemo(() => app ? buildFindingLocationIndex(app) : new Map(), [app]);
   const selectedScreen = app?.screens.find(screen => screen.id === selectedScreenId);
   const selection: Selection | undefined = selectedControl
     ? { kind: "control", value: selectedControl }
     : selectedScreen
       ? { kind: "screen", value: selectedScreen }
       : undefined;
+
+  function openFinding(finding: Finding) {
+    const location = locationForFinding(findingLocations, finding);
+    if (!location) return;
+    setSelectedScreenId(location.screen.id);
+    setSelectedControl(location.kind === "control" ? location.control : undefined);
+    setRightTab("inspect");
+  }
 
   function installModel(model: CanvasAppModel, importWarnings: string[]) {
     setApp(model);
@@ -120,7 +131,7 @@ export default function App() {
             </div>
             <div>
               <strong>Canvas App Visualizer</strong>
-              <span>Open-source developer tooling</span>
+              <span>Developer workbench · v0.2</span>
             </div>
           </div>
           <a
@@ -189,7 +200,7 @@ export default function App() {
           </div>
           <div>
             <strong>Canvas App Visualizer</strong>
-            <span>{app.name}</span>
+            <span>{app.name} · v0.2</span>
           </div>
         </div>
 
@@ -282,7 +293,9 @@ export default function App() {
             {rightTab === "inspect" ? (
               <Inspector selection={selection} />
             ) : (
-              <DiagnosticsPanel findings={findings} />
+              <DiagnosticsPanel findings={findings}
+                canOpenFinding={finding => Boolean(locationForFinding(findingLocations, finding))}
+                onOpenFinding={openFinding} />
             )}
           </div>
         </aside>

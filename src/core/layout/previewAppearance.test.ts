@@ -49,6 +49,14 @@ describe("semantic preview classification", () => {
     expect(isDefinitelyHidden(control("Label", { Visible: "=varVisible" }))).toBe(false);
   });
 
+  it("resolves viewport-dependent visibility without guessing runtime variables", () => {
+    const symbols = { "App.Width": 1366, "App.Height": 768, "Parent.Width": 1200 };
+    expect(isDefinitelyHidden(control("Label", { Visible: "=App.Width < 1000" }), symbols)).toBe(true);
+    expect(isDefinitelyHidden(control("Label", { Visible: "=App.Width >= 1000" }), symbols)).toBe(false);
+    expect(isDefinitelyHidden(control("Label", { Visible: "=varIsAdmin && App.Width >= 1000" }), symbols)).toBe(false);
+    expect(isDefinitelyHidden(control("Label", { Visible: "=false//App.Width >= 1000" }), symbols)).toBe(true);
+  });
+
   it("respects explicit serialized typography and alignment", () => {
     const label = control("Label", {
       Align: "=Align.Right",

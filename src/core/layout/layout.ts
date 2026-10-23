@@ -172,11 +172,11 @@ export function buildSiblingGeometrySymbols(
 
       setNumber(
         control.name + ".X",
-        staticNumber(control.properties.X, selfSymbols)
+        control.properties.X === undefined ? 0 : staticNumber(control.properties.X, selfSymbols)
       );
       setNumber(
         control.name + ".Y",
-        staticNumber(control.properties.Y, selfSymbols)
+        control.properties.Y === undefined ? 0 : staticNumber(control.properties.Y, selfSymbols)
       );
     }
 
@@ -206,19 +206,39 @@ export function controlRect(
     finalHeight
   );
 
-  const x = resolvedNumber(control.properties.X, selfSymbols);
-  const y = resolvedNumber(control.properties.Y, selfSymbols);
+  const initialX = resolvedNumber(control.properties.X, selfSymbols);
+  const initialY = resolvedNumber(control.properties.Y, selfSymbols);
+
+  // Canvas supports formulas such as Height = App.Height - Self.Y - 20.
+  // Resolve the known position before making a second, side-effect-free size pass.
+  const positionedSymbols = {
+    ...(selfSymbols ?? {}),
+    ...(initialX !== null ? { "Self.X": initialX } : {}),
+    ...(initialY !== null ? { "Self.Y": initialY } : {})
+  };
+  const resolvedWidth = resolvedNumber(control.properties.Width, positionedSymbols) ?? width;
+  const resolvedHeight = resolvedNumber(control.properties.Height, positionedSymbols) ?? height;
+  const effectiveWidth = Math.max(8, resolvedWidth ?? defaults.width);
+  const effectiveHeight = Math.max(8, resolvedHeight ?? defaults.height);
+  const finalSymbols = {
+    ...(layoutSymbols(context, effectiveWidth, effectiveHeight) ?? {}),
+    ...positionedSymbols,
+    "Self.Width": effectiveWidth,
+    "Self.Height": effectiveHeight
+  };
+  const x = resolvedNumber(control.properties.X, finalSymbols) ?? initialX;
+  const y = resolvedNumber(control.properties.Y, finalSymbols) ?? initialY;
 
   return {
-    x: x ?? 24 + (index % 4) * 190,
-    y: y ?? 24 + Math.floor(index / 4) * 72,
-    width: finalWidth,
-    height: finalHeight,
+    x: x ?? (control.properties.X === undefined ? 0 : 24 + (index % 4) * 190),
+    y: y ?? (control.properties.Y === undefined ? 0 : 24 + Math.floor(index / 4) * 72),
+    width: effectiveWidth,
+    height: effectiveHeight,
     dynamic:
-      x === null ||
-      y === null ||
-      width === null ||
-      height === null
+      (control.properties.X !== undefined && x === null) ||
+      (control.properties.Y !== undefined && y === null) ||
+      (control.properties.Width !== undefined && resolvedWidth === null) ||
+      (control.properties.Height !== undefined && resolvedHeight === null)
   };
 }
 
@@ -426,6 +446,7 @@ export interface GalleryTemplateLayout {
   orientation: "vertical" | "horizontal";
   variableHeight: boolean;
   padding: number;
+  wrapCount: number;
   dynamic: boolean;
 }
 
@@ -435,12 +456,16 @@ export function isGallery(control: CanvasControl | undefined): boolean {
 
 export function galleryTemplateLayout(
   control: CanvasControl,
-  rect: VisualRect
+  rect: VisualRect,
+  context?: LayoutContext
 ): GalleryTemplateLayout | null {
   if (!isGallery(control)) return null;
 
   const variant = (control.variant ?? "").toLowerCase();
   const horizontal = variant.includes("horizontal");
+  const symbols = layoutSymbols(context);
+  const resolvedWrap = staticNumber(control.properties.WrapCount, symbols);
+  const wrapCount = Math.max(1, Math.min(64, Math.floor(resolvedWrap ?? 1)));
   const variableHeight = variant.includes("variableheight");
   const templateSize =
     staticNumber(control.properties.TemplateSize) ??
@@ -459,11 +484,12 @@ export function galleryTemplateLayout(
   return {
     x: rect.x,
     y: rect.y,
-    width: horizontal ? Math.min(rect.width, size) : rect.width,
-    height: horizontal ? rect.height : Math.min(rect.height, size),
+    width: horizontal ? Math.min(rect.width, size) : rect.width / wrapCount,
+    height: horizontal ? rect.height / wrapCount : Math.min(rect.height, size),
     orientation: horizontal ? "horizontal" : "vertical",
     variableHeight,
     padding,
-    dynamic: templateSize === null || variableHeight
+    wrapCount,
+    dynamic: templateSize === null || variableHeight || (control.properties.WrapCount !== undefined && resolvedWrap === null)
   };
 }

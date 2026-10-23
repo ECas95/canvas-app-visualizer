@@ -1,6 +1,6 @@
 import type { CanvasControl } from "../../types/canvas";
 import { literalNumber, literalText, rgba } from "./layout";
-import { staticBoolean } from "../powerfx/staticEval";
+import { staticBoolean, type StaticPowerFxValue } from "../powerfx/staticEval";
 
 export type PreviewKind =
   | "button" | "label" | "input" | "select" | "checkbox" | "toggle"
@@ -75,8 +75,11 @@ export function previewFontSize(control: CanvasControl): number {
   return resolved !== null && resolved > 0 ? Math.min(256, resolved) : 14;
 }
 
-export function isDefinitelyHidden(control: CanvasControl): boolean {
-  return staticBoolean(control.properties.Visible) === false;
+export function isDefinitelyHidden(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): boolean {
+  return staticBoolean(control.properties.Visible, symbols) === false;
 }
 
 export function previewIsChecked(control: CanvasControl): boolean {
