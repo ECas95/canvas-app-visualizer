@@ -1,5 +1,6 @@
 import type { CanvasControl, PreviewMediaAsset } from "../types/canvas";
 import { literalNumber } from "../core/layout/layout";
+import { previewCornerRadii, previewRoundedRectPath } from "../core/layout/previewCorners";
 import { staticBoolean, staticString } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, resolvePreviewImage } from "../core/layout/previewMedia";
@@ -49,8 +50,8 @@ export function CanvasVisualControl({
   const fontSize = previewFontSize(control, simulationSymbols);
   const text = label?.slice(0, 240);
   const inset = Math.min(12, Math.max(3, width * 0.04));
-  const radius = Math.min(width / 2, height / 2,
-    Math.max(0, literalNumber(props.RadiusTopLeft) ?? 4));
+  const corners = previewCornerRadii(props, width, height);
+  const outline = previewRoundedRectPath(x, y, width, height, corners);
   const selected = simulationSymbols
     ? [props.Default, props.Checked, props.Value].some(value => staticBoolean(value, simulationSymbols) === true)
     : previewIsChecked(control);
@@ -91,7 +92,7 @@ export function CanvasVisualControl({
   );
 
   const basicRect = (
-    <rect x={x} y={y} width={width} height={height} rx={radius}
+    <path d={outline}
       fill={fill} stroke={stroke}
       strokeWidth={thickness ?? (stroke === "transparent" ? 0 : 1)}
     />
@@ -128,8 +129,9 @@ export function CanvasVisualControl({
     <g opacity={disabled ? 0.66 : displayMode === "view" ? 0.86 : 1}>
       <defs>
         <clipPath id={clipId}>
-          <rect x={x + 1} y={y + 1} width={Math.max(0, width - 2)}
-            height={Math.max(0, height - 2)} rx={radius}/>
+          <path d={previewRoundedRectPath(
+            x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2), corners
+          )}/>
         </clipPath>
       </defs>
       {kind === "shape" && control.controlType.toLowerCase().includes("circle")
@@ -199,7 +201,7 @@ export function CanvasVisualControl({
         )}
       </g>
       {isContainer && explicitFill === null && (
-        <rect x={x} y={y} width={width} height={height} rx={radius}
+        <path d={outline}
           fill="none" stroke="#a8b0bd" strokeWidth="0.6" strokeDasharray="3 5"
           opacity={kind === "container" ? .3 : .6} />
       )}
