@@ -11,6 +11,19 @@ Open a modern `.msapp` package or current `.pa.yaml` source and inspect screens,
 
 > Canvas App Visualizer is an independent project and is not affiliated with or endorsed by Microsoft. It does not replace Power Apps Studio or the Power Apps runtime.
 
+## v0.2.0 — Source-faithful workbench
+
+- **Visual / Structure previews** with responsive viewport profiles, zoom, focused selection and source-based control styling.
+- **Collapsible App explorer** with live search, explicit expand-all/collapse-all and automatic reveal of selected controls.
+- **Diagnostic navigation:** search advisory findings by rule/control/property and inspect the original affected screen/control from a finding.
+- **Gallery layout improvements:** `WrapCount`, `TemplateSize`, parent template dimensions and viewport-aware column layout; unknown runtime datasets remain illustrative, never fabricated.
+- **More accurate layout formulas:** Canvas default `X/Y=0` when not serialized, sibling references, `Self.Y`-dependent dimensions and provable static boolean branches.
+- **Local import protections:** bounded YAML file count/size and locally embedded raster-image handling.
+
+**Runtime boundary:** the preview does not execute Power Fx behavior, permissions, database queries or connectors. Galeries whose `Items` rely on remote data display source templates as unknown, not real records. This is deliberate.
+
+See [release notes](docs/RELEASE_V0.2.0.md) and [Microsoft source references](docs/MICROSOFT_SOURCE_OF_TRUTH.md).
+
 ## Current MVP
 
 - open modern `.msapp` packages directly in the browser;
@@ -22,7 +35,7 @@ Open a modern `.msapp` package or current `.pa.yaml` source and inspect screens,
 - render an approximate screen preview with safe evaluation of common `Parent`, `Self`, `App`, gallery-template, sibling-geometry, and AutoLayout formulas;
 - inspect serialized formulas and properties;
 - lex Power Fx with awareness of strings, interpolation islands, quoted identifiers, comments, operators, records/tables, and qualified function calls;
-- load Microsoft's official Power Fx parser locally through browser WebAssembly for authoritative syntax diagnostics when available;
+- load the official Microsoft Power Fx parser locally through browser WebAssembly for syntax diagnostics when available;
 - surface structural, performance, delegation, maintainability, startup, and accessibility review hints;
 - classify analyzer findings by severity and confidence;
 - process files locally with no application upload API;
@@ -133,10 +146,9 @@ See [Security Policy](SECURITY.md).
 
 The intended product is a web application with a desktop distribution using the same core parser/analyzer.
 
-The deployed web application now bundles a local WebAssembly build of Microsoft's open-source Power Fx engine. Official parsing is used for syntax diagnostics; the TypeScript lexer remains a fast indexer/fallback.
-
 Planned work includes:
 
+- local Microsoft Power Fx Core syntax parsing via WebAssembly (included in the Pages build when this branch is deployed);
 - app-aware Power Fx binding and type checking;
 - connector-aware delegation profiles;
 - dependency/call graphs;

@@ -5,27 +5,25 @@ import { Icon } from "./Icon";
 interface Props {
   findings: Finding[];
   powerFxStatus: "idle" | "loading" | "ready" | "unavailable";
+  canOpenFinding?: (finding: Finding) => boolean;
+  onOpenFinding?: (finding: Finding) => void;
 }
 
 type Filter = "all" | FindingSeverity;
 
-function engineStatusLabel(
-  status: Props["powerFxStatus"]
-): string {
+function engineStatusLabel(status: Props["powerFxStatus"]): string {
   switch (status) {
-    case "loading":
-      return "Power Fx engine · loading";
-    case "ready":
-      return "Official Power Fx · ready";
-    case "unavailable":
-      return "Power Fx engine · fallback";
-    default:
-      return "Power Fx engine · idle";
+    case "loading": return "Power Fx engine · loading";
+    case "ready": return "Official Power Fx · ready";
+    case "unavailable": return "Power Fx engine · fallback";
+    default: return "Power Fx engine · idle";
   }
 }
 
-export function DiagnosticsPanel({ findings, powerFxStatus }: Props) {
+export function DiagnosticsPanel({ findings, canOpenFinding, onOpenFinding, powerFxStatus }: Props) {
   const [filter, setFilter] = useState<Filter>("all");
+  const [search, setSearch] = useState("");
+  const query = search.trim().toLowerCase();
 
   const counts = {
     error: findings.filter(item => item.severity === "error").length,
@@ -34,8 +32,14 @@ export function DiagnosticsPanel({ findings, powerFxStatus }: Props) {
   };
 
   const visible = useMemo(
-    () => (filter === "all" ? findings : findings.filter(item => item.severity === filter)),
-    [findings, filter]
+    () => findings.filter(item => {
+      if (filter !== "all" && item.severity !== filter) return false;
+      if (!query) return true;
+      return [item.title, item.message, item.ruleId, item.category,
+        item.controlPath, item.property, item.sourceFile]
+        .some(value => value?.toLowerCase().includes(query));
+    }),
+    [findings, filter, query]
   );
 
   return (
@@ -46,16 +50,7 @@ export function DiagnosticsPanel({ findings, powerFxStatus }: Props) {
           <strong>{findings.length === 0 ? "No findings" : findings.length + " findings"}</strong>
         </div>
         <div className="analysis-status">
-          <span
-            className={
-              "engine-note " +
-              (powerFxStatus === "ready"
-                ? "ready"
-                : powerFxStatus === "unavailable"
-                  ? "fallback"
-                  : "")
-            }
-          >
+          <span className={"engine-note " + (powerFxStatus === "ready" ? "ready" : powerFxStatus === "unavailable" ? "fallback" : "")}>
             {engineStatusLabel(powerFxStatus)}
           </span>
           <span className="analysis-note">Advisory</span>
@@ -89,6 +84,13 @@ export function DiagnosticsPanel({ findings, powerFxStatus }: Props) {
         </button>
       </div>
 
+      <label className="diagnostic-search">
+        <Icon name="search" size={14} />
+        <input value={search} onChange={event => setSearch(event.target.value)}
+          placeholder="Find rule, control or property" aria-label="Search diagnostics" />
+        <span>{visible.length} shown</span>
+      </label>
+
       {visible.length === 0 ? (
         <div className="diagnostic-empty">
           <Icon name="diagnostics" size={22} />
@@ -121,8 +123,15 @@ export function DiagnosticsPanel({ findings, powerFxStatus }: Props) {
               </div>
               {(item.controlPath || item.property) && (
                 <div className="finding-location">
-                  {item.controlPath}
-                  {item.property ? " · " + item.property : ""}
+                  <span>{item.controlPath}
+                    {item.property ? " · " + item.property : ""}</span>
+                  {onOpenFinding && canOpenFinding?.(item) && (
+                    <button type="button" className="finding-jump"
+                      onClick={() => onOpenFinding(item)}
+                      aria-label={"Inspect " + item.controlPath}>
+                      Inspect control <Icon name="chevron" size={12} />
+                    </button>
+                  )}
                 </div>
               )}
             </article>

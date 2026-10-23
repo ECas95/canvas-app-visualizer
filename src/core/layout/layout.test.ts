@@ -218,10 +218,59 @@ describe("layout literal helpers", () => {
     expect(symbols["Header.Width"]).toBe(1366);
     expect(body.height).toBe(714);
     expect(body.y).toBe(54);
-    expect(body.dynamic).toBe(true);
-    // X is not serialized in this fixture, so the preview still marks the
-    // control as partially unresolved even though Height and Y were solved.
+    expect(body.x).toBe(0);
+    expect(body.dynamic).toBe(false);
+    // Omitted X uses the Canvas default instead of a fabricated offset.
   });
+  it("uses Canvas zero defaults instead of fabricated positions", () => {
+    const makeControl = (id: string, properties: Record<string, unknown>): CanvasControl => ({
+      id, name: id, controlType: "Label", properties, children: [],
+      sourceFile: "Src/Home.pa.yaml", sourcePath: "Screens/Home/" + id,
+      sourceFormat: "pa-yaml-v3", zIndex: 1
+    });
+    const context = { parentWidth: 600, parentHeight: 400, appWidth: 600, appHeight: 400 };
+    const omitted = controlRect(makeControl("Omitted", {
+      Width: "=120", Height: "=25"
+    }), 7, context);
+    expect(omitted.x).toBe(0);
+    expect(omitted.y).toBe(0);
+    expect(omitted.dynamic).toBe(false);
+
+    const explicit = controlRect(makeControl("Explicit", {
+      X: "=Parent.Width-150", Y: "=12", Width: "=100", Height: "=25"
+    }), 3, context);
+    expect(explicit.x).toBe(450);
+    expect(explicit.y).toBe(12);
+    expect(explicit.dynamic).toBe(false);
+
+    const unresolved = controlRect(makeControl("Dynamic", {
+      X: "=varMissing", Y: "=25", Width: "=90", Height: "=20"
+    }), 2, context);
+    expect(unresolved.x).toBe(404);
+    expect(unresolved.y).toBe(25);
+    expect(unresolved.dynamic).toBe(true);
+  });
+
+  it("makes omitted sibling X/Y defaults available to geometry expressions", () => {
+    const makeControl = (name: string, properties: Record<string, unknown>): CanvasControl => ({
+      id: name, name, controlType: "Label", properties, children: [],
+      sourceFile: "Src/Home.pa.yaml", sourcePath: "Screens/Home/" + name,
+      sourceFormat: "pa-yaml-v3", zIndex: 1
+    });
+    const controls = [
+      makeControl("Origin", { Width: "=100", Height: "=20" }),
+      makeControl("Dependent", { X: "=Origin.X + 15", Y: "=Origin.Y + 40", Width: "=100", Height: "=20" })
+    ];
+    const context = { parentWidth: 500, parentHeight: 400, appWidth: 500, appHeight: 400 };
+    const symbols = buildSiblingGeometrySymbols(controls, context);
+    expect(symbols["Origin.X"]).toBe(0);
+    expect(symbols["Origin.Y"]).toBe(0);
+    const rect = controlRect(controls[1], 1, { ...context, symbols });
+    expect(rect.x).toBe(15);
+    expect(rect.y).toBe(40);
+    expect(rect.dynamic).toBe(false);
+  });
+
   it("models a vertical gallery template from TemplateSize", () => {
     const gallery: CanvasControl = {
       id: "gallery",
@@ -312,5 +361,65 @@ describe("layout literal helpers", () => {
     expect(template?.width).toBe(180);
     expect(template?.height).toBe(220);
   });
+
+  it("resolves gallery height using a known Self.Y and unknown unused variables", () => {
+    const gallery: CanvasControl = {
+      id: "gallery", name: "Catalog", controlType: "Gallery", variant: "Vertical",
+      properties: {
+        Width: "=App.Width - 48",
+        Height: "=Max(180, App.Height - Self.Y - 20)",
+        X: "=24",
+        Y: "=200 + If(App.Width < 720 && varIsAdmin, 48, 0)"
+      },
+      children: [], sourceFile: "Src/Demo.pa.yaml", sourcePath: "Catalog",
+      zIndex: 1, sourceFormat: "pa-yaml-v3"
+    };
+    const rect = controlRect(gallery, 0, {
+      parentWidth: 1366, parentHeight: 768, appWidth: 1366, appHeight: 768
+    });
+    expect(rect.x).toBe(24);
+    expect(rect.y).toBe(200);
+    expect(rect.height).toBe(548);
+    expect(rect.dynamic).toBe(false);
+  });
+
+  it("resolves responsive Gallery.WrapCount from app viewport without inventing records", () => {
+    const gallery: CanvasControl = {
+      id: "g", name: "Catalog", controlType: "Gallery", variant: "Vertical",
+      properties: {
+        TemplateSize: "=292",
+        TemplatePadding: "=8",
+        WrapCount: "=If(App.Width < 720, 1, If(App.Width < 1180, 2, 3))"
+      },
+      children: [], sourceFile: "Src/Screen.pa.yaml", sourcePath: "Catalog",
+      zIndex: 1, sourceFormat: "pa-yaml-v3"
+    };
+    const rect = { x: 24, y: 236, width: 1200, height: 600, dynamic: false };
+    const at = (appWidth: number) => galleryTemplateLayout(gallery, rect, {
+      appWidth, appHeight: 768, parentWidth: 1200, parentHeight: 600
+    });
+    expect(at(1366)?.wrapCount).toBe(3);
+    expect(at(1366)?.width).toBe(400);
+    expect(at(1366)?.height).toBe(292);
+    expect(at(900)?.wrapCount).toBe(2);
+    expect(at(900)?.width).toBe(600);
+    expect(at(390)?.wrapCount).toBe(1);
+    expect(at(390)?.width).toBe(1200);
+  });
+
+  it("keeps unknown Gallery.WrapCount explicitly dynamic", () => {
+    const gallery: CanvasControl = {
+      id: "g", name: "Catalog", controlType: "Gallery", variant: "Vertical",
+      properties: { WrapCount: "=varColumns", TemplateSize: "=80" },
+      children: [], sourceFile: "Src/Demo.pa.yaml", sourcePath: "Catalog",
+      zIndex: 1, sourceFormat: "pa-yaml-v3"
+    };
+    const resolved = galleryTemplateLayout(gallery,
+      { x: 0, y: 0, width: 1000, height: 500, dynamic: false },
+      { appWidth: 1200, appHeight: 800, parentWidth: 1000, parentHeight: 500 });
+    expect(resolved?.wrapCount).toBe(1);
+    expect(resolved?.dynamic).toBe(true);
+  });
+
 
 });

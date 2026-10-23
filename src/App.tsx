@@ -8,6 +8,7 @@ import { Icon } from "./components/Icon";
 import { analyzeCanvasApp } from "./core/analyzer/analyzer";
 import { importCanvasFiles } from "./core/importers/source";
 import { collectFormulaRefs, countControls } from "./core/model/formulas";
+import { buildFindingLocationIndex, locationForFinding } from "./core/model/findingNavigation";
 import { buildCanvasModel } from "./core/model/normalize";
 import { analyzeOfficialPowerFxSyntax } from "./core/powerfx/officialEngine";
 import { DEMO_FILES } from "./sample/demo";
@@ -15,7 +16,8 @@ import type {
   CanvasAppModel,
   CanvasControl,
   CanvasScreen,
-  Finding
+  Finding,
+  PreviewMediaAsset
 } from "./types/canvas";
 
 type Selection =
@@ -46,6 +48,7 @@ function sourceFormatLabel(app: CanvasAppModel): string {
 
 export default function App() {
   const [app, setApp] = useState<CanvasAppModel>();
+  const [mediaAssets, setMediaAssets] = useState<PreviewMediaAsset[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -53,29 +56,19 @@ export default function App() {
   const [selectedControl, setSelectedControl] = useState<CanvasControl>();
   const [rightTab, setRightTab] = useState<"inspect" | "diagnostics">("diagnostics");
   const [officialFindings, setOfficialFindings] = useState<Finding[]>([]);
-  const [powerFxStatus, setPowerFxStatus] = useState<
-    "idle" | "loading" | "ready" | "unavailable"
-  >("idle");
+  const [powerFxStatus, setPowerFxStatus] = useState<"idle" | "loading" | "ready" | "unavailable">("idle");
 
-  const staticFindings = useMemo(
-    () => (app ? analyzeCanvasApp(app) : []),
-    [app]
-  );
+  const staticFindings = useMemo(() => (app ? analyzeCanvasApp(app) : []), [app]);
 
   useEffect(() => {
     let cancelled = false;
-
     if (!app) {
       setOfficialFindings([]);
       setPowerFxStatus("idle");
-      return () => {
-        cancelled = true;
-      };
+      return () => { cancelled = true; };
     }
-
     setOfficialFindings([]);
     setPowerFxStatus("loading");
-
     analyzeOfficialPowerFxSyntax(app)
       .then(result => {
         if (cancelled) return;
@@ -87,24 +80,16 @@ export default function App() {
         setOfficialFindings([]);
         setPowerFxStatus("unavailable");
       });
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [app]);
 
   const findings = useMemo(() => {
-    const fallback =
-      powerFxStatus === "ready"
-        ? staticFindings.filter(
-            finding => finding.ruleId !== "powerfx.syntax.delimiters"
-          )
-        : staticFindings;
-
+    const fallback = powerFxStatus === "ready"
+      ? staticFindings.filter(finding => finding.ruleId !== "powerfx.syntax.delimiters")
+      : staticFindings;
     return [...officialFindings, ...fallback].sort((a, b) => {
       const rank = { error: 0, warning: 1, info: 2 };
-      return rank[a.severity] - rank[b.severity] ||
-        a.ruleId.localeCompare(b.ruleId);
+      return rank[a.severity] - rank[b.severity] || a.ruleId.localeCompare(b.ruleId);
     });
   }, [officialFindings, powerFxStatus, staticFindings]);
   const formulaCount = useMemo(
@@ -113,12 +98,21 @@ export default function App() {
   );
   const controlCount = useMemo(() => (app ? countControls(app) : 0), [app]);
 
+  const findingLocations = useMemo(() => app ? buildFindingLocationIndex(app) : new Map(), [app]);
   const selectedScreen = app?.screens.find(screen => screen.id === selectedScreenId);
   const selection: Selection | undefined = selectedControl
     ? { kind: "control", value: selectedControl }
     : selectedScreen
       ? { kind: "screen", value: selectedScreen }
       : undefined;
+
+  function openFinding(finding: Finding) {
+    const location = locationForFinding(findingLocations, finding);
+    if (!location) return;
+    setSelectedScreenId(location.screen.id);
+    setSelectedControl(location.kind === "control" ? location.control : undefined);
+    setRightTab("inspect");
+  }
 
   function installModel(model: CanvasAppModel, importWarnings: string[]) {
     setApp(model);
@@ -133,6 +127,7 @@ export default function App() {
     setError(undefined);
     try {
       const result = await importCanvasFiles(files);
+      setMediaAssets(result.mediaAssets ?? []);
       installModel(
         buildCanvasModel(result.files, result.sourceKind, appNameFromFiles(files)),
         result.warnings
@@ -145,6 +140,7 @@ export default function App() {
   }
 
   function loadDemo() {
+    setMediaAssets([]);
     installModel(
       buildCanvasModel(DEMO_FILES, "yaml", "Synthetic Inventory Demo"),
       []
@@ -153,6 +149,7 @@ export default function App() {
 
   function reset() {
     setApp(undefined);
+    setMediaAssets([]);
     setSelectedControl(undefined);
     setSelectedScreenId(undefined);
     setWarnings([]);
@@ -172,7 +169,7 @@ export default function App() {
             </div>
             <div>
               <strong>Canvas App Visualizer</strong>
-              <span>Open-source developer tooling</span>
+              <span>Developer workbench · v0.2</span>
             </div>
           </div>
           <a
@@ -241,7 +238,7 @@ export default function App() {
           </div>
           <div>
             <strong>Canvas App Visualizer</strong>
-            <span>{app.name}</span>
+            <span>{app.name} · v0.2</span>
           </div>
         </div>
 
@@ -299,6 +296,7 @@ export default function App() {
         />
 
         <CanvasPreview
+          mediaAssets={mediaAssets}
           screen={selectedScreen}
           selectedId={selectedControl?.id}
           onSelect={control => {
@@ -333,10 +331,10 @@ export default function App() {
             {rightTab === "inspect" ? (
               <Inspector selection={selection} />
             ) : (
-              <DiagnosticsPanel
-                findings={findings}
+              <DiagnosticsPanel findings={findings}
                 powerFxStatus={powerFxStatus}
-              />
+                canOpenFinding={finding => Boolean(locationForFinding(findingLocations, finding))}
+                onOpenFinding={openFinding} />
             )}
           </div>
         </aside>

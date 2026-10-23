@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { importCanvasFiles } from "./source";
 
 async function msapp(
-  entries: Record<string, string>
+  entries: Record<string, string | Uint8Array>
 ): Promise<File> {
   const zip = new JSZip();
   for (const [path, content] of Object.entries(entries)) {
@@ -21,6 +21,18 @@ async function msapp(
 }
 
 describe("Canvas source importer", () => {
+  it("rejects excessive individual YAML files before reading", async () => {
+    const large = new File([""], "Large.pa.yaml");
+    Object.defineProperty(large, "size", { value: 6 * 1024 * 1024 });
+    await expect(importCanvasFiles([large])).rejects.toThrow("Source file is too large");
+  });
+
+  it("rejects more than 250 source files", async () => {
+    const files = Array.from({ length: 251 }, (_, index) =>
+      new File([""], `Screen${index}.pa.yaml`)
+    );
+    await expect(importCanvasFiles(files)).rejects.toThrow("Too many YAML source files");
+  });
   it("prefers current pa.yaml when a package contains current and retired source", async () => {
     const file = await msapp({
       "Src/App.pa.yaml": "App:\n  Properties:\n    StartScreen: =Home\n",
@@ -64,4 +76,24 @@ describe("Canvas source importer", () => {
       "No Canvas source was found"
     );
   });
+  it("extracts only locally packaged raster media with normalized names", async () => {
+    // A small PNG fixture. SVGs and images outside resource folders are ignored.
+    const png = Uint8Array.from(
+      atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lXcAAAAASUVORK5CYII="),
+      char => char.charCodeAt(0)
+    );
+    const file = await msapp({
+      "Src/Home.pa.yaml": "Screens:\n  Home:\n    Children: []\n",
+      "Resources/CompanyLogo.PNG": png,
+      "Resources/Vector.svg": "<svg xmlns='http://www.w3.org/2000/svg'></svg>",
+      "External/Other.png": png
+    });
+
+    const result = await importCanvasFiles([file]);
+    expect(result.mediaAssets).toHaveLength(1);
+    expect(result.mediaAssets?.[0].name).toBe("companylogo");
+    expect(result.mediaAssets?.[0].path).toBe("Resources/CompanyLogo.PNG");
+    expect(result.mediaAssets?.[0].dataUrl).toMatch(/^data:image\/png;base64,/);
+  });
+
 });
