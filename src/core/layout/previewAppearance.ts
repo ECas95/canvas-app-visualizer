@@ -1,6 +1,7 @@
 import type { CanvasControl } from "../../types/canvas";
 import { literalNumber, literalText, rgba } from "./layout";
 import { staticBoolean, staticString, type StaticPowerFxValue } from "../powerfx/staticEval";
+import { lexPowerFx, significantTokens, type PowerFxToken } from "../powerfx/lexer";
 
 export type PreviewKind =
   | "button" | "label" | "input" | "select" | "checkbox" | "toggle"
@@ -52,6 +53,90 @@ export function previewColor(raw: unknown): string | null {
   const literal = literalText(value);
   if (literal && /^#[a-fA-F0-9]{3,8}$/.test(literal)) return literal;
   return null;
+}
+
+
+/** Evaluates only the selected branch of a scalar If for visual colors.
+ * Unknown variables and unsupported syntax remain unresolved. There is no JS
+ * evaluation, connector call, CSS expression injection or arbitrary function.
+ */
+function splitIfArguments(tokens: PowerFxToken[]): PowerFxToken[][] | null {
+  const parts: PowerFxToken[][] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].value === "(") depth++;
+    else if (tokens[i].value === ")") depth--;
+    else if (tokens[i].value === "," && depth === 0) {
+      if (i === start) return null;
+      parts.push(tokens.slice(start, i));
+      start = i + 1;
+    }
+    if (depth < 0) return null;
+  }
+  if (depth !== 0 || start >= tokens.length) return null;
+  parts.push(tokens.slice(start));
+  return parts;
+}
+
+function expressionText(source: string, tokens: PowerFxToken[]): string {
+  return tokens.length ? source.slice(tokens[0].start, tokens[tokens.length - 1].end) : "";
+}
+
+export function previewColorWithSymbols(
+  raw: unknown,
+  symbols?: Record<string, StaticPowerFxValue>,
+  depth = 0
+): string | null {
+  const known = previewColor(raw);
+  if (known) return known;
+  if (!symbols || typeof raw !== "string" || depth > 6) return null;
+  const value = raw.trim();
+
+  // Literal text variables and ColorValue(variable) are only accepted as
+  // CSS-independent hex colors; never accept arbitrary string CSS.
+  const colorValue = /^=?\s*ColorValue\(\s*([A-Za-z_][\w]*)\s*\)\s*$/i.exec(value);
+  if (colorValue) {
+    const resolved = staticString("=" + colorValue[1], symbols);
+    return resolved && /^#[a-fA-F0-9]{3,8}$/.test(resolved) ? resolved : null;
+  }
+  const scalar = staticString(value, symbols);
+  if (scalar && /^#[a-fA-F0-9]{3,8}$/.test(scalar)) return scalar;
+
+  const lexed = lexPowerFx(value);
+  if (lexed.diagnostics.length) return null;
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+  if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
+      tokens[tokens.length - 1]?.value !== ")") return null;
+  const branches = splitIfArguments(tokens.slice(2, -1));
+  if (!branches || branches.length < 2) return null;
+
+  for (let i = 0; i + 1 < branches.length; i += 2) {
+    const condition = staticBoolean("=" + expressionText(value, branches[i]), symbols);
+    if (condition === null) return null;
+    if (condition) {
+      return previewColorWithSymbols("=" + expressionText(value, branches[i + 1]), symbols, depth + 1);
+    }
+  }
+  const fallback = branches.length % 2 === 1 ? branches[branches.length - 1] : undefined;
+  return fallback ? previewColorWithSymbols("=" + expressionText(value, fallback), symbols, depth + 1) : null;
+}
+
+export type PreviewDisplayMode = "edit" | "disabled" | "view" | "unresolved";
+
+export function previewDisplayMode(
+  raw: unknown,
+  symbols?: Record<string, StaticPowerFxValue>
+): PreviewDisplayMode {
+  if (raw === undefined || raw === null) return "edit";
+  const resolved = staticString(raw, symbols);
+  if (resolved === null) return "unresolved";
+  const mode = resolved.toLowerCase();
+  if (mode === "displaymode.edit") return "edit";
+  if (mode === "displaymode.disabled") return "disabled";
+  if (mode === "displaymode.view") return "view";
+  return "unresolved";
 }
 
 export function previewText(control: CanvasControl): string | null {
@@ -148,7 +233,5 @@ export function previewCanRunOnSelect(
   control: CanvasControl,
   symbols?: Record<string, StaticPowerFxValue>
 ): boolean {
-  const mode = control.properties.DisplayMode;
-  if (mode === undefined || mode === null) return true;
-  return staticString(mode, symbols)?.toLowerCase() === "displaymode.edit";
+  return previewDisplayMode(control.properties.DisplayMode, symbols) === "edit";
 }
