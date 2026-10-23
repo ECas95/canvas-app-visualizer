@@ -29,6 +29,7 @@ interface DrawItem {
   width: number;
   height: number;
   dynamic: boolean;
+  renderSymbols: PreviewVariables;
   visibilityUnknown: boolean;
   ancestors: string[];
 }
@@ -87,9 +88,18 @@ function flatten(
     const visibilityUnknown = ancestorVisibilityUnknown || visibility === "unknown";
     const x = offsetX + rect.x;
     const y = offsetY + rect.y;
+    const renderSymbols: PreviewVariables = {
+      ...visibilitySymbols,
+      ...(templateWidth !== undefined ? { "Parent.TemplateWidth": templateWidth } : {}),
+      ...(templateHeight !== undefined ? { "Parent.TemplateHeight": templateHeight } : {}),
+      ...(!rect.dynamic ? {
+        "Self.Width": rect.width, "Self.Height": rect.height,
+        "Self.X": rect.x, "Self.Y": rect.y
+      } : {})
+    };
     output.push({
       control, x, y, width: rect.width, height: rect.height,
-      dynamic: rect.dynamic, visibilityUnknown, ancestors
+      dynamic: rect.dynamic, renderSymbols, visibilityUnknown, ancestors
     });
     if (depth >= 24 || control.children.length === 0) continue;
     const editorGroup = control.controlType.toLowerCase() === "group";
@@ -194,8 +204,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
     );
   }
 
-  const fill = previewColorWithSymbols(screen.properties.Fill, interactive ? variables : undefined)
-    ?? rgba(screen.properties.Fill) ?? "#ffffff";
+  const fill = previewColorWithSymbols(screen.properties.Fill, {
+    "App.Width": width, "App.Height": height, ...variables
+  }) ?? rgba(screen.properties.Fill) ?? "#ffffff";
   const zoomWidth = zoom === "fit" ? "min(100%,1120px)"
     : `${Math.round(width * Number(zoom) / 100)}px`;
 
@@ -288,7 +299,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                   }}>
                   {mode === "visual" ? (
                     <CanvasVisualControl control={item.control} mediaAssets={mediaAssets}
-                      simulationSymbols={interactive ? variables : undefined}
+                      simulationSymbols={item.renderSymbols}
                       x={item.x} y={item.y} width={item.width} height={item.height}
                       clipId={`${instanceId}-text-${index}`} />
                   ) : (
