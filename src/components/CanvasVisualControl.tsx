@@ -4,7 +4,7 @@ import { staticBoolean, staticString } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, resolvePreviewImage } from "../core/layout/previewMedia";
 import {
-  previewColor, previewFontSize, previewFontWeight, previewHorizontalAlign,
+  previewColorWithSymbols, previewDisplayMode, previewFontSize, previewFontWeight, previewHorizontalAlign,
   previewIsChecked, previewItalic, previewKind, previewText, previewTextDecoration,
   previewVerticalAlign
 } from "../core/layout/previewAppearance";
@@ -30,9 +30,15 @@ export function CanvasVisualControl({
   const props = control.properties;
   const kind = previewKind(control.controlType);
   const media = kind === "image" ? resolvePreviewImage(props.Image, mediaAssets) : undefined;
-  const explicitFill = previewColor(props.Fill);
-  const foreground = previewColor(props.Color) ?? "#242424";
-  const borderColor = previewColor(props.BorderColor);
+  const displayMode = previewDisplayMode(props.DisplayMode, simulationSymbols);
+  const disabled = displayMode === "disabled";
+  const explicitFill = previewColorWithSymbols(
+    disabled ? props.DisabledFill ?? props.Fill : props.Fill, simulationSymbols
+  );
+  const foreground = previewColorWithSymbols(
+    disabled ? props.DisabledColor ?? props.Color : props.Color, simulationSymbols
+  ) ?? "#242424";
+  const borderColor = previewColorWithSymbols(props.BorderColor, simulationSymbols);
   const thickness = literalNumber(props.BorderThickness);
   const rawText = kind === "input"
     ? props.Default ?? props.Value ?? props.HintText
@@ -119,7 +125,7 @@ export function CanvasVisualControl({
   };
 
   return (
-    <g>
+    <g opacity={disabled ? 0.66 : displayMode === "view" ? 0.86 : 1}>
       <defs>
         <clipPath id={clipId}>
           <rect x={x + 1} y={y + 1} width={Math.max(0, width - 2)}
@@ -135,10 +141,12 @@ export function CanvasVisualControl({
 
       <g clipPath={`url(#${clipId})`}>
         {kind === "button" && svgText(text ?? (props.Text ? "…" : "Button"), x + width / 2, "middle",
-          previewColor(props.Color) ?? "#ffffff")}
+          previewColorWithSymbols(
+            disabled ? props.DisabledColor ?? props.Color : props.Color, simulationSymbols
+          ) ?? (disabled ? "#555555" : "#ffffff"))}
         {kind === "label" && text && svgText(text)}
         {kind === "input" && svgText(text ?? (props.Default || props.Value ? "…" : ""),
-          x + inset, "start", previewColor(props.Color) ??
+          x + inset, "start", previewColorWithSymbols(props.Color, simulationSymbols) ??
           (label ? "#242424" : "#7f8792"))}
         {kind === "select" && (
           <>
