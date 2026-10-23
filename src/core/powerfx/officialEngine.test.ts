@@ -9,11 +9,23 @@ describe("normalizeCanvasFormula", () => {
     });
   });
 
-  it("preserves leading whitespace and reports the source offset", () => {
-    expect(normalizeCanvasFormula("  =Parent.Width - 24")).toEqual({
-      expression: "  Parent.Width - 24",
+  it("strips leading whitespace and maps parser spans back to Canvas source", () => {
+    const formula = "  =Parent.Width - 24";
+    const normalized = normalizeCanvasFormula(formula);
+    expect(normalized).toEqual({
+      expression: "Parent.Width - 24",
       offset: 3
     });
+    expect(formula.slice(normalized.offset, normalized.offset + 6)).toBe(
+      normalized.expression.slice(0, 6)
+    );
+  });
+
+  it("handles multiline indentation before the serialized equals prefix", () => {
+    const formula = "\n  =If(true, 1, 2)";
+    const normalized = normalizeCanvasFormula(formula);
+    expect(normalized).toEqual({ expression: "If(true, 1, 2)", offset: 4 });
+    expect(formula.slice(normalized.offset)).toBe(normalized.expression);
   });
 
   it("leaves expressions without a Canvas source prefix unchanged", () => {
