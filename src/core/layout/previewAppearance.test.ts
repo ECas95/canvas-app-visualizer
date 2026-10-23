@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CanvasControl } from "../../types/canvas";
 import {
-  isDefinitelyHidden, previewColor, previewFontSize, previewFontWeight,
+  isDefinitelyHidden, previewCanRunOnSelect, previewColor, previewFontSize, previewFontWeight,
   previewHorizontalAlign, previewIsChecked, previewItalic, previewKind,
   previewText, previewTextDecoration, previewVerticalAlign
 } from "./previewAppearance";
@@ -93,5 +93,23 @@ describe("semantic preview classification", () => {
   it("resolves serialized checkbox and toggle state", () => {
     expect(previewIsChecked(control("Toggle", { Default: "=true" }))).toBe(true);
     expect(previewIsChecked(control("Checkbox", { Checked: "=false" }))).toBe(false);
+  });
+
+  it("only runs simulated OnSelect for a confirmed editable DisplayMode", () => {
+    const action = (mode?: string) => control("Classic/Button@2.2.0", {
+      OnSelect: "=Set(clicked, true)",
+      ...(mode === undefined ? {} : { DisplayMode: mode })
+    });
+    // YAML omits properties at their defaults.
+    expect(previewCanRunOnSelect(action())).toBe(true);
+    expect(previewCanRunOnSelect(action("=DisplayMode.Edit"))).toBe(true);
+    expect(previewCanRunOnSelect(action("=DisplayMode.Disabled"))).toBe(false);
+    expect(previewCanRunOnSelect(action("=DisplayMode.View"))).toBe(false);
+    expect(previewCanRunOnSelect(action("=varMode"))).toBe(false);
+    expect(previewCanRunOnSelect(action("=If(varReady, DisplayMode.Edit, DisplayMode.Disabled)"), {varReady: true})).toBe(true);
+    expect(previewCanRunOnSelect(action("=If(varReady, DisplayMode.Edit, DisplayMode.Disabled)"), {varReady: false})).toBe(false);
+    expect(previewCanRunOnSelect(action("=If(varReady, DisplayMode.Edit, DisplayMode.Disabled)"))).toBe(false);
+    expect(previewCanRunOnSelect(action("=If(true, DisplayMode.Edit, DisplayMode.Disabled)"))).toBe(true);
+    expect(previewCanRunOnSelect(action("=Connector.DisplayMode()"))).toBe(false);
   });
 });
