@@ -9,7 +9,7 @@ import {
   isGallery,
   rgba
 } from "../core/layout/layout";
-import { isDefinitelyHidden, previewCanRunOnSelect, previewColorWithSymbols } from "../core/layout/previewAppearance";
+import { previewVisibility, previewCanRunOnSelect, previewColorWithSymbols } from "../core/layout/previewAppearance";
 import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/layout/previewDataState";
 import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScopedState, type PreviewVariables } from "../core/powerfx/previewBehavior";
 import { CanvasVisualControl } from "./CanvasVisualControl";
@@ -29,6 +29,7 @@ interface DrawItem {
   width: number;
   height: number;
   dynamic: boolean;
+  visibilityUnknown: boolean;
   ancestors: string[];
 }
 
@@ -55,7 +56,8 @@ function flatten(
   templateWidth?: number,
   templateHeight?: number,
   parentControl?: CanvasControl,
-  simulationSymbols: PreviewVariables = {}
+  simulationSymbols: PreviewVariables = {},
+  ancestorVisibilityUnknown = false
 ): DrawItem[] {
   const output: DrawItem[] = [];
   const baseContext = {
@@ -80,13 +82,14 @@ function flatten(
       "Parent.Width": parentWidth, "Parent.Height": parentHeight,
       ...simulationSymbols
     };
-    if (isDefinitelyHidden(control, visibilitySymbols) ||
-        dependsOnRuntimeGalleryItems(control)) continue;
+    const visibility = previewVisibility(control, visibilitySymbols);
+    if (visibility === "hidden" || dependsOnRuntimeGalleryItems(control)) continue;
+    const visibilityUnknown = ancestorVisibilityUnknown || visibility === "unknown";
     const x = offsetX + rect.x;
     const y = offsetY + rect.y;
     output.push({
       control, x, y, width: rect.width, height: rect.height,
-      dynamic: rect.dynamic, ancestors
+      dynamic: rect.dynamic, visibilityUnknown, ancestors
     });
     if (depth >= 24 || control.children.length === 0) continue;
     const editorGroup = control.controlType.toLowerCase() === "group";
@@ -106,7 +109,8 @@ function flatten(
       editorGroup ? templateWidth : template?.width,
       editorGroup ? templateHeight : template?.height,
       editorGroup ? parentControl : control,
-      simulationSymbols
+      simulationSymbols,
+      visibilityUnknown
     ));
   }
   return output;
@@ -178,6 +182,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
     [items, focusSelection, target]
   );
   const unresolved = items.filter(item => item.dynamic).length;
+  const runtimeVisibilityUnknown = items.filter(item => item.visibilityUnknown).length;
 
   if (!screen) {
     return (
@@ -303,7 +308,8 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                       fill="none" stroke="#0067c0" strokeWidth={3} pointerEvents="none" />
                   )}
                   <title>{item.control.name} · {item.control.controlType}
-                    {item.dynamic ? " · unresolved layout" : ""}</title>
+                    {item.dynamic ? " · unresolved layout" : ""}
+                    {item.visibilityUnknown ? " · runtime visibility not verified" : ""}</title>
                 </g>
               );
               // Clip children in layout hosts only; plain editor Groups do not clip.
@@ -357,7 +363,13 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
       </div>
       <div className="preview-note">
         <span>{mode === "visual" ? "Static visual approximation" : "Control structure"}</span>
-        <span>{visibleItems.length} visible nodes · {unresolved} unresolved layouts</span>
+        <span>{visibleItems.length} drawn nodes · {unresolved} unresolved layouts</span>
+        {runtimeVisibilityUnknown > 0 && (
+          <span className="preview-unknown-state" role="status"
+            title="Visible depends on runtime values unavailable from the Canvas source. These nodes are illustrative and may be hidden in the actual app.">
+            {runtimeVisibilityUnknown} nodes with unknown runtime visibility — NOT verified as visible
+          </span>
+        )}
         {interactive && <span className="simulation-status" aria-live="polite">
           {simulationMessage} · {Object.keys(variables).length} local variable(s)
         </span>}
