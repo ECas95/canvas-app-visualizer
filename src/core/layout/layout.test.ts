@@ -313,6 +313,27 @@ describe("layout literal helpers", () => {
     expect(template?.height).toBe(220);
   });
 
+  it("resolves gallery height using a known Self.Y and unknown unused variables", () => {
+    const gallery: CanvasControl = {
+      id: "gallery", name: "Catalog", controlType: "Gallery", variant: "Vertical",
+      properties: {
+        Width: "=App.Width - 48",
+        Height: "=Max(180, App.Height - Self.Y - 20)",
+        X: "=24",
+        Y: "=200 + If(App.Width < 720 && varIsAdmin, 48, 0)"
+      },
+      children: [], sourceFile: "Src/Demo.pa.yaml", sourcePath: "Catalog",
+      zIndex: 1, sourceFormat: "pa-yaml-v3"
+    };
+    const rect = controlRect(gallery, 0, {
+      parentWidth: 1366, parentHeight: 768, appWidth: 1366, appHeight: 768
+    });
+    expect(rect.x).toBe(24);
+    expect(rect.y).toBe(200);
+    expect(rect.height).toBe(548);
+    expect(rect.dynamic).toBe(false);
+  });
+
   it("resolves responsive Gallery.WrapCount from app viewport without inventing records", () => {
     const gallery: CanvasControl = {
       id: "g", name: "Catalog", controlType: "Gallery", variant: "Vertical",
