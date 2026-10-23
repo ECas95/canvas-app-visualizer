@@ -426,6 +426,7 @@ export interface GalleryTemplateLayout {
   orientation: "vertical" | "horizontal";
   variableHeight: boolean;
   padding: number;
+  wrapCount: number;
   dynamic: boolean;
 }
 
@@ -435,12 +436,16 @@ export function isGallery(control: CanvasControl | undefined): boolean {
 
 export function galleryTemplateLayout(
   control: CanvasControl,
-  rect: VisualRect
+  rect: VisualRect,
+  context?: LayoutContext
 ): GalleryTemplateLayout | null {
   if (!isGallery(control)) return null;
 
   const variant = (control.variant ?? "").toLowerCase();
   const horizontal = variant.includes("horizontal");
+  const symbols = layoutSymbols(context);
+  const resolvedWrap = staticNumber(control.properties.WrapCount, symbols);
+  const wrapCount = Math.max(1, Math.min(64, Math.floor(resolvedWrap ?? 1)));
   const variableHeight = variant.includes("variableheight");
   const templateSize =
     staticNumber(control.properties.TemplateSize) ??
@@ -459,11 +464,12 @@ export function galleryTemplateLayout(
   return {
     x: rect.x,
     y: rect.y,
-    width: horizontal ? Math.min(rect.width, size) : rect.width,
-    height: horizontal ? rect.height : Math.min(rect.height, size),
+    width: horizontal ? Math.min(rect.width, size) : rect.width / wrapCount,
+    height: horizontal ? rect.height / wrapCount : Math.min(rect.height, size),
     orientation: horizontal ? "horizontal" : "vertical",
     variableHeight,
     padding,
-    dynamic: templateSize === null || variableHeight
+    wrapCount,
+    dynamic: templateSize === null || variableHeight || (control.properties.WrapCount !== undefined && resolvedWrap === null)
   };
 }
