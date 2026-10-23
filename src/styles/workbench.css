@@ -30,3 +30,13 @@
 .canvas-frame svg{display:block;width:100%;aspect-ratio:1366/768;background:#fff}.visual-control{cursor:pointer}.preview-note{display:flex;align-items:center;gap:7px;padding:0 11px;border-top:1px solid var(--border);background:#fff;color:var(--text3);font-size:9px}
 .dynamic-swatch{width:18px;height:9px;border:1px dashed #657285;border-radius:2px}
 .statusbar{display:flex;align-items:center;justify-content:space-between;padding:0 10px;border-top:1px solid #d8d8d8;background:#f7f7f7;color:var(--text3);font-size:9px}.statusbar>div{display:flex;align-items:center;gap:10px}.status-ready{color:var(--success);font-weight:600}
+/* Explorer disclosure controls: separate expansion from selection. */
+.tree-entry{display:flex;align-items:center;min-width:0}
+.tree-entry>.tree-item{flex:1;min-width:0;width:auto}
+.tree-expander,.tree-expander-placeholder{flex:0 0 18px;width:18px;height:28px;display:inline-grid;place-items:center}
+.tree-expander{border:0;background:transparent;color:var(--text2);cursor:pointer;font-size:12px}
+.tree-expander:hover{color:var(--accent);background:#f2f6fb}
+.tree-expander:focus-visible,.tree-actions button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.tree-actions{display:flex;justify-content:flex-end;gap:8px;padding:0 10px 5px}
+.tree-actions button{border:0;background:transparent;color:var(--text2);font-size:10px;cursor:pointer;padding:3px}
+.tree-actions button:hover{text-decoration:underline;color:var(--accent)}
