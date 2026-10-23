@@ -16,6 +16,17 @@ The workbench is an inspector, **not** a Power Apps emulator. No behavior proper
 - Preserve child layout positioning from the existing safe geometry evaluator and constrain drawn children in layout hosts.
 - Unknown control types remain visible as placeholders. Package images intentionally do not load in this phase.
 
+## Source-first rendering contract
+
+Preview properties follow a deterministic precedence:
+
+1. **Serialized YAML wins**: a statically resolvable value of `X`, `Y`, `Width`, `Height`, `Fill`, `Color`, `Text`, `Size`, `FontWeight`, `Align`, `VerticalAlign`, `Italic`, `Underline`, `Strikethrough`, `BorderColor`, `BorderThickness`, `RadiusTopLeft`, or `Visible` takes precedence over the appearance of the generic control.
+2. **Known expression subset**: limited local arithmetic and control geometry expressions are used only when all dependencies are available.
+3. **Visual fallback**: when a property is absent or cannot be evaluated, the relevant control type gets a neutral approximate default instead of a fabricated value. Dynamic text must not be replaced with a made-up application string.
+4. **Inspection remains authoritative**: the Properties panel always shows the original serialized values, even when the preview cannot resolve them.
+
+This is a *source-aware picture*, not an executable app. Unknown runtime visibility is not treated as false; known `Visible=false` excludes a control and its descendants from the preview. The preview does not execute behavior formulas or connector requests.
+
 ## Fidelity tiers
 
 1. **Resolved:** property is statically known from source (e.g., constant dimensions and `ColorValue`).
