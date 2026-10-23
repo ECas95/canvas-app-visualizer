@@ -226,6 +226,7 @@ Authoritative syntax layer:
 - the deployed site lazy-loads that runtime locally and batch-parses Canvas formulas;
 - official parser errors/warnings are mapped back to file, control/property, formula, and source span;
 - the TypeScript lexer becomes fallback/indexing infrastructure when the WebAssembly engine is unavailable.
+- incomplete, duplicate, or malformed WASM batch results are rejected as unavailable so provisional TypeScript syntax diagnostics remain visible; successful parses can still carry official warnings.
 
 Not yet authoritative:
 

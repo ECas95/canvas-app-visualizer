@@ -205,24 +205,67 @@ export async function analyzeOfficialPowerFxSyntax(
   const raw = engine.ParseBatch(JSON.stringify(requests));
   const response = JSON.parse(raw) as ParseBatchResponse;
 
+  return findingsFromOfficialBatch(refs, response);
+}
+
+/**
+ * A partial or malformed WASM response must never be treated as a complete
+ * authoritative parse: App.tsx can then retain the provisional TS findings.
+ * Results are keyed by their original formula index, not by array order.
+ */
+export function findingsFromOfficialBatch(
+  refs: FormulaRef[],
+  response: ParseBatchResponse
+): Finding[] {
   if (response.hostError) {
     throw new Error(response.hostError);
   }
 
-  if (!response.success || !Array.isArray(response.results)) {
-    throw new Error("The local Microsoft Power Fx parser returned an invalid batch response.");
+  const invalidBatch = () =>
+    new Error("The local Microsoft Power Fx parser returned an incomplete or invalid batch response.");
+
+  if (
+    response.success !== true ||
+    !Array.isArray(response.results) ||
+    response.results.length !== refs.length
+  ) {
+    throw invalidBatch();
   }
 
+  const seen = new Set<number>();
   const findings: Finding[] = [];
 
   for (const item of response.results) {
+    if (
+      !item ||
+      typeof item.id !== "string" ||
+      !/^(0|[1-9]\\d*)$/u.test(item.id)
+    ) {
+      throw invalidBatch();
+    }
+
     const index = Number(item.id);
+    if (
+      !Number.isSafeInteger(index) ||
+      index >= refs.length ||
+      seen.has(index) ||
+      !item.result ||
+      typeof item.result.success !== "boolean" ||
+      !Array.isArray(item.result.errors) ||
+      (!item.result.success && item.result.errors.length === 0)
+    ) {
+      throw invalidBatch();
+    }
+
+    seen.add(index);
     const ref = refs[index];
-
-    if (!ref || !item.result || item.result.success) continue;
-
     const normalized = normalizeCanvasFormula(ref.formula);
-    for (const [diagnosticIndex, diagnostic] of (item.result.errors ?? []).entries()) {
+
+    // Power Fx can return warnings even when the parse succeeds.
+    for (const [diagnosticIndex, diagnostic] of item.result.errors.entries()) {
+      if (!diagnostic || typeof diagnostic.message !== "string") {
+        throw invalidBatch();
+      }
       findings.push(
         diagnosticToFinding(
           ref,
@@ -236,7 +279,6 @@ export async function analyzeOfficialPowerFxSyntax(
 
   return findings;
 }
-
 
 /**
  * Once the official parser has returned a complete analysis, its syntax
