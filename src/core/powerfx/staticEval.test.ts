@@ -70,6 +70,20 @@ describe("static Power Fx evaluator", () => {
     expect(staticNumber("=Abs(-3)")).toBe(3);
   });
 
+  it("handles multi-condition If in documented first-match order", () => {
+    expect(staticString('=If(false, "first", true, "second", "default")')).toBe("second");
+    expect(staticString('=If(false, "first", false, "second", "default")')).toBe("default");
+    expect(staticString('=If(true, "first", true, "second", "default")')).toBe("first");
+    expect(staticString('=If(false, "first", true, "second")')).toBe("second");
+  });
+
+  it("keeps unresolved conditions and omitted defaults unknown", () => {
+    expect(staticString('=If(false, "first", varUnknown, "second", "default")')).toBeNull();
+    expect(staticString('=If(false, "first", false, "second")')).toBeNull();
+    expect(staticBoolean("=If(false, true)")).toBeNull();
+    expect(staticString('=If(true, "first", varUnknown, "second")')).toBe("first");
+  });
+
   it("does not invent values for unknown runtime symbols", () => {
     expect(
       evaluateStaticPowerFx("=User().Email", { symbols })
