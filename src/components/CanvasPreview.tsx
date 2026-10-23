@@ -77,6 +77,7 @@ function flatten(
       dynamic: rect.dynamic, ancestors
     });
     if (depth >= 24 || control.children.length === 0) continue;
+    const editorGroup = control.controlType.toLowerCase() === "group";
     const template = isGallery(control)
       ? galleryTemplateLayout(control, {
           x: 0, y: 0, width: rect.width, height: rect.height, dynamic: rect.dynamic
@@ -84,13 +85,15 @@ function flatten(
       : null;
     output.push(...flatten(
       control.children,
-      x + (template?.x ?? 0),
-      y + (template?.y ?? 0),
-      template?.width ?? rect.width,
-      template?.height ?? rect.height,
+      editorGroup ? offsetX : x + (template?.x ?? 0),
+      editorGroup ? offsetY : y + (template?.y ?? 0),
+      editorGroup ? parentWidth : template?.width ?? rect.width,
+      editorGroup ? parentHeight : template?.height ?? rect.height,
       appWidth, appHeight, depth + 1,
       [...ancestors, control.id],
-      template?.width, template?.height, control
+      editorGroup ? templateWidth : template?.width,
+      editorGroup ? templateHeight : template?.height,
+      editorGroup ? parentControl : control
     ));
   }
   return output;
