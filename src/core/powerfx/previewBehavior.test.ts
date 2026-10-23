@@ -146,6 +146,27 @@ describe("safe local Power Fx behavior preview", () => {
     expect(res.variables.known).toBe(false);
   });
 
+  it("rejects host object prototype names without pretending state changed", () => {
+    const initial = { ready: false };
+    for (const name of ["__proto__", "constructor", "prototype", "toString", "hasOwnProperty"]) {
+      const result = simulatePreviewBehavior(`=Set(${name}, true)`, initial);
+      expect(result.ok, name).toBe(false);
+      expect(result.variables).toEqual(initial);
+      expect(result.changes).toEqual([]);
+    }
+  });
+
+  it("rolls back earlier writes if a later context field shadows an object member", () => {
+    const initial = { ready: false };
+    const result = simulatePreviewBehavior(
+      "=Set(ready, true); UpdateContext({count: 2, __proto__: true})",
+      initial
+    );
+    expect(result.ok).toBe(false);
+    expect(result.variables).toEqual(initial);
+    expect(result.changes).toEqual([]);
+  });
+
   it("rejects reserved names and nested side-effect attempts", () => {
     expect(simulatePreviewBehavior("=Set(App, 3)").ok).toBe(false);
     expect(simulatePreviewBehavior("=Set(varX, Set(varY, true))").ok).toBe(false);
