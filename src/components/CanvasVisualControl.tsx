@@ -18,6 +18,8 @@ const FAMILY = '"Segoe UI",system-ui,sans-serif';
 export function CanvasVisualControl({
   control, x, y, width, height, clipId
 }: Props) {
+  // Editor groups are organizational, not rendered Canvas controls.
+  if (control.controlType.toLowerCase() === "group") return null;
   const props = control.properties;
   const kind = previewKind(control.controlType);
   const explicitFill = previewColor(props.Fill);
