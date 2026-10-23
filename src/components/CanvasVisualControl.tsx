@@ -1,5 +1,6 @@
-import type { CanvasControl } from "../types/canvas";
+import type { CanvasControl, PreviewMediaAsset } from "../types/canvas";
 import { literalNumber } from "../core/layout/layout";
+import { previewImageFit, resolvePreviewImage } from "../core/layout/previewMedia";
 import {
   previewColor, previewFontSize, previewFontWeight, previewHorizontalAlign,
   previewIsChecked, previewItalic, previewKind, previewText, previewTextDecoration,
@@ -8,6 +9,7 @@ import {
 
 interface Props {
   control: CanvasControl;
+  mediaAssets?: PreviewMediaAsset[];
   x: number;
   y: number;
   width: number;
@@ -18,12 +20,13 @@ interface Props {
 const FAMILY = '"Segoe UI",system-ui,sans-serif';
 
 export function CanvasVisualControl({
-  control, x, y, width, height, clipId
+  control, x, y, width, height, clipId, mediaAssets = []
 }: Props) {
   // Editor groups are organizational, not rendered Canvas controls.
   if (control.controlType.toLowerCase() === "group") return null;
   const props = control.properties;
   const kind = previewKind(control.controlType);
+  const media = kind === "image" ? resolvePreviewImage(props.Image, mediaAssets) : undefined;
   const explicitFill = previewColor(props.Fill);
   const foreground = previewColor(props.Color) ?? "#242424";
   const borderColor = previewColor(props.BorderColor);
@@ -159,13 +162,19 @@ export function CanvasVisualControl({
           x + width / 2, "middle", foreground, y + height / 2
         )}
         {kind === "image" && (
-          <>
+          media ? (
+            <image x={x} y={y} width={width} height={height}
+              href={media.dataUrl}
+              preserveAspectRatio={previewImageFit(props.ImagePosition)} />
+          ) : (
+            <>
             <rect x={x + 6} y={y + 6} width={Math.max(4, width - 12)}
               height={Math.max(4, height - 12)} rx={3} fill="#eaf0f5" stroke="#abb7c4"/>
             <path d={`M ${x + 12} ${y + height - 16} l ${Math.max(5, width * .28)} -${Math.max(5, height * .36)} l ${Math.max(5, width * .18)} ${Math.max(5, height * .2)} l ${Math.max(5, width * .16)} -${Math.max(5, height * .2)}`}
               fill="none" stroke="#7d90a4" strokeWidth={2}/>
             <circle cx={x + Math.min(width - 12, 24)} cy={y + 22} r={4} fill="#9ab0c5"/>
-          </>
+            </>
+          )
         )}
         {kind === "unknown" && (
           <>{svgText(control.name, x + 8, "start", "#606977")}</>
