@@ -11,6 +11,7 @@ The **Simulate local state** switch is off by default. When enabled, clicking a 
 
 - Reactive preview visibility via `Visible` and static simulated variable state; text and checkbox/toggle state where resolvable.
 - All actions are transactional: if any call or value is unsupported, **nothing** is committed.
+- The preview validates **every nested call**, including calls inside unselected `If` branches, against a small pure-function allowlist (`If`, `Min`, `Max`, `Abs`, `Round`, `RoundUp`, `RoundDown`, `Coalesce`). Qualified calls such as `Connector.Max` and all other functions are rejected before any state update; this is a conservative preview safety rule, not a claim that Power Fx evaluates unselected branches.
 
 ## Explicitly blocked and out of scope
 
