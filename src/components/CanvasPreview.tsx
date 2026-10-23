@@ -9,7 +9,7 @@ import {
   isGallery,
   rgba
 } from "../core/layout/layout";
-import { isDefinitelyHidden, previewColor } from "../core/layout/previewAppearance";
+import { isDefinitelyHidden, previewCanRunOnSelect, previewColor } from "../core/layout/previewAppearance";
 import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/layout/previewDataState";
 import { simulatePreviewBehavior, type PreviewVariables } from "../core/powerfx/previewBehavior";
 import { CanvasVisualControl } from "./CanvasVisualControl";
@@ -146,7 +146,11 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
   function selectControl(control: CanvasControl) {
     onSelect(control);
     if (interactive && mode === "visual" && control.properties.OnSelect) {
-      simulate(control.properties.OnSelect);
+      if (previewCanRunOnSelect(control, variables)) {
+        simulate(control.properties.OnSelect);
+      } else {
+        setSimulationMessage("OnSelect skipped: DisplayMode is not confirmed Edit.");
+      }
     }
   }
   const { width, height } = PROFILES[profile];
