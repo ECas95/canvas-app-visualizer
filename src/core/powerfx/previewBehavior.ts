@@ -99,7 +99,10 @@ function applyStep(
   source: string,
   tokens: PowerFxToken[],
   working: PreviewVariables,
-  changed: string[]
+  changed: string[],
+  // Tracks assignments within this behavior batch only; it is not a full
+  // Power Fx binding/scope model and must never guess across separate events.
+  batchKinds: Map<string, "set" | "updatecontext">
 ): string | null {
   if (tokens.length < 5 || tokens[0].kind !== "identifier" ||
       tokens[1].value !== "(" || tokens[tokens.length - 1].value !== ")") {
@@ -145,6 +148,13 @@ function applyStep(
       return "Duplicate UpdateContext field: " + name + ".";
     }
     seen.add(lower);
+    // Power Fx allows a global and a screen context variable to share a
+    // name, with context taking precedence. The flat preview record cannot
+    // represent both; fail closed instead of silently overwriting one.
+    const earlierKind = batchKinds.get(lower);
+    if (earlierKind && earlierKind !== operation) {
+      return "Ambiguous global/context variable " + name + "; no changes applied.";
+    }
     const unsupported = unsupportedValueFunction(expression);
     if (unsupported) return "Unsupported nested function: " + unsupported + "; no changes applied.";
     const actual = canonical(name, working);
@@ -154,7 +164,10 @@ function applyStep(
   }
   for (const [name, value] of pending) candidate[name] = value;
   if (Object.keys(candidate).length > MAX_VARIABLES) return "Variable count limit exceeded.";
-  for (const [name] of pending) changed.push(name);
+  for (const [name] of pending) {
+    changed.push(name);
+    batchKinds.set(name.toLowerCase(), operation as "set" | "updatecontext");
+  }
   Object.assign(working, candidate);
   return null;
 }
@@ -184,8 +197,9 @@ export function simulatePreviewBehavior(
 
   const working: PreviewVariables = { ...variables };
   const changes: string[] = [];
+  const batchKinds = new Map<string, "set" | "updatecontext">();
   for (const step of actions) {
-    const issue = applyStep(source, step, working, changes);
+    const issue = applyStep(source, step, working, changes, batchKinds);
     if (issue) return rejected(issue);
   }
   const unique = [...new Set(changes)];
