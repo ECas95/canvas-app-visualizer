@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CanvasControl } from "../../types/canvas";
 import {
-  isDefinitelyHidden, previewCanRunOnSelect, previewColor, previewColorWithSymbols, previewDisplayMode, previewFontSize, previewFontWeight,
+  isDefinitelyHidden, previewVisibility, previewCanRunOnSelect, previewColor, previewColorWithSymbols, previewDisplayMode, previewFontSize, previewFontWeight,
   previewHorizontalAlign, previewIsChecked, previewItalic, previewKind,
   previewText, previewTextDecoration, previewVerticalAlign
 } from "./previewAppearance";
@@ -47,6 +47,25 @@ describe("semantic preview classification", () => {
     expect(isDefinitelyHidden(control("Label", { Visible: "=false" }))).toBe(true);
     expect(isDefinitelyHidden(control("Label", { Visible: "=true" }))).toBe(false);
     expect(isDefinitelyHidden(control("Label", { Visible: "=varVisible" }))).toBe(false);
+  });
+
+  it("does not mistake unavailable security or gallery state for Visible=true", () => {
+    expect(previewVisibility(control("GroupContainer", {
+      Visible: "=varReady && varAuthorized"
+    }))).toBe("unknown");
+    expect(previewVisibility(control("GroupContainer", {
+      Visible: "=varReady && varAuthorized"
+    }), { varReady: false })).toBe("hidden");
+    expect(previewVisibility(control("GroupContainer", {
+      Visible: "=varReady && varAuthorized"
+    }), { varReady: true, varAuthorized: true })).toBe("visible");
+    expect(previewVisibility(control("GroupContainer", {
+      Visible: "=varReady && IsEmpty(Gallery1.AllItems)"
+    }), { varReady: true })).toBe("unknown");
+    expect(previewVisibility(control("GroupContainer", {
+      Visible: "=false// outdated design visibility"
+    }))).toBe("hidden");
+    expect(previewVisibility(control("Label"))).toBe("visible");
   });
 
   it("resolves viewport-dependent visibility without guessing runtime variables", () => {
