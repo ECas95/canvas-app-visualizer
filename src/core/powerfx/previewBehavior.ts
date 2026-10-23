@@ -15,7 +15,16 @@ const MAX_FORMULA_CHARS = 8000;
 const MAX_STEPS = 20;
 const MAX_VARIABLES = 64;
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const RESERVED = new Set(["app", "self", "parent", "thisitem", "true", "false"]);
+// Prevent JavaScript object-prototype property names from being treated as
+// writable preview variables. They can silently disappear or shadow host
+// object members when stored in the plain record used by this simulator.
+// This is a conservative preview restriction, not Power Fx name binding.
+const RESERVED = new Set([
+  "app", "self", "parent", "thisitem", "true", "false",
+  "__proto__", "prototype", "constructor", "tostring", "tolocalestring",
+  "valueof", "hasownproperty", "isprototypeof", "propertyisenumerable",
+  "__definegetter__", "__definesetter__", "__lookupgetter__", "__lookupsetter__"
+]);
 
 // Only explicitly supported, side-effect-free calls may appear in values,
 // including branches of If that would not be selected by static evaluation.
