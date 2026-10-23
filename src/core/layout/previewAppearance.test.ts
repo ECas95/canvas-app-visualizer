@@ -76,6 +76,18 @@ describe("semantic preview classification", () => {
     expect(isDefinitelyHidden(control("Label", { Visible: "=false//App.Width >= 1000" }), symbols)).toBe(true);
   });
 
+  it("uses the source-responsive font Size instead of a fixed fallback", () => {
+    const heading = control("Label", {
+      Size: "=If(App.Width < 720, 20, 24)",
+      Text: '="Workspace"'
+    });
+    expect(previewFontSize(heading, { "App.Width": 1366 })).toBe(24);
+    expect(previewFontSize(heading, { "App.Width": 390 })).toBe(20);
+    expect(previewFontSize(heading)).toBe(14);
+    expect(previewFontSize(control("Label", { FontSize: "=Parent.Width / 20" }),
+      { "Parent.Width": 600 })).toBe(30);
+  });
+
   it("respects explicit serialized typography and alignment", () => {
     const label = control("Label", {
       Align: "=Align.Right",
