@@ -60,7 +60,7 @@ export function CanvasVisualControl({
   );
 
   return (
-    <g pointerEvents="none">
+    <g>
       <defs>
         <clipPath id={clipId}>
           <rect x={x + 1} y={y + 1} width={Math.max(0, width - 2)}
