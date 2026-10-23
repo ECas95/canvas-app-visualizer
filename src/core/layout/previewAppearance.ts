@@ -72,7 +72,7 @@ export function previewText(control: CanvasControl): string | null {
 export function previewFontSize(control: CanvasControl): number {
   const resolved = literalNumber(control.properties.Size) ??
     literalNumber(control.properties.FontSize);
-  return Math.min(32, Math.max(9, resolved ?? 14));
+  return resolved !== null && resolved > 0 ? Math.min(256, resolved) : 14;
 }
 
 export function isDefinitelyHidden(control: CanvasControl): boolean {
@@ -83,4 +83,54 @@ export function previewIsChecked(control: CanvasControl): boolean {
   return staticBoolean(control.properties.Default) === true ||
     staticBoolean(control.properties.Checked) === true ||
     staticBoolean(control.properties.Value) === true;
+}
+
+/**
+ * Only serialized styling may override approximate defaults. Unknown or
+ * runtime-dependent values stay undefined rather than being guessed.
+ */
+function enumValue(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const value = raw.trim().replace(/^=\s*/, "");
+  const match = value.match(/^(?:[A-Za-z]+\.)?([A-Za-z]+)$/);
+  return match ? match[1].toLowerCase() : null;
+}
+
+export type PreviewHorizontalAlign = "start" | "middle" | "end";
+export type PreviewVerticalAlign = "top" | "middle" | "bottom";
+
+export function previewHorizontalAlign(control: CanvasControl): PreviewHorizontalAlign | null {
+  const value = enumValue(control.properties.Align ?? control.properties.TextAlign);
+  if (value === "center" || value === "middle") return "middle";
+  if (value === "right" || value === "end") return "end";
+  if (value === "left" || value === "start") return "start";
+  return null;
+}
+
+export function previewVerticalAlign(control: CanvasControl): PreviewVerticalAlign | null {
+  const value = enumValue(control.properties.VerticalAlign ?? control.properties.TextVerticalAlignment);
+  if (value === "top") return "top";
+  if (value === "bottom") return "bottom";
+  if (value === "middle" || value === "center") return "middle";
+  return null;
+}
+
+export function previewFontWeight(control: CanvasControl): number | undefined {
+  const value = enumValue(control.properties.FontWeight);
+  if (value === "bold") return 700;
+  if (value === "semibold") return 600;
+  if (value === "normal" || value === "regular") return 400;
+  if (value === "light") return 300;
+  return undefined;
+}
+
+export function previewItalic(control: CanvasControl): boolean {
+  return staticBoolean(control.properties.Italic) === true;
+}
+
+export function previewTextDecoration(control: CanvasControl): string | undefined {
+  const decorations: string[] = [];
+  if (staticBoolean(control.properties.Underline) === true) decorations.push("underline");
+  if (staticBoolean(control.properties.Strikethrough) === true) decorations.push("line-through");
+  return decorations.length ? decorations.join(" ") : undefined;
 }
