@@ -313,4 +313,43 @@ describe("layout literal helpers", () => {
     expect(template?.height).toBe(220);
   });
 
+  it("resolves responsive Gallery.WrapCount from app viewport without inventing records", () => {
+    const gallery: CanvasControl = {
+      id: "g", name: "Catalog", controlType: "Gallery", variant: "Vertical",
+      properties: {
+        TemplateSize: "=292",
+        TemplatePadding: "=8",
+        WrapCount: "=If(App.Width < 720, 1, If(App.Width < 1180, 2, 3))"
+      },
+      children: [], sourceFile: "Src/Screen.pa.yaml", sourcePath: "Catalog",
+      zIndex: 1, sourceFormat: "pa-yaml-v3"
+    };
+    const rect = { x: 24, y: 236, width: 1200, height: 600, dynamic: false };
+    const at = (appWidth: number) => galleryTemplateLayout(gallery, rect, {
+      appWidth, appHeight: 768, parentWidth: 1200, parentHeight: 600
+    });
+    expect(at(1366)?.wrapCount).toBe(3);
+    expect(at(1366)?.width).toBe(400);
+    expect(at(1366)?.height).toBe(292);
+    expect(at(900)?.wrapCount).toBe(2);
+    expect(at(900)?.width).toBe(600);
+    expect(at(390)?.wrapCount).toBe(1);
+    expect(at(390)?.width).toBe(1200);
+  });
+
+  it("keeps unknown Gallery.WrapCount explicitly dynamic", () => {
+    const gallery: CanvasControl = {
+      id: "g", name: "Catalog", controlType: "Gallery", variant: "Vertical",
+      properties: { WrapCount: "=varColumns", TemplateSize: "=80" },
+      children: [], sourceFile: "Src/Demo.pa.yaml", sourcePath: "Catalog",
+      zIndex: 1, sourceFormat: "pa-yaml-v3"
+    };
+    const resolved = galleryTemplateLayout(gallery,
+      { x: 0, y: 0, width: 1000, height: 500, dynamic: false },
+      { appWidth: 1200, appHeight: 800, parentWidth: 1000, parentHeight: 500 });
+    expect(resolved?.wrapCount).toBe(1);
+    expect(resolved?.dynamic).toBe(true);
+  });
+
+
 });
