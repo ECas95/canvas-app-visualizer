@@ -1,5 +1,5 @@
 import { useId, useMemo, useState, type ReactNode } from "react";
-import type { CanvasControl, CanvasScreen } from "../types/canvas";
+import type { CanvasControl, CanvasScreen, PreviewMediaAsset } from "../types/canvas";
 import {
   autoLayoutChildren,
   buildSiblingGeometrySymbols,
@@ -15,6 +15,7 @@ import { Icon } from "./Icon";
 
 interface Props {
   screen?: CanvasScreen;
+  mediaAssets?: PreviewMediaAsset[];
   selectedId?: string;
   onSelect: (control: CanvasControl) => void;
 }
@@ -108,7 +109,7 @@ function wireframeColor(type: string): string {
   return "#657285";
 }
 
-export function CanvasPreview({ screen, selectedId, onSelect }: Props) {
+export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }: Props) {
   const [profile, setProfile] = useState<Profile>("desktop");
   const [mode, setMode] = useState<PreviewMode>("visual");
   const [zoom, setZoom] = useState<Zoom>("fit");
@@ -227,7 +228,7 @@ export function CanvasPreview({ screen, selectedId, onSelect }: Props) {
                     }
                   }}>
                   {mode === "visual" ? (
-                    <CanvasVisualControl control={item.control}
+                    <CanvasVisualControl control={item.control} mediaAssets={mediaAssets}
                       x={item.x} y={item.y} width={item.width} height={item.height}
                       clipId={`${instanceId}-text-${index}`} />
                   ) : (
