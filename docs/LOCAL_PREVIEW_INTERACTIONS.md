@@ -80,3 +80,26 @@ As a result, the six SQL-backed records in scrMain remain unavailable unless ver
 This limited local action validator is **not** a replacement for the official Microsoft parser in PR #13. Later development should use official Power Fx AST/binding before expanding allowable semantics.
 
 - Microsoft UpdateContext record semantics: https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-updatecontext
+
+
+## Scope-aware state (incremental)
+
+The interactive Canvas preview now maintains two distinct, in-memory stores for
+the **selected screen**: `globals` written by `Set`, and `context` written
+by `UpdateContext`. Formulas see a merged read-only symbol view in which
+screen context values take precedence over same-name globals, case-insensitively.
+A later `Set` still writes the global store even if a context value hides it.
+State persists across clicks and explicit `OnVisible` runs, and is discarded
+when the preview is reset, disabled, or switched to another screen.
+
+This removes the earlier cross-scope collision limitation for the interactive
+preview. The backwards-compatible flat helper `simulatePreviewBehavior`
+continues to reject ambiguous mixed-scope assignments within one batch;
+the UI uses `simulateScopedPreviewBehavior` instead. Neither API supports
+cross-screen navigation, connector data, collections, `Patch`, or
+`ClearCollect`. The model is a conservative scalar-only approximation, not
+Power Apps runtime or app-aware binding.
+
+Official Microsoft scope semantics:
+https://github.com/microsoft/Power-Fx/blob/main/docs/variables.md
+https://learn.microsoft.com/en-us/power-platform/power-fx/variables
