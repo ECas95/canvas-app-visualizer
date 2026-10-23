@@ -1,6 +1,6 @@
 import type { CanvasControl } from "../../types/canvas";
 import { literalNumber, literalText, rgba } from "./layout";
-import { staticBoolean, type StaticPowerFxValue } from "../powerfx/staticEval";
+import { staticBoolean, staticString, type StaticPowerFxValue } from "../powerfx/staticEval";
 
 export type PreviewKind =
   | "button" | "label" | "input" | "select" | "checkbox" | "toggle"
@@ -136,4 +136,19 @@ export function previewTextDecoration(control: CanvasControl): string | undefine
   if (staticBoolean(control.properties.Underline) === true) decorations.push("underline");
   if (staticBoolean(control.properties.Strikethrough) === true) decorations.push("line-through");
   return decorations.length ? decorations.join(" ") : undefined;
+}
+
+/**
+ * Safe interaction preview: only trigger OnSelect when DisplayMode is known
+ * to permit user input. Unknown formulas must not grant interaction.
+ * An omitted property uses the control's normal editable default in preview.
+ * Microsoft: https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-button
+ */
+export function previewCanRunOnSelect(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): boolean {
+  const mode = control.properties.DisplayMode;
+  if (mode === undefined || mode === null) return true;
+  return staticString(mode, symbols)?.toLowerCase() === "displaymode.edit";
 }
