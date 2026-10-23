@@ -248,18 +248,19 @@ export function CanvasPreview({ screen, selectedId, onSelect }: Props) {
                 </g>
               );
               // Clip children in layout hosts only; plain editor Groups do not clip.
-              return item.ancestors.reduceRight<ReactNode>((child, ancestor) => {
+              const clipped = item.ancestors.reduceRight<ReactNode>((child, ancestor) => {
                 const parent = itemById.get(ancestor);
                 if (!parent) return child;
                 // A Power Apps Group is an editor grouping, not a clipping container.
                 if (!/(gallery|container|form|datacard)/i.test(parent.control.controlType)) return child;
                 const parentIndex = indexById.get(parent.control.id) ?? 0;
                 return (
-                  <g key={ancestor} clipPath={`url(#${instanceId}-bounds-${parentIndex})`}>
+                  <g clipPath={`url(#${instanceId}-bounds-${parentIndex})`}>
                     {child}
                   </g>
                 );
               }, draw);
+              return <g key={item.control.id}>{clipped}</g>;
             })}
           </svg>
         </div>
