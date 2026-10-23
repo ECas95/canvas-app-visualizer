@@ -60,6 +60,16 @@ describe("static Power Fx evaluator", () => {
     expect(staticNumber("=If(varCondition, 8, 16)", symbols)).toBeNull();
   });
 
+  it("does not treat qualified connector or namespace calls as pure built-ins", () => {
+    // Namespaced functions are not interchangeable with Power Fx built-ins.
+    expect(evaluateStaticPowerFx("=SQL.If(true, 1, 2)")).toBeNull();
+    expect(evaluateStaticPowerFx("=Connector.Max(10, 20)")).toBeNull();
+    expect(evaluateStaticPowerFx("=Service.Abs(-3)")).toBeNull();
+    // Unqualified, supported pure functions still resolve normally.
+    expect(staticNumber("=Max(10, 20)")).toBe(20);
+    expect(staticNumber("=Abs(-3)")).toBe(3);
+  });
+
   it("does not invent values for unknown runtime symbols", () => {
     expect(
       evaluateStaticPowerFx("=User().Email", { symbols })
