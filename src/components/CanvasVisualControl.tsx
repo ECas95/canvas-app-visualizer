@@ -46,7 +46,7 @@ export function CanvasVisualControl({
       ? props.Default ?? props.InputTextPlaceholder
       : props.Text ?? props.Label;
   const label = (simulationSymbols && staticString(rawText, simulationSymbols)) ?? previewText(control);
-  const fontSize = previewFontSize(control);
+  const fontSize = previewFontSize(control, simulationSymbols);
   const text = label?.slice(0, 240);
   const inset = Math.min(12, Math.max(3, width * 0.04));
   const radius = Math.min(width / 2, height / 2,
