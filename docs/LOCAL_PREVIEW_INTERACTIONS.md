@@ -14,6 +14,20 @@ The **Simulate local state** switch is off by default. When enabled, clicking a 
 - The preview validates **every nested call**, including calls inside unselected `If` branches, against a small pure-function allowlist (`If`, `Min`, `Max`, `Abs`, `Round`, `RoundUp`, `RoundDown`, `Coalesce`). Qualified calls such as `Connector.Max` and all other functions are rejected before any state update; this is a conservative preview safety rule, not a claim that Power Fx evaluates unselected branches.
 
 
+## Static numeric rounding fidelity
+
+The local static preview now follows the documented Power Fx direction for
+`Round` (half ties away from zero), `RoundUp` (away from zero) and
+`RoundDown` (toward zero), including negative values and negative decimal
+places. Decimal exponent shifting avoids common JavaScript binary scaling
+artifacts such as `Round(1.005, 2)`. Unsupported precision, nonintegral
+decimal places, missing/extra arguments, and unsafe numeric ranges remain
+**unresolved** rather than guessing a result. This affects both static
+geometry and opt-in local behavior expressions; it does not execute external
+effects.
+
+Microsoft reference: https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-round
+
 ## DisplayMode interaction guard
 
 A simulated `OnSelect` is allowed only when the control's `DisplayMode` is absent (the preview's editable default) or resolves to `DisplayMode.Edit`. Explicit `DisplayMode.Disabled`, `DisplayMode.View`, and unresolved/dynamic values do not run behavior formulas; the control can still be selected for **inspection**. `If` formulas depending on known local preview variables are rechecked on each click. This conservative guard does not claim to reproduce all inherited Form/DataCard display modes or actual runtime permissions.
