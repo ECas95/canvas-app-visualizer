@@ -43,6 +43,27 @@ in-memory JavaScript record cannot safely represent. This is a simulator
 implementation guard, **not** a restriction asserted by Microsoft Power Fx.
 The entire action batch rolls back when such a target is encountered.
 
+## Conservative global/context collision guard
+
+Microsoft Power Fx treats `Set` variables as app-global and `UpdateContext`
+variables as screen-local. Both can legally share a name, with the context
+variable taking precedence in unqualified formulas. This preview currently
+stores scalar state in a **single flat record**, so a batch that assigns the
+same case-insensitive name through both functions is **rejected transactionally**
+rather than showing a false value. Repeated writes using the same function
+kind and distinct global/context names still work.
+
+This is deliberately **not** full scope parity: collisions across separate
+`OnVisible`/`OnSelect` invocations cannot yet be reliably detected because
+variable provenance is not persisted. Future work should maintain separate
+global and per-screen contexts and use official Power Fx binding/AST (PR #13).
+No SQL data, permissions, or connector state is inferred.
+
+Official semantics:
+- https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-set
+- https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-updatecontext
+- https://learn.microsoft.com/en-us/power-platform/power-fx/variables
+
 ## Explicitly blocked and out of scope
 
 `Patch`, `SubmitForm`, `ClearCollect`, `Collect`, `Remove`, `Refresh`, `Navigate`, flow invocation, `User()`, SQL, Dataverse, external connector calls, custom functions, arbitrary browser/JS code and all other non-allowlisted functions are **never executed**. Missing runtime values are not invented.
