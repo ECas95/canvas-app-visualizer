@@ -1,6 +1,6 @@
 import type { CanvasControl } from "../../types/canvas";
-import { literalNumber, literalText, rgba } from "./layout";
-import { staticBoolean, staticString, type StaticPowerFxValue } from "../powerfx/staticEval";
+import { literalText, rgba } from "./layout";
+import { staticBoolean, staticNumber, staticString, type StaticPowerFxValue } from "../powerfx/staticEval";
 import { lexPowerFx, significantTokens, type PowerFxToken } from "../powerfx/lexer";
 
 export type PreviewKind =
@@ -154,9 +154,12 @@ export function previewText(control: CanvasControl): string | null {
   return literalText(props.Text) ?? literalText(props.Label);
 }
 
-export function previewFontSize(control: CanvasControl): number {
-  const resolved = literalNumber(control.properties.Size) ??
-    literalNumber(control.properties.FontSize);
+export function previewFontSize(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): number {
+  const resolved = staticNumber(control.properties.Size, symbols) ??
+    staticNumber(control.properties.FontSize, symbols);
   return resolved !== null && resolved > 0 ? Math.min(256, resolved) : 14;
 }
 
