@@ -1,5 +1,7 @@
 import type { CanvasControl, PreviewMediaAsset } from "../types/canvas";
 import { literalNumber } from "../core/layout/layout";
+import { staticBoolean, staticString } from "../core/powerfx/staticEval";
+import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, resolvePreviewImage } from "../core/layout/previewMedia";
 import {
   previewColor, previewFontSize, previewFontWeight, previewHorizontalAlign,
@@ -10,6 +12,7 @@ import {
 interface Props {
   control: CanvasControl;
   mediaAssets?: PreviewMediaAsset[];
+  simulationSymbols?: PreviewVariables;
   x: number;
   y: number;
   width: number;
@@ -20,7 +23,7 @@ interface Props {
 const FAMILY = '"Segoe UI",system-ui,sans-serif';
 
 export function CanvasVisualControl({
-  control, x, y, width, height, clipId, mediaAssets = []
+  control, x, y, width, height, clipId, mediaAssets = [], simulationSymbols
 }: Props) {
   // Editor groups are organizational, not rendered Canvas controls.
   if (control.controlType.toLowerCase() === "group") return null;
@@ -31,13 +34,20 @@ export function CanvasVisualControl({
   const foreground = previewColor(props.Color) ?? "#242424";
   const borderColor = previewColor(props.BorderColor);
   const thickness = literalNumber(props.BorderThickness);
-  const label = previewText(control);
+  const rawText = kind === "input"
+    ? props.Default ?? props.Value ?? props.HintText
+    : kind === "select"
+      ? props.Default ?? props.InputTextPlaceholder
+      : props.Text ?? props.Label;
+  const label = (simulationSymbols && staticString(rawText, simulationSymbols)) ?? previewText(control);
   const fontSize = previewFontSize(control);
   const text = label?.slice(0, 240);
   const inset = Math.min(12, Math.max(3, width * 0.04));
   const radius = Math.min(width / 2, height / 2,
     Math.max(0, literalNumber(props.RadiusTopLeft) ?? 4));
-  const selected = previewIsChecked(control);
+  const selected = simulationSymbols
+    ? [props.Default, props.Checked, props.Value].some(value => staticBoolean(value, simulationSymbols) === true)
+    : previewIsChecked(control);
   const horizontalAlign = previewHorizontalAlign(control);
   const verticalAlign = previewVerticalAlign(control);
   const fontWeight = previewFontWeight(control);
