@@ -25,3 +25,10 @@
   .preview-toolbar-meta{gap:6px}
   .preview-note{align-items:flex-start}
 }
+
+/* Local-only Power Fx state sandbox, clearly separated from normal inspection. */
+.simulation-action{border:1px solid #c7d6e4;background:#f6faff;border-radius:5px;color:#165482;padding:5px 8px;font-size:10px;white-space:nowrap;cursor:pointer}
+.simulation-action:hover{background:#e8f3fd;border-color:#9dbfdb}
+.simulation-action:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.simulation-action:disabled{opacity:.45;cursor:not-allowed}
+.simulation-status{border:1px solid #ccdae8;padding:4px 7px;border-radius:5px;background:#eff7fc;color:#244b68;overflow-wrap:anywhere;max-width:460px}
