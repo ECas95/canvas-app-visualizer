@@ -86,7 +86,7 @@ export function CanvasVisualControl({
     atY = y + height / 2
   ) => {
     const point = alignedTextPoint(atX, anchor);
-    const lines = value.split(/\\r?\\n/).slice(0, 5);
+    const lines = value.split(/\r?\n/).slice(0, 5);
     const lineHeight = fontSize * 1.2;
     const centralY = alignedY(atY);
     const firstY = centralY - ((lines.length - 1) * lineHeight) / 2;
