@@ -62,6 +62,30 @@ describe("safe local Power Fx behavior preview", () => {
     expect(result.changes).toEqual([]);
   });
 
+  it("rejects same-name Set and UpdateContext collisions without inventing scope", () => {
+    const initial = { shared: 8, unaffected: true };
+    for (const formula of [
+      "=Set(shared, 1); UpdateContext({shared: 2})",
+      "=UpdateContext({SHARED: 2}); Set(shared, 1)",
+      "=Set(shared, 1); UpdateContext({unrelated: 3}); Set(shared, 4); UpdateContext({Shared: 5})"
+    ]) {
+      const result = simulatePreviewBehavior(formula, initial);
+      expect(result.ok, formula).toBe(false);
+      expect(result.message).toContain("Ambiguous global/context variable");
+      expect(result.variables).toEqual(initial);
+      expect(result.changes).toEqual([]);
+    }
+  });
+
+  it("preserves sequential assignments within one scope and distinct scoped names", () => {
+    const result = simulatePreviewBehavior(
+      "=Set(globalFlag, true); Set(GLOBALFLAG, false); UpdateContext({localFlag: 1}); UpdateContext({LOCALFLAG: 2})"
+    );
+    expect(result.ok).toBe(true);
+    expect(result.variables).toEqual({ globalFlag: false, localFlag: 2 });
+    expect(result.changes).toEqual(["globalFlag", "localFlag"]);
+  });
+
   it("supports repeated toggles and If with known state", () => {
     const first = simulatePreviewBehavior("=Set(varOpen, !varOpen)", { varOpen: false });
     expect(first.ok).toBe(true);
