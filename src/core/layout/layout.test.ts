@@ -383,6 +383,76 @@ describe("layout literal helpers", () => {
     expect(rect.dynamic).toBe(false);
   });
 
+  it("resolves dependent sibling Y, Self.Y Height and zero-height layout hosts", () => {
+    const child = (name: string, properties: Record<string, unknown>): CanvasControl => ({
+      id: name, name, controlType: "GroupContainer",
+      properties, children: [], zIndex: 1, sourceFormat: "pa-yaml-v3",
+      sourceFile: "Src/Fixture.pa.yaml", sourcePath: "Screens/Fixture/" + name
+    });
+    const header = child("Header", {
+      X: "=24", Y: "=80", Width: "=App.Width - 48", Height: "=140"
+    });
+    const toolbar = child("Toolbar", {
+      X: "=Header.X", Y: "=Header.Y + Header.Height + 16",
+      Width: "=Header.Width", Height: "=0// responsive toolbar omitted in design",
+      Visible: "=false//hidden by source"
+    });
+    const gallery = child("Catalogue", {
+      X: "=Header.X",
+      Y: "=Toolbar.Y + Toolbar.Height + 16 + If(App.Width < 720 && varAdmin, 48, 0)",
+      Width: "=Header.Width",
+      Height: "=Max(180, App.Height - Self.Y - 20)",
+      WrapCount: "=If(App.Width < 720, 1, If(App.Width < 1180, 2, 3))",
+      TemplateSize: "=292",
+      TemplatePadding: "=8"
+    });
+    gallery.controlType = "Gallery";
+    gallery.variant = "Vertical";
+    // Intentionally order the gallery before the toolbar to check fixed
+    // point resolution rather than accidental ordering of serialized nodes.
+    const items = [gallery, toolbar, header];
+    const context = {
+      appWidth: 1366, appHeight: 768, parentWidth: 1366, parentHeight: 768
+    };
+    const symbols = buildSiblingGeometrySymbols(items, context);
+    expect(symbols["Header.Y"]).toBe(80);
+    expect(symbols["Toolbar.Y"]).toBe(236);
+    expect(symbols["Toolbar.Height"]).toBe(0);
+    expect(symbols["Catalogue.Y"]).toBe(252);
+    expect(symbols["Catalogue.Height"]).toBe(496);
+    const rect = controlRect(gallery, 0, { ...context, symbols });
+    expect(rect).toMatchObject({ x: 24, y: 252, width: 1318, height: 496, dynamic: false });
+    const template = galleryTemplateLayout(gallery, rect, { ...context, symbols });
+    expect(template?.wrapCount).toBe(3);
+    expect(template?.width).toBeCloseTo(1318 / 3);
+    expect(template?.height).toBe(292);
+    expect(template?.padding).toBe(8);
+  });
+
+  it("evaluates viewport-dependent gallery template sizes against App dimensions", () => {
+    const gallery: CanvasControl = {
+      id: "gallery", name: "ResponsiveGallery", controlType: "Gallery",
+      variant: "Vertical",
+      properties: {
+        TemplateSize: "=If(App.Width < 720, 140, 292)",
+        TemplatePadding: "=If(App.Width < 720, 4, 8)",
+        WrapCount: "=If(App.Width < 720, 1, 3)"
+      },
+      children: [], sourceFile: "Src/Fixture.pa.yaml",
+      sourcePath: "Screens/Fixture/ResponsiveGallery",
+      sourceFormat: "pa-yaml-v3", zIndex: 1
+    };
+    const rect = { x: 0, y: 0, width: 900, height: 500, dynamic: false };
+    const narrow = galleryTemplateLayout(gallery, rect, {
+      appWidth: 390, appHeight: 844, parentWidth: 900, parentHeight: 500
+    });
+    const desktop = galleryTemplateLayout(gallery, rect, {
+      appWidth: 1366, appHeight: 768, parentWidth: 900, parentHeight: 500
+    });
+    expect(narrow).toMatchObject({ wrapCount: 1, width: 900, height: 140, padding: 4 });
+    expect(desktop).toMatchObject({ wrapCount: 3, width: 300, height: 292, padding: 8 });
+  });
+
   it("resolves responsive Gallery.WrapCount from app viewport without inventing records", () => {
     const gallery: CanvasControl = {
       id: "g", name: "Catalog", controlType: "Gallery", variant: "Vertical",
