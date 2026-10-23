@@ -122,6 +122,8 @@ describe("findingsFromOfficialBatch", () => {
 
   it("maps out-of-order results and preserves warnings on successful parses", () => {
     const findings = findingsFromOfficialBatch(refs, {
+      engine: "Microsoft.PowerFx",
+      mode: "parseBatch",
       success: true,
       results: [
         { id: "1", result: { success: true, errors: [
@@ -147,6 +149,8 @@ describe("findingsFromOfficialBatch", () => {
 
   it("rejects a missing result instead of marking incomplete analysis ready", () => {
     expect(() => findingsFromOfficialBatch(refs, {
+      engine: "Microsoft.PowerFx",
+      mode: "parseBatch",
       success: true,
       results: [{ id: "0", result: { success: true, errors: [] } }]
     })).toThrow(/incomplete or invalid batch/u);
@@ -154,6 +158,8 @@ describe("findingsFromOfficialBatch", () => {
 
   it("rejects duplicate result identifiers even when the result count matches", () => {
     expect(() => findingsFromOfficialBatch(refs, {
+      engine: "Microsoft.PowerFx",
+      mode: "parseBatch",
       success: true,
       results: [
         { id: "0", result: { success: true, errors: [] } },
@@ -164,6 +170,8 @@ describe("findingsFromOfficialBatch", () => {
 
   it("rejects unknown result identifiers instead of silently dropping them", () => {
     expect(() => findingsFromOfficialBatch(refs, {
+      engine: "Microsoft.PowerFx",
+      mode: "parseBatch",
       success: true,
       results: [
         { id: "0", result: { success: true, errors: [] } },
@@ -174,6 +182,8 @@ describe("findingsFromOfficialBatch", () => {
 
   it("rejects failed parses without diagnostics to retain the TS fallback", () => {
     expect(() => findingsFromOfficialBatch(refs, {
+      engine: "Microsoft.PowerFx",
+      mode: "parseBatch",
       success: true,
       results: [
         { id: "0", result: { success: false, errors: [] } },
@@ -181,4 +191,59 @@ describe("findingsFromOfficialBatch", () => {
       ]
     })).toThrow(/incomplete or invalid batch/u);
   });
+  it.each([
+    { engine: "AnotherEngine", mode: "parseBatch" },
+    { engine: "Microsoft.PowerFx", mode: "check" },
+    { engine: undefined, mode: "parseBatch" }
+  ])("rejects a batch without official parse provenance: %o", ({ engine, mode }) => {
+    expect(() => findingsFromOfficialBatch(refs, {
+      engine,
+      mode,
+      success: true,
+      results: [
+        { id: "0", result: { success: true, errors: [] } },
+        { id: "1", result: { success: true, errors: [] } }
+      ]
+    })).toThrow(/incomplete or invalid batch/u);
+  });
+
+  it.each([
+    { label: "negative", start: -1, end: 1 },
+    { label: "reversed", start: 2, end: 1 },
+    { label: "out of bounds", start: 0, end: 100 },
+    { label: "fractional", start: 0.5, end: 1 },
+    { label: "missing end", start: 0, end: undefined }
+  ])("rejects $label parser spans to preserve fallback diagnostics", ({ start, end }) => {
+    expect(() => findingsFromOfficialBatch(refs, {
+      engine: "Microsoft.PowerFx",
+      mode: "parseBatch",
+      success: true,
+      results: [
+        { id: "0", result: { success: false, errors: [
+          { message: "Unexpected token", start, end }
+        ] } },
+        { id: "1", result: { success: true, errors: [] } }
+      ]
+    })).toThrow(/incomplete or invalid batch/u);
+  });
+
+  it("accepts an end-of-expression span and diagnostics without positions", () => {
+    const findings = findingsFromOfficialBatch(refs, {
+      engine: "Microsoft.PowerFx",
+      mode: "parseBatch",
+      success: true,
+      results: [
+        { id: "0", result: { success: false, errors: [
+          { message: "Unexpected token", start: null, end: null }
+        ] } },
+        { id: "1", result: { success: true, errors: [
+          { message: "At end", warning: true, start: 5, end: 5 }
+        ] } }
+      ]
+    });
+    expect(findings).toHaveLength(2);
+    expect(findings[0].message).not.toContain("Character span");
+    expect(findings[1].message).toContain("Character span 6–6");
+  });
+
 });
