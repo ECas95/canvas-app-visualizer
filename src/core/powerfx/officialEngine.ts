@@ -236,3 +236,33 @@ export async function analyzeOfficialPowerFxSyntax(
 
   return findings;
 }
+
+
+/**
+ * Once the official parser has returned a complete analysis, its syntax
+ * diagnostics replace the TypeScript lexer's provisional syntax finding.
+ * Keep all non-syntax static review hints. If the runtime is unavailable,
+ * preserve the lexical fallback instead of hiding potential errors.
+ *
+ * Canvas .pa.yaml formulas are source expressions, not permission or
+ * connector-runtime evidence. This merge only affects diagnostics.
+ */
+export function mergeOfficialPowerFxFindings(
+  staticFindings: Finding[],
+  officialFindings: Finding[],
+  officialReady: boolean
+): Finding[] {
+  const fallback = officialReady
+    ? staticFindings.filter(
+        finding => finding.ruleId !== "powerfx.syntax.lexical-structure"
+      )
+    : staticFindings;
+  const rank: Record<Finding["severity"], number> = {
+    error: 0,
+    warning: 1,
+    info: 2
+  };
+  return [...officialFindings, ...fallback].sort(
+    (a, b) => rank[a.severity] - rank[b.severity] || a.ruleId.localeCompare(b.ruleId)
+  );
+}
