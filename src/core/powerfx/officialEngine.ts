@@ -239,7 +239,7 @@ export function findingsFromOfficialBatch(
     if (
       !item ||
       typeof item.id !== "string" ||
-      !/^(0|[1-9]\\d*)$/u.test(item.id)
+      !/^(0|[1-9]\d*)$/u.test(item.id)
     ) {
       throw invalidBatch();
     }
