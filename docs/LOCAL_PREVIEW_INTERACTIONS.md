@@ -13,6 +13,13 @@ The **Simulate local state** switch is off by default. When enabled, clicking a 
 - All actions are transactional: if any call or value is unsupported, **nothing** is committed.
 - The preview validates **every nested call**, including calls inside unselected `If` branches, against a small pure-function allowlist (`If`, `Min`, `Max`, `Abs`, `Round`, `RoundUp`, `RoundDown`, `Coalesce`). Qualified calls such as `Connector.Max` and all other functions are rejected before any state update; this is a conservative preview safety rule, not a claim that Power Fx evaluates unselected branches.
 
+
+## DisplayMode interaction guard
+
+A simulated `OnSelect` is allowed only when the control's `DisplayMode` is absent (the preview's editable default) or resolves to `DisplayMode.Edit`. Explicit `DisplayMode.Disabled`, `DisplayMode.View`, and unresolved/dynamic values do not run behavior formulas; the control can still be selected for **inspection**. `If` formulas depending on known local preview variables are rechecked on each click. This conservative guard does not claim to reproduce all inherited Form/DataCard display modes or actual runtime permissions.
+
+Microsoft documents that a disabled button does not trigger `OnSelect`: https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-button
+
 ## Explicitly blocked and out of scope
 
 `Patch`, `SubmitForm`, `ClearCollect`, `Collect`, `Remove`, `Refresh`, `Navigate`, flow invocation, `User()`, SQL, Dataverse, external connector calls, custom functions, arbitrary browser/JS code and all other non-allowlisted functions are **never executed**. Missing runtime values are not invented.
