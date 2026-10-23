@@ -100,15 +100,26 @@ function applyStep(
     return "Blocked behavior: " + tokens[0].value + ". Only Set/UpdateContext are simulated.";
   }
 
+  // An UpdateContext argument is one record expression, not a sequence of
+  // assignments. Resolve every field against the same pre-call snapshot.
+  // Separate semicolon-delimited behavior statements remain sequential.
   const candidate = { ...working };
+  const pending: Array<[string, StaticPowerFxValue]> = [];
+  const seen = new Set<string>();
   for (const [name, expression] of updates) {
-    const actual = canonical(name, candidate);
-    const value = evaluateValue(source, expression, candidate);
+    const lower = name.toLowerCase();
+    if (operation === "updatecontext" && seen.has(lower)) {
+      return "Duplicate UpdateContext field: " + name + ".";
+    }
+    seen.add(lower);
+    const actual = canonical(name, working);
+    const value = evaluateValue(source, expression, working);
     if (value === null) return "Unresolved value for " + name + "; no changes applied.";
-    candidate[actual] = value;
-    if (Object.keys(candidate).length > MAX_VARIABLES) return "Variable count limit exceeded.";
+    pending.push([actual, value]);
   }
-  for (const [name] of updates) changed.push(canonical(name, candidate));
+  for (const [name, value] of pending) candidate[name] = value;
+  if (Object.keys(candidate).length > MAX_VARIABLES) return "Variable count limit exceeded.";
+  for (const [name] of pending) changed.push(name);
   Object.assign(working, candidate);
   return null;
 }
