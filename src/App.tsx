@@ -13,7 +13,8 @@ import { DEMO_FILES } from "./sample/demo";
 import type {
   CanvasAppModel,
   CanvasControl,
-  CanvasScreen
+  CanvasScreen,
+  PreviewMediaAsset
 } from "./types/canvas";
 
 type Selection =
@@ -44,6 +45,7 @@ function sourceFormatLabel(app: CanvasAppModel): string {
 
 export default function App() {
   const [app, setApp] = useState<CanvasAppModel>();
+  const [mediaAssets, setMediaAssets] = useState<PreviewMediaAsset[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -78,6 +80,7 @@ export default function App() {
     setError(undefined);
     try {
       const result = await importCanvasFiles(files);
+      setMediaAssets(result.mediaAssets ?? []);
       installModel(
         buildCanvasModel(result.files, result.sourceKind, appNameFromFiles(files)),
         result.warnings
@@ -90,6 +93,7 @@ export default function App() {
   }
 
   function loadDemo() {
+    setMediaAssets([]);
     installModel(
       buildCanvasModel(DEMO_FILES, "yaml", "Synthetic Inventory Demo"),
       []
@@ -98,6 +102,7 @@ export default function App() {
 
   function reset() {
     setApp(undefined);
+    setMediaAssets([]);
     setSelectedControl(undefined);
     setSelectedScreenId(undefined);
     setWarnings([]);
@@ -242,6 +247,7 @@ export default function App() {
         />
 
         <CanvasPreview
+          mediaAssets={mediaAssets}
           screen={selectedScreen}
           selectedId={selectedControl?.id}
           onSelect={control => {
