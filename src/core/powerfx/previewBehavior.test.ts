@@ -42,6 +42,16 @@ describe("safe local Power Fx behavior preview", () => {
     expect(simulatePreviewBehavior("=Set(varAllowed, missingSymbol)").ok).toBe(false);
   });
 
+  it("rejects connector-qualified lookalikes inside otherwise allowed Set", () => {
+    const initial = { varAllowed: false };
+    const res = simulatePreviewBehavior(
+      "=Set(varAllowed, Connector.If(true, true, false))", initial
+    );
+    expect(res.ok).toBe(false);
+    expect(res.variables).toEqual(initial);
+    expect(res.changes).toEqual([]);
+  });
+
   it("never runs a partial UpdateContext record", () => {
     const res = simulatePreviewBehavior(
       "=UpdateContext({known: true, unsupported: SQLView.Value})",
