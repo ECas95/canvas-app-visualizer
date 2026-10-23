@@ -227,6 +227,27 @@ describe("findingsFromOfficialBatch", () => {
     })).toThrow(/incomplete or invalid batch/u);
   });
 
+  it.each([
+    { label: "string warning flag", diagnostic: { message: "Bad flag", warning: "false" } },
+    { label: "numeric warning flag", diagnostic: { message: "Bad flag", warning: 0 } },
+    { label: "object severity", diagnostic: { message: "Bad severity", warning: false, severity: { value: "Error" } } }
+  ])("rejects $label rather than misclassifying an official diagnostic", ({ diagnostic }) => {
+    // Simulate malformed JSON crossing the JS/.NET boundary, bypassing TS types.
+    const response = {
+      engine: "Microsoft.PowerFx",
+      mode: "parseBatch",
+      success: true,
+      results: [
+        { id: "0", result: { success: false, errors: [diagnostic] } },
+        { id: "1", result: { success: true, errors: [] } }
+      ]
+    };
+    expect(() => findingsFromOfficialBatch(
+      refs,
+      response as unknown as Parameters<typeof findingsFromOfficialBatch>[1]
+    )).toThrow(/incomplete or invalid batch/u);
+  });
+
   it("accepts an end-of-expression span and diagnostics without positions", () => {
     const findings = findingsFromOfficialBatch(refs, {
       engine: "Microsoft.PowerFx",
