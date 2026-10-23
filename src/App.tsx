@@ -10,7 +10,7 @@ import { importCanvasFiles } from "./core/importers/source";
 import { collectFormulaRefs, countControls } from "./core/model/formulas";
 import { buildFindingLocationIndex, locationForFinding } from "./core/model/findingNavigation";
 import { buildCanvasModel } from "./core/model/normalize";
-import { analyzeOfficialPowerFxSyntax } from "./core/powerfx/officialEngine";
+import { analyzeOfficialPowerFxSyntax, mergeOfficialPowerFxFindings } from "./core/powerfx/officialEngine";
 import { DEMO_FILES } from "./sample/demo";
 import type {
   CanvasAppModel,
@@ -83,15 +83,14 @@ export default function App() {
     return () => { cancelled = true; };
   }, [app]);
 
-  const findings = useMemo(() => {
-    const fallback = powerFxStatus === "ready"
-      ? staticFindings.filter(finding => finding.ruleId !== "powerfx.syntax.delimiters")
-      : staticFindings;
-    return [...officialFindings, ...fallback].sort((a, b) => {
-      const rank = { error: 0, warning: 1, info: 2 };
-      return rank[a.severity] - rank[b.severity] || a.ruleId.localeCompare(b.ruleId);
-    });
-  }, [officialFindings, powerFxStatus, staticFindings]);
+  const findings = useMemo(
+    () => mergeOfficialPowerFxFindings(
+      staticFindings,
+      officialFindings,
+      powerFxStatus === "ready"
+    ),
+    [officialFindings, powerFxStatus, staticFindings]
+  );
   const formulaCount = useMemo(
     () => (app ? collectFormulaRefs(app).length : 0),
     [app]
