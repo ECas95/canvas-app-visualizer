@@ -154,29 +154,46 @@ export function buildSiblingGeometrySymbols(
 
       const width = staticNumber(control.properties.Width, baseSymbols);
       const height = staticNumber(control.properties.Height, baseSymbols);
-
       const setNumber = (key: string, value: number | null): void => {
         if (value === null || resolved[key] === value) return;
         resolved[key] = value;
         changed = true;
       };
 
-      setNumber(control.name + ".Width", width);
-      setNumber(control.name + ".Height", height);
-
-      const selfSymbols: Record<string, StaticPowerFxValue> = {
+      // Power Apps formulas may derive Height from Self.Y, while Self.Y
+      // depends on a preceding sibling (for example gallery below toolbar).
+      // Resolve positions with any known sizes, then retry dimensions using
+      // the resolved Self.X/Y. The outer passes resolve sibling dependencies.
+      const firstSymbols: Record<string, StaticPowerFxValue> = {
         ...baseSymbols,
         ...(width !== null ? { "Self.Width": width } : {}),
         ...(height !== null ? { "Self.Height": height } : {})
       };
-
+      const earlyX = control.properties.X === undefined
+        ? 0 : staticNumber(control.properties.X, firstSymbols);
+      const earlyY = control.properties.Y === undefined
+        ? 0 : staticNumber(control.properties.Y, firstSymbols);
+      const positionedSymbols: Record<string, StaticPowerFxValue> = {
+        ...firstSymbols,
+        ...(earlyX !== null ? { "Self.X": earlyX } : {}),
+        ...(earlyY !== null ? { "Self.Y": earlyY } : {})
+      };
+      const finalWidth = staticNumber(control.properties.Width, positionedSymbols) ?? width;
+      const finalHeight = staticNumber(control.properties.Height, positionedSymbols) ?? height;
+      const finalSymbols: Record<string, StaticPowerFxValue> = {
+        ...positionedSymbols,
+        ...(finalWidth !== null ? { "Self.Width": finalWidth } : {}),
+        ...(finalHeight !== null ? { "Self.Height": finalHeight } : {})
+      };
+      setNumber(control.name + ".Width", finalWidth);
+      setNumber(control.name + ".Height", finalHeight);
       setNumber(
         control.name + ".X",
-        control.properties.X === undefined ? 0 : staticNumber(control.properties.X, selfSymbols)
+        control.properties.X === undefined ? 0 : staticNumber(control.properties.X, finalSymbols)
       );
       setNumber(
         control.name + ".Y",
-        control.properties.Y === undefined ? 0 : staticNumber(control.properties.Y, selfSymbols)
+        control.properties.Y === undefined ? 0 : staticNumber(control.properties.Y, finalSymbols)
       );
     }
 
@@ -468,12 +485,12 @@ export function galleryTemplateLayout(
   const wrapCount = Math.max(1, Math.min(64, Math.floor(resolvedWrap ?? 1)));
   const variableHeight = variant.includes("variableheight");
   const templateSize =
-    staticNumber(control.properties.TemplateSize) ??
-    staticNumber(control.properties.TemplateHeight) ??
+    staticNumber(control.properties.TemplateSize, symbols) ??
+    staticNumber(control.properties.TemplateHeight, symbols) ??
     null;
   const padding = Math.max(
     0,
-    staticNumber(control.properties.TemplatePadding) ?? 0
+    staticNumber(control.properties.TemplatePadding, symbols) ?? 0
   );
 
   const fallbackSize = horizontal
