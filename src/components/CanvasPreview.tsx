@@ -1,3 +1,4 @@
+import { useId, useMemo, useState, type ReactNode } from "react";
 import type { CanvasControl, CanvasScreen } from "../types/canvas";
 import {
   autoLayoutChildren,
@@ -6,9 +7,10 @@ import {
   galleryTemplateLayout,
   isAutoLayout,
   isGallery,
-  literalText,
   rgba
 } from "../core/layout/layout";
+import { isDefinitelyHidden, previewColor } from "../core/layout/previewAppearance";
+import { CanvasVisualControl } from "./CanvasVisualControl";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -24,106 +26,114 @@ interface DrawItem {
   width: number;
   height: number;
   dynamic: boolean;
+  ancestors: string[];
 }
+
+const PROFILES = {
+  desktop: { width: 1366, height: 768, label: "Desktop" },
+  tablet: { width: 768, height: 1024, label: "Tablet" },
+  phone: { width: 390, height: 844, label: "Phone" }
+} as const;
+
+type Profile = keyof typeof PROFILES;
+type PreviewMode = "visual" | "structure";
+type Zoom = "fit" | "50" | "75" | "100" | "125";
 
 function flatten(
   controls: CanvasControl[],
-  offsetX = 0,
-  offsetY = 0,
-  parentWidth = 1366,
-  parentHeight = 768,
-  appWidth = 1366,
-  appHeight = 768,
+  offsetX: number,
+  offsetY: number,
+  parentWidth: number,
+  parentHeight: number,
+  appWidth: number,
+  appHeight: number,
   depth = 0,
+  ancestors: string[] = [],
   templateWidth?: number,
   templateHeight?: number,
   parentControl?: CanvasControl
 ): DrawItem[] {
   const output: DrawItem[] = [];
   const baseContext = {
-    parentWidth,
-    parentHeight,
-    appWidth,
-    appHeight,
-    templateWidth,
-    templateHeight
+    parentWidth, parentHeight, appWidth, appHeight, templateWidth, templateHeight
   };
-  const siblingSymbols = buildSiblingGeometrySymbols(
-    controls,
-    baseContext
-  );
-  const context = {
-    ...baseContext,
-    symbols: siblingSymbols
-  };
-
+  const siblingSymbols = buildSiblingGeometrySymbols(controls, baseContext);
+  const context = { ...baseContext, symbols: siblingSymbols };
   const positioned =
     parentControl && isAutoLayout(parentControl)
       ? autoLayoutChildren(parentControl, context)
       : controls.map((control, index) => ({
-          control,
-          rect: controlRect(control, index, context)
+          control, rect: controlRect(control, index, context)
         }));
 
-  positioned.forEach(({ control, rect }) => {
+  for (const { control, rect } of positioned) {
+    // A proven-false parent hides its complete subtree; unresolved visibility
+    // stays visible instead of guessing runtime state.
+    if (isDefinitelyHidden(control)) continue;
     const x = offsetX + rect.x;
     const y = offsetY + rect.y;
-
     output.push({
-      control,
-      x,
-      y,
-      width: rect.width,
-      height: rect.height,
-      dynamic: rect.dynamic
+      control, x, y, width: rect.width, height: rect.height,
+      dynamic: rect.dynamic, ancestors
     });
-
-    if (depth < 5 && control.children.length > 0) {
-      const galleryTemplate = isGallery(control)
-        ? galleryTemplateLayout(control, {
-            x: 0,
-            y: 0,
-            width: rect.width,
-            height: rect.height,
-            dynamic: rect.dynamic
-          })
-        : null;
-
-      const childParentWidth = galleryTemplate?.width ?? rect.width;
-      const childParentHeight = galleryTemplate?.height ?? rect.height;
-
-      output.push(
-        ...flatten(
-          control.children,
-          x + (galleryTemplate?.x ?? 0),
-          y + (galleryTemplate?.y ?? 0),
-          childParentWidth,
-          childParentHeight,
-          appWidth,
-          appHeight,
-          depth + 1,
-          galleryTemplate?.width,
-          galleryTemplate?.height,
-          control
-        )
-      );
-    }
-  });
-
+    if (depth >= 24 || control.children.length === 0) continue;
+    const template = isGallery(control)
+      ? galleryTemplateLayout(control, {
+          x: 0, y: 0, width: rect.width, height: rect.height, dynamic: rect.dynamic
+        })
+      : null;
+    output.push(...flatten(
+      control.children,
+      x + (template?.x ?? 0),
+      y + (template?.y ?? 0),
+      template?.width ?? rect.width,
+      template?.height ?? rect.height,
+      appWidth, appHeight, depth + 1,
+      [...ancestors, control.id],
+      template?.width, template?.height, control
+    ));
+  }
   return output;
 }
 
-function colorFor(type: string): string {
+function wireframeColor(type: string): string {
   const lower = type.toLowerCase();
   if (lower.includes("button")) return "#0f6cbd";
   if (lower.includes("gallery")) return "#107c6c";
   if (lower.includes("input")) return "#8a5d00";
-  if (lower.includes("image") || lower.includes("icon")) return "#8b4a85";
   if (lower.includes("container")) return "#4f6b57";
-  return "#5c667a";
+  return "#657285";
 }
 
 export function CanvasPreview({ screen, selectedId, onSelect }: Props) {
+  const [profile, setProfile] = useState<Profile>("desktop");
+  const [mode, setMode] = useState<PreviewMode>("visual");
+  const [zoom, setZoom] = useState<Zoom>("fit");
+  const [focusSelection, setFocusSelection] = useState(false);
+  const instanceId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const { width, height } = PROFILES[profile];
+
+  const items = useMemo(
+    () => screen ? flatten(screen.children, 0, 0, width, height, width, height) : [],
+    [screen, width, height]
+  );
+  const itemById = useMemo(
+    () => new Map(items.map(item => [item.control.id, item])),
+    [items]
+  );
+  const target = selectedId ? itemById.get(selectedId) : undefined;
+  const visibleItems = useMemo(
+    () => focusSelection && target
+      ? items.filter(item =>
+          item.control.id === target.control.id ||
+          item.ancestors.includes(target.control.id) ||
+          target.ancestors.includes(item.control.id)
+        )
+      : items,
+    [items, focusSelection, target]
+  );
+  const unresolved = items.filter(item => item.dynamic).length;
+
   if (!screen) {
     return (
       <main className="preview empty">
@@ -134,10 +144,9 @@ export function CanvasPreview({ screen, selectedId, onSelect }: Props) {
     );
   }
 
-  const width = 1366;
-  const height = 768;
-  const items = flatten(screen.children);
-  const fill = rgba(screen.properties.Fill) ?? "#f7f7f7";
+  const fill = previewColor(screen.properties.Fill) ?? rgba(screen.properties.Fill) ?? "#ffffff";
+  const zoomWidth = zoom === "fit" ? "min(100%,1120px)"
+    : `${Math.round(width * Number(zoom) / 100)}px`;
 
   return (
     <main className="preview">
@@ -147,114 +156,116 @@ export function CanvasPreview({ screen, selectedId, onSelect }: Props) {
           <Icon name="chevron" size={12} />
           <strong>{screen.name}</strong>
         </div>
-        <div className="preview-toolbar-meta">
-          <span className="subtle-badge">Approximate preview</span>
-          <span>{items.length} nodes</span>
-          <span>1366 × 768</span>
+        <div className="preview-toolbar-meta preview-actions">
+          <div className="preview-segment" role="group" aria-label="Preview mode">
+            <button type="button" className={mode === "visual" ? "active" : ""}
+              aria-pressed={mode === "visual"} onClick={() => setMode("visual")}>Visual</button>
+            <button type="button" className={mode === "structure" ? "active" : ""}
+              aria-pressed={mode === "structure"} onClick={() => setMode("structure")}>Structure</button>
+          </div>
+          <label className="preview-choice">
+            <span>Viewport</span>
+            <select aria-label="Simulated viewport" value={profile}
+              onChange={event => setProfile(event.target.value as Profile)}>
+              {Object.entries(PROFILES).map(([key, value]) => (
+                <option key={key} value={key}>{value.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="preview-choice">
+            <span>Zoom</span>
+            <select aria-label="Preview zoom" value={zoom}
+              onChange={event => setZoom(event.target.value as Zoom)}>
+              <option value="fit">Fit</option>
+              <option value="50">50%</option>
+              <option value="75">75%</option>
+              <option value="100">100%</option>
+              <option value="125">125%</option>
+            </select>
+          </label>
+          <label className="preview-focus">
+            <input type="checkbox" checked={focusSelection} disabled={!target}
+              onChange={event => setFocusSelection(event.target.checked)} />
+            Isolate selection
+          </label>
+          <span className="preview-dimensions">{width} × {height}</span>
         </div>
       </div>
-
       <div className="canvas-stage">
-        <div className="canvas-frame">
+        <div className="canvas-frame" style={{ width: zoomWidth }}>
           <div className="canvas-frame-bar">
             <span>{screen.name}</span>
-            <span>Canvas source preview</span>
+            <span>{mode === "visual" ? "Visual approximation" : "Structure inspection"}</span>
           </div>
-          <svg viewBox={"0 0 " + width + " " + height} role="img" aria-label={screen.name}>
-            <rect x="0" y="0" width={width} height={height} fill={fill} />
-            {items.map(item => {
+          <svg viewBox={`0 0 ${width} ${height}`}
+            style={{ aspectRatio: `${width} / ${height}` }}
+            role="img" aria-label={`${screen.name} canvas preview`}>
+            <defs>
+              {items.map((item, index) => (
+                <clipPath key={item.control.id} id={`${instanceId}-bounds-${index}`}>
+                  <rect x={item.x} y={item.y} width={item.width} height={item.height} />
+                </clipPath>
+              ))}
+            </defs>
+            <rect width={width} height={height} fill={fill} />
+            {visibleItems.map(item => {
+              const index = items.indexOf(item);
               const selected = selectedId === item.control.id;
-              const text =
-                literalText(item.control.properties.Text) ??
-                item.control.name;
-              const template = galleryTemplateLayout(item.control, {
-                x: item.x,
-                y: item.y,
-                width: item.width,
-                height: item.height,
-                dynamic: item.dynamic
-              });
-              return (
-                <g
-                  key={item.control.id}
-                  onClick={event => {
-                    event.stopPropagation();
-                    onSelect(item.control);
-                  }}
-                  className="visual-control"
-                >
-                  <rect
-                    x={item.x}
-                    y={item.y}
-                    width={item.width}
-                    height={item.height}
-                    rx="4"
-                    fill={colorFor(item.control.controlType)}
-                    fillOpacity={selected ? 0.2 : 0.08}
-                    stroke={selected ? "#0f6cbd" : colorFor(item.control.controlType)}
-                    strokeWidth={selected ? 3 : 1.5}
-                    strokeDasharray={item.dynamic ? "8 5" : undefined}
-                  />
-                  {template && (
+              const draw = (
+                <g className="visual-control" key={item.control.id}
+                  role="button" tabIndex={0}
+                  aria-label={`Inspect ${item.control.name} (${item.control.controlType})`}
+                  onClick={event => { event.stopPropagation(); onSelect(item.control); }}
+                  onKeyDown={event => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onSelect(item.control);
+                    }
+                  }}>
+                  {mode === "visual" ? (
+                    <CanvasVisualControl control={item.control}
+                      x={item.x} y={item.y} width={item.width} height={item.height}
+                      clipId={`${instanceId}-text-${index}`} />
+                  ) : (
                     <>
-                      <rect
-                        x={template.x + 2}
-                        y={template.y + 2}
-                        width={Math.max(4, template.width - 4)}
-                        height={Math.max(4, template.height - 4)}
-                        rx="2"
-                        fill="none"
-                        stroke="#0f6cbd"
-                        strokeOpacity="0.45"
-                        strokeWidth="1"
-                        strokeDasharray="5 4"
-                        pointerEvents="none"
-                      />
-                      <text
-                        x={template.x + 8}
-                        y={template.y + template.height - 8}
-                        fontSize="9"
-                        fontFamily='"Segoe UI", system-ui, sans-serif'
-                        fill="#0f6cbd"
-                        opacity="0.8"
-                        pointerEvents="none"
-                      >
-                        {template.variableHeight
-                          ? "variable-height template preview"
-                          : template.orientation + " gallery template"}
+                      <rect x={item.x} y={item.y} width={item.width} height={item.height}
+                        rx={3} fill={wireframeColor(item.control.controlType)}
+                        fillOpacity={0.07} stroke={wireframeColor(item.control.controlType)}
+                        strokeWidth={1.5} strokeDasharray={item.dynamic ? "8 5" : undefined} />
+                      <text x={item.x + 5} y={item.y + Math.min(18, item.height / 2 + 3)}
+                        fontSize={12} fill="#303846" pointerEvents="none">
+                        {item.control.name.slice(0, 36)}
                       </text>
                     </>
                   )}
-                  <text
-                    x={item.x + 8}
-                    y={item.y + Math.min(24, item.height / 2 + 5)}
-                    fontSize="14"
-                    fontFamily='"Segoe UI", system-ui, sans-serif'
-                    fill="#242424"
-                  >
-                    {text.slice(0, 44)}
-                  </text>
-                  {item.dynamic && (
-                    <text
-                      x={item.x + 8}
-                      y={item.y + item.height - 8}
-                      fontSize="10"
-                      fontFamily='"Segoe UI", system-ui, sans-serif'
-                      fill="#616161"
-                    >
-                      dynamic layout
-                    </text>
+                  {selected && (
+                    <rect x={item.x} y={item.y} width={item.width} height={item.height}
+                      fill="none" stroke="#0067c0" strokeWidth={3} pointerEvents="none" />
                   )}
+                  <title>{item.control.name} · {item.control.controlType}
+                    {item.dynamic ? " · unresolved layout" : ""}</title>
                 </g>
               );
+              // Clip descendants inside all visible ancestor bounds, rather
+              // than allowing text and child controls to spill onto siblings.
+              return item.ancestors.reduceRight<ReactNode>((child, ancestor) => {
+                const parent = itemById.get(ancestor);
+                if (!parent) return child;
+                const parentIndex = items.indexOf(parent);
+                return (
+                  <g key={ancestor} clipPath={`url(#${instanceId}-bounds-${parentIndex})`}>
+                    {child}
+                  </g>
+                );
+              }, draw);
             })}
           </svg>
         </div>
       </div>
-
       <div className="preview-note">
-        <span className="dynamic-swatch" />
-        Dashed outlines indicate formula-driven geometry that cannot be resolved statically.
+        <span>{mode === "visual" ? "Static visual approximation" : "Control structure"}</span>
+        <span>{visibleItems.length} visible nodes · {unresolved} unresolved layouts</span>
+        <span>Viewport profiles simulate dimensions; no formulas or connectors are executed.</span>
       </div>
     </main>
   );
