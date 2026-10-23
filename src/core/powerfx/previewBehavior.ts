@@ -17,6 +17,30 @@ const MAX_VARIABLES = 64;
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const RESERVED = new Set(["app", "self", "parent", "thisitem", "true", "false"]);
 
+// Only explicitly supported, side-effect-free calls may appear in values,
+// including branches of If that would not be selected by static evaluation.
+// This is a conservative validation pass, not a substitute for official
+// Microsoft Power Fx AST/binding (tracked separately in PR #13).
+const PURE_VALUE_FUNCTIONS = new Set([
+  "if", "min", "max", "abs", "round", "roundup", "rounddown", "coalesce"
+]);
+
+function unsupportedValueFunction(tokens: PowerFxToken[]): string | null {
+  for (let index = 1; index < tokens.length; index += 1) {
+    if (tokens[index].value !== "(") continue;
+    const callee = tokens[index - 1];
+    if (callee.kind !== "identifier" && callee.kind !== "quotedIdentifier") continue;
+    // Qualified calls (including connector functions named like built-ins)
+    // and quoted function names are never interpreted as pure built-ins.
+    if (callee.kind !== "identifier" ||
+        tokens[index - 2]?.value === "." ||
+        !PURE_VALUE_FUNCTIONS.has(callee.value.toLowerCase())) {
+      return callee.value;
+    }
+  }
+  return null;
+}
+
 function split(tokens: PowerFxToken[], separator: string): PowerFxToken[][] | null {
   const groups: PowerFxToken[][] = [];
   let start = 0;
@@ -112,6 +136,8 @@ function applyStep(
       return "Duplicate UpdateContext field: " + name + ".";
     }
     seen.add(lower);
+    const unsupported = unsupportedValueFunction(expression);
+    if (unsupported) return "Unsupported nested function: " + unsupported + "; no changes applied.";
     const actual = canonical(name, working);
     const value = evaluateValue(source, expression, working);
     if (value === null) return "Unresolved value for " + name + "; no changes applied.";
