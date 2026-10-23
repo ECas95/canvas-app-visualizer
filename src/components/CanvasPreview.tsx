@@ -9,7 +9,7 @@ import {
   isGallery,
   rgba
 } from "../core/layout/layout";
-import { isDefinitelyHidden, previewCanRunOnSelect, previewColor } from "../core/layout/previewAppearance";
+import { isDefinitelyHidden, previewCanRunOnSelect, previewColorWithSymbols } from "../core/layout/previewAppearance";
 import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/layout/previewDataState";
 import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScopedState, type PreviewVariables } from "../core/powerfx/previewBehavior";
 import { CanvasVisualControl } from "./CanvasVisualControl";
@@ -189,7 +189,8 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
     );
   }
 
-  const fill = previewColor(screen.properties.Fill) ?? rgba(screen.properties.Fill) ?? "#ffffff";
+  const fill = previewColorWithSymbols(screen.properties.Fill, interactive ? variables : undefined)
+    ?? rgba(screen.properties.Fill) ?? "#ffffff";
   const zoomWidth = zoom === "fit" ? "min(100%,1120px)"
     : `${Math.round(width * Number(zoom) / 100)}px`;
 
@@ -360,6 +361,32 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
         {interactive && <span className="simulation-status" aria-live="polite">
           {simulationMessage} · {Object.keys(variables).length} local variable(s)
         </span>}
+        {interactive && (
+          <details className="simulation-vars">
+            <summary>Inspect state ({Object.keys(variables).length})</summary>
+            <div className="simulation-vars-panel">
+              <strong>Preview state · browser only</strong>
+              {(["globals", "context"] as const).map(scope => (
+                <div key={scope}>
+                  <span className="simulation-vars-scope">{scope === "globals" ? "Global · Set" : "Screen · UpdateContext"}</span>
+                  {Object.entries(scopedState[scope]).length === 0 ? (
+                    <p>None</p>
+                  ) : (
+                    <dl>
+                      {Object.entries(scopedState[scope]).map(([name, value]) => (
+                        <div key={name}>
+                          <dt>{name}</dt>
+                          <dd>{JSON.stringify(value)}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+                </div>
+              ))}
+              <small>Context variables take precedence when names overlap. No data source is queried.</small>
+            </div>
+          </details>
+        )}
         <span>Gallery templates are illustrative; runtime records are not evaluated.</span>
         <span>Viewport profiles simulate dimensions; no formulas or connectors are executed.</span>
       </div>
