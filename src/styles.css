@@ -3,3 +3,5 @@
 @import "./styles/workbench.css";
 @import "./styles/panels.css";
 @import "./styles/responsive.css";
+
+@import "./styles/semantic-preview.css";

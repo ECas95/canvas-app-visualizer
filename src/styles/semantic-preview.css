@@ -1,0 +1,27 @@
+/* Workbench preview modes stay separate from the main shell and Power Fx UI. */
+.preview{grid-template-rows:auto minmax(0,1fr) auto}
+.preview-toolbar{min-height:48px;flex-wrap:wrap;row-gap:7px;padding:7px 12px}
+.preview-actions{display:flex;align-items:center;flex-wrap:wrap;gap:9px}
+.preview-segment{display:inline-flex;padding:2px;background:#eff2f6;border-radius:5px;border:1px solid #dfe3e8}
+.preview-segment button{font:inherit;font-size:11px;color:#425066;border:0;background:transparent;padding:5px 9px;border-radius:4px;cursor:pointer}
+.preview-segment button.active{background:white;color:#075a9e;box-shadow:0 1px 3px #0002;font-weight:600}
+.preview-choice{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#636c78}
+.preview-choice select{border:1px solid #d3d8df;background:white;color:#293446;border-radius:4px;padding:5px;font-size:11px;max-width:95px}
+.preview-focus{display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:10px;color:#46556a;cursor:pointer}
+.preview-focus input{accent-color:#0f6cbd}
+.preview-focus:has(input:disabled){opacity:.5;cursor:not-allowed}
+.preview-dimensions{font-variant-numeric:tabular-nums;white-space:nowrap}
+.canvas-stage{display:flex;align-items:safe center;justify-content:safe center;min-width:0}
+.canvas-stage .canvas-frame{flex:0 0 auto;max-width:none}
+.canvas-frame svg{width:100%;height:auto;display:block}
+.visual-control:focus-visible{outline:none;filter:drop-shadow(0 0 3px #0067c0)}
+.preview-note{display:flex;min-height:29px;gap:12px;flex-wrap:wrap;align-items:center;padding:6px 12px;font-size:10px;line-height:1.35}
+.preview-note span:first-child{font-weight:600;color:#46546a}
+@media(max-width:1100px){
+  .preview-toolbar{align-items:flex-start}
+  .preview-breadcrumb{min-width:100%}
+}
+@media(max-width:760px){
+  .preview-toolbar-meta{gap:6px}
+  .preview-note{align-items:flex-start}
+}

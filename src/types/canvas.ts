@@ -115,8 +115,16 @@ export interface FormulaRef {
   sourceFormat?: CanvasSourceFormat;
 }
 
+export interface PreviewMediaAsset {
+  /** Unique basename from local MSAPP raster resource; never fetched from a URL. */
+  name: string;
+  path: string;
+  dataUrl: string;
+}
+
 export interface ImportResult {
   files: SourceFile[];
+  mediaAssets?: PreviewMediaAsset[];
   sourceKind: SourceKind;
   sourceFormat: AppSourceFormat;
   warnings: string[];
