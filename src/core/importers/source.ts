@@ -118,8 +118,8 @@ async function readRasterMedia(entries: JSZip.JSZipObject[]): Promise<PreviewMed
   let total = 0;
   for (const entry of entries) {
     const path = normalizedPath(entry.name);
-    if (!/(^|\\/)(assets|resources|media)(\\/|$)/i.test(path) ||
-        /(^|\\/)src\\//i.test(path)) continue;
+    if (!/(^|\/)(assets|resources|media)(\/|$)/i.test(path) ||
+        /(^|\/)src\//i.test(path)) continue;
     const extension = path.split(".").at(-1)?.toLowerCase() ?? "";
     const mime = RASTER_MIME[extension];
     if (!mime) continue;
@@ -133,7 +133,7 @@ async function readRasterMedia(entries: JSZip.JSZipObject[]): Promise<PreviewMed
     if (content.byteLength > MAX_SINGLE_MEDIA_BYTES ||
         total + content.byteLength > MAX_TOTAL_MEDIA_BYTES) continue;
     const basename = path.split("/").at(-1) ?? path;
-    const stem = basename.replace(/\\.[^.]+$/, "");
+    const stem = basename.replace(/\.[^.]+$/, "");
     const name = stem.toLowerCase();
     if (media.some(asset => asset.name === name)) continue;
     total += content.byteLength;
