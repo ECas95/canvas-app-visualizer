@@ -58,6 +58,7 @@ export function serializedGeometry(entries: InspectorProperty[]): InspectorPrope
 export function Inspector({ selection }: Props) {
   const [query, setQuery] = useState("");
   const [formulasOnly, setFormulasOnly] = useState(false);
+  const [copiedProperty, setCopiedProperty] = useState<string | null>(null);
 
   if (!selection) {
     return (
@@ -160,6 +161,17 @@ export function Inspector({ selection }: Props) {
               {entry.formula && <span>Power Fx</span>}
             </div>
             <code>{formatSerializedValue(entry.value)}</code>
+            <button
+              type="button"
+              aria-label={`Copy ${entry.name} source value`}
+              title="Copy serialized source value"
+              onClick={() => {
+                if (!navigator.clipboard?.writeText) return;
+                void navigator.clipboard.writeText(formatSerializedValue(entry.value))
+                  .then(() => setCopiedProperty(entry.name))
+                  .catch(() => setCopiedProperty(null));
+              }}
+            >{copiedProperty === entry.name ? "Copied" : "Copy"}</button>
           </div>
         ))}
       </div>
