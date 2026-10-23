@@ -43,26 +43,22 @@ in-memory JavaScript record cannot safely represent. This is a simulator
 implementation guard, **not** a restriction asserted by Microsoft Power Fx.
 The entire action batch rolls back when such a target is encountered.
 
-## Conservative global/context collision guard
+## Scoped variables and state inspection
 
-Microsoft Power Fx treats `Set` variables as app-global and `UpdateContext`
-variables as screen-local. Both can legally share a name, with the context
-variable taking precedence in unqualified formulas. This preview currently
-stores scalar state in a **single flat record**, so a batch that assigns the
-same case-insensitive name through both functions is **rejected transactionally**
-rather than showing a false value. Repeated writes using the same function
-kind and distinct global/context names still work.
+The interactive preview keeps separate in-memory global variables (written by `Set`) and screen-context variables (written by `UpdateContext`). Context variables take precedence when an unqualified formula reads the same name. Use **Inspect state** to examine both stores. State is reset when changing screens, disabling the simulator, or pressing **Reset**.
 
-This is deliberately **not** full scope parity: collisions across separate
-`OnVisible`/`OnSelect` invocations cannot yet be reliably detected because
-variable provenance is not persisted. Future work should maintain separate
-global and per-screen contexts and use official Power Fx binding/AST (PR #13).
-No SQL data, permissions, or connector state is inferred.
+The backwards-compatible flat test API intentionally rejects ambiguous cross-scope name collisions within one batch. The actual UI uses the scoped API. Neither approach claims full Canvas runtime parity, and no variables persist outside the local browser session.
 
 Official semantics:
 - https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-set
 - https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-updatecontext
 - https://learn.microsoft.com/en-us/power-platform/power-fx/variables
+
+## Reactive preview appearance
+
+When a local scalar value is known, the viewer can update `Visible`, `Text`, checkbox/toggle state, `Fill` and `Color` (including safe `If` branches with known boolean conditions), `DisplayMode`, and dependent geometry. Color strings are restricted to valid hex values or known Power Apps color literals; arbitrary CSS is not accepted. `DisabledFill` and `DisabledColor` apply when a control is known disabled. An unresolved condition remains unresolved rather than inventing a runtime value.
+
+The bundled synthetic demo demonstrates the effect: run `OnVisible`, click **Show hint**, and observe the button color, dependent label, and an enabled/disabled control. The preview can inspect disabled controls but does not trigger their `OnSelect` behavior.
 
 ## Explicitly blocked and out of scope
 
