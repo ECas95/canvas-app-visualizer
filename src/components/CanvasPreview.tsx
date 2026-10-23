@@ -121,6 +121,7 @@ export function CanvasPreview({ screen, selectedId, onSelect }: Props) {
     () => new Map(items.map(item => [item.control.id, item])),
     [items]
   );
+  const indexById = useMemo(() => new Map(items.map((item, index) => [item.control.id, index])), [items]);
   const target = selectedId ? itemById.get(selectedId) : undefined;
   const visibleItems = useMemo(
     () => focusSelection && target
@@ -209,7 +210,7 @@ export function CanvasPreview({ screen, selectedId, onSelect }: Props) {
             </defs>
             <rect width={width} height={height} fill={fill} />
             {visibleItems.map(item => {
-              const index = items.indexOf(item);
+              const index = indexById.get(item.control.id) ?? 0;
               const selected = selectedId === item.control.id;
               const draw = (
                 <g className="visual-control" key={item.control.id}
@@ -251,7 +252,7 @@ export function CanvasPreview({ screen, selectedId, onSelect }: Props) {
               return item.ancestors.reduceRight<ReactNode>((child, ancestor) => {
                 const parent = itemById.get(ancestor);
                 if (!parent) return child;
-                const parentIndex = items.indexOf(parent);
+                const parentIndex = indexById.get(parent.control.id) ?? 0;
                 return (
                   <g key={ancestor} clipPath={`url(#${instanceId}-bounds-${parentIndex})`}>
                     {child}
