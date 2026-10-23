@@ -71,7 +71,13 @@ function flatten(
   for (const { control, rect } of positioned) {
     // A proven-false parent hides its complete subtree; unresolved visibility
     // stays visible instead of guessing runtime state.
-    if (isDefinitelyHidden(control) || dependsOnRuntimeGalleryItems(control)) continue;
+    const visibilitySymbols = {
+      ...siblingSymbols,
+      "App.Width": appWidth, "App.Height": appHeight,
+      "Parent.Width": parentWidth, "Parent.Height": parentHeight
+    };
+    if (isDefinitelyHidden(control, visibilitySymbols) ||
+        dependsOnRuntimeGalleryItems(control)) continue;
     const x = offsetX + rect.x;
     const y = offsetY + rect.y;
     output.push({
