@@ -74,6 +74,7 @@ export const DEMO_FILES: SourceFile[] = [
             Y: =320
             Width: =180
             Height: =44
+            Fill: =If(varShowHint, Color.Green, Color.Gray)
             OnSelect: =Set(varShowHint, !varShowHint)
       - DetailsHint:
           Control: Label
@@ -84,6 +85,17 @@ export const DEMO_FILES: SourceFile[] = [
             Y: =378
             Width: =360
             Height: =60
+      - PreviewEnabledButton:
+          Control: Button
+          Properties:
+            Text: ="Enabled when hint is visible"
+            X: =780
+            Y: =455
+            Width: =240
+            Height: =42
+            DisplayMode: =If(varShowHint, DisplayMode.Edit, DisplayMode.Disabled)
+            DisabledFill: =Color.LightGray
+            OnSelect: =Set(varPressed, true)
       - StatusIcon:
           Control: Classic/Icon
           Variant: Check
