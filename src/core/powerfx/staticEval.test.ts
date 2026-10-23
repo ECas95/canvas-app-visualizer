@@ -46,6 +46,20 @@ describe("static Power Fx evaluator", () => {
     expect(staticNumber("=100 * 20%")).toBeCloseTo(20);
   });
 
+  it("resolves known false AND unknown without guessing the variable", () => {
+    expect(staticBoolean("=App.Width < 720 && varIsAdmin", symbols)).toBe(false);
+    expect(staticNumber("=If(App.Width < 720 && varIsAdmin, 48, 0)", symbols)).toBe(0);
+    expect(staticBoolean("=App.Width > 720 && varIsAdmin", symbols)).toBeNull();
+    expect(staticBoolean("=true || varIsAdmin", symbols)).toBe(true);
+    expect(staticBoolean("=false || varIsAdmin", symbols)).toBeNull();
+  });
+
+  it("keeps unsupported selected branches unknown but selects known branches", () => {
+    expect(staticNumber("=If(App.Width > 700, 16, dynamicSpacing)", symbols)).toBe(16);
+    expect(staticNumber("=If(App.Width > 2000, 16, dynamicSpacing)", symbols)).toBeNull();
+    expect(staticNumber("=If(varCondition, 8, 16)", symbols)).toBeNull();
+  });
+
   it("does not invent values for unknown runtime symbols", () => {
     expect(
       evaluateStaticPowerFx("=User().Email", { symbols })
