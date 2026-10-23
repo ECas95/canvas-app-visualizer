@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CanvasAppModel, CanvasControl } from "../types/canvas";
 import { Icon } from "./Icon";
 
@@ -84,6 +84,36 @@ export function AppTree({ app, selectedId, onSelectScreen, onSelectControl }: Pr
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const query = search.trim().toLowerCase();
   const searching = query.length > 0;
+
+  // Reveal a target reached from Diagnostics, even inside collapsed parents.
+  useEffect(() => {
+    if (!selectedId) return;
+    const ancestors: string[] = [];
+    function find(controls: CanvasControl[], parents: string[]): boolean {
+      for (const control of controls) {
+        if (control.id === selectedId) {
+          ancestors.push(...parents);
+          return true;
+        }
+        if (find(control.children, [...parents, control.id])) return true;
+      }
+      return false;
+    }
+    for (const screen of app.screens) {
+      if (screen.id === selectedId || find(screen.children, [screen.id])) {
+        ancestors.push(screen.id);
+        break;
+      }
+    }
+    if (ancestors.length) {
+      setCollapsed(current => {
+        if (!ancestors.some(id => current.has(id))) return current;
+        const next = new Set(current);
+        for (const id of ancestors) next.delete(id);
+        return next;
+      });
+    }
+  }, [app.screens, selectedId]);
 
   const screens = useMemo(
     () => app.screens
