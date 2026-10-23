@@ -206,19 +206,39 @@ export function controlRect(
     finalHeight
   );
 
-  const x = resolvedNumber(control.properties.X, selfSymbols);
-  const y = resolvedNumber(control.properties.Y, selfSymbols);
+  const initialX = resolvedNumber(control.properties.X, selfSymbols);
+  const initialY = resolvedNumber(control.properties.Y, selfSymbols);
+
+  // Canvas supports formulas such as Height = App.Height - Self.Y - 20.
+  // Resolve the known position before making a second, side-effect-free size pass.
+  const positionedSymbols = {
+    ...(selfSymbols ?? {}),
+    ...(initialX !== null ? { "Self.X": initialX } : {}),
+    ...(initialY !== null ? { "Self.Y": initialY } : {})
+  };
+  const resolvedWidth = resolvedNumber(control.properties.Width, positionedSymbols) ?? width;
+  const resolvedHeight = resolvedNumber(control.properties.Height, positionedSymbols) ?? height;
+  const effectiveWidth = Math.max(8, resolvedWidth ?? defaults.width);
+  const effectiveHeight = Math.max(8, resolvedHeight ?? defaults.height);
+  const finalSymbols = {
+    ...(layoutSymbols(context, effectiveWidth, effectiveHeight) ?? {}),
+    ...positionedSymbols,
+    "Self.Width": effectiveWidth,
+    "Self.Height": effectiveHeight
+  };
+  const x = resolvedNumber(control.properties.X, finalSymbols) ?? initialX;
+  const y = resolvedNumber(control.properties.Y, finalSymbols) ?? initialY;
 
   return {
     x: x ?? 24 + (index % 4) * 190,
     y: y ?? 24 + Math.floor(index / 4) * 72,
-    width: finalWidth,
-    height: finalHeight,
+    width: effectiveWidth,
+    height: effectiveHeight,
     dynamic:
       x === null ||
       y === null ||
-      width === null ||
-      height === null
+      resolvedWidth === null ||
+      resolvedHeight === null
   };
 }
 
