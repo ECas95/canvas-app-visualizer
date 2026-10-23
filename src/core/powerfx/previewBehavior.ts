@@ -95,14 +95,34 @@ function evaluateValue(source: string, tokens: PowerFxToken[], vars: PreviewVari
   return value;
 }
 
+/** A conservative browser-local model of Power Fx global and screen context scopes. */
+export interface PreviewScopedState {
+  globals: PreviewVariables;
+  context: PreviewVariables;
+}
+
+export interface PreviewScopedActionResult extends PreviewActionResult {
+  state: PreviewScopedState;
+}
+
+/** Context variables take precedence over same-name globals (case insensitive). */
+export function previewScopedSymbols(state: PreviewScopedState): PreviewVariables {
+  const symbols: PreviewVariables = { ...state.globals };
+  for (const [name, value] of Object.entries(state.context)) {
+    const existing = Object.keys(symbols).find(key => key.toLowerCase() === name.toLowerCase());
+    if (existing) delete symbols[existing];
+    symbols[name] = value;
+  }
+  return symbols;
+}
+
 function applyStep(
   source: string,
   tokens: PowerFxToken[],
-  working: PreviewVariables,
+  working: PreviewScopedState,
   changed: string[],
-  // Tracks assignments within this behavior batch only; it is not a full
-  // Power Fx binding/scope model and must never guess across separate events.
-  batchKinds: Map<string, "set" | "updatecontext">
+  batchKinds: Map<string, "set" | "updatecontext">,
+  legacyCollisionGuard: boolean
 ): string | null {
   if (tokens.length < 5 || tokens[0].kind !== "identifier" ||
       tokens[1].value !== "(" || tokens[tokens.length - 1].value !== ")") {
@@ -112,12 +132,12 @@ function applyStep(
   const args = split(tokens.slice(2, -1), ",");
   if (!args) return "Malformed or unsupported function arguments.";
 
-  let updates: Array<[string, PowerFxToken[]]> = [];
+  const updates: Array<[string, PowerFxToken[]]> = [];
   if (operation === "set") {
     if (args.length !== 2) return "Set must have exactly two arguments.";
     const name = validName(args[0]);
     if (!name) return "Set target must be a simple nonreserved variable.";
-    updates = [[name, args[1]]];
+    updates.push([name, args[1]]);
   } else if (operation === "updatecontext") {
     if (args.length !== 1) return "UpdateContext requires one literal record.";
     const record = args[0];
@@ -136,10 +156,12 @@ function applyStep(
     return "Blocked behavior: " + tokens[0].value + ". Only Set/UpdateContext are simulated.";
   }
 
-  // An UpdateContext argument is one record expression, not a sequence of
-  // assignments. Resolve every field against the same pre-call snapshot.
-  // Separate semicolon-delimited behavior statements remain sequential.
-  const candidate = { ...working };
+  const target = operation === "set" ? working.globals : working.context;
+  const other = operation === "set" ? working.context : working.globals;
+  // Every field of a single UpdateContext record reads the same pre-call
+  // snapshot; separate semicolon-delimited statements remain sequential.
+  const symbols = previewScopedSymbols(working);
+  const candidate = { ...target };
   const pending: Array<[string, StaticPowerFxValue]> = [];
   const seen = new Set<string>();
   for (const [name, expression] of updates) {
@@ -148,27 +170,28 @@ function applyStep(
       return "Duplicate UpdateContext field: " + name + ".";
     }
     seen.add(lower);
-    // Power Fx allows a global and a screen context variable to share a
-    // name, with context taking precedence. The flat preview record cannot
-    // represent both; fail closed instead of silently overwriting one.
+    // Retain the original flat API's conservative behavior for callers that
+    // have no scope metadata. The scoped API correctly represents both names.
     const earlierKind = batchKinds.get(lower);
-    if (earlierKind && earlierKind !== operation) {
+    if (legacyCollisionGuard && earlierKind && earlierKind !== operation) {
       return "Ambiguous global/context variable " + name + "; no changes applied.";
     }
     const unsupported = unsupportedValueFunction(expression);
     if (unsupported) return "Unsupported nested function: " + unsupported + "; no changes applied.";
-    const actual = canonical(name, working);
-    const value = evaluateValue(source, expression, working);
+    const actual = canonical(name, target);
+    const value = evaluateValue(source, expression, symbols);
     if (value === null) return "Unresolved value for " + name + "; no changes applied.";
     pending.push([actual, value]);
   }
   for (const [name, value] of pending) candidate[name] = value;
-  if (Object.keys(candidate).length > MAX_VARIABLES) return "Variable count limit exceeded.";
+  if (Object.keys(candidate).length + Object.keys(other).length > MAX_VARIABLES) {
+    return "Variable count limit exceeded.";
+  }
   for (const [name] of pending) {
     changed.push(name);
     batchKinds.set(name.toLowerCase(), operation as "set" | "updatecontext");
   }
-  Object.assign(working, candidate);
+  Object.assign(target, candidate);
   return null;
 }
 
@@ -177,13 +200,18 @@ function applyStep(
  * rejects the complete batch. No network, browser code, formulas with effects,
  * connector calls, Patch/Collect/Navigate, or arbitrary JavaScript is run.
  */
-export function simulatePreviewBehavior(
+function simulateBehavior(
   formula: unknown,
-  variables: PreviewVariables = {}
-): PreviewActionResult {
-  const original = { ...variables };
-  const rejected = (message: string): PreviewActionResult => ({
-    ok: false, variables: original, changes: [], message
+  state: PreviewScopedState,
+  legacyCollisionGuard: boolean
+): PreviewScopedActionResult {
+  const original: PreviewScopedState = {
+    globals: { ...state.globals },
+    context: { ...state.context }
+  };
+  const rejected = (message: string): PreviewScopedActionResult => ({
+    ok: false, state: original, variables: previewScopedSymbols(original),
+    changes: [], message
   });
   if (typeof formula !== "string" || !formula.trim()) return rejected("No behavior formula.");
   if (formula.length > MAX_FORMULA_CHARS) return rejected("Behavior formula is too long.");
@@ -195,16 +223,39 @@ export function simulatePreviewBehavior(
   const actions = split(tokens, ";");
   if (!actions || actions.length > MAX_STEPS) return rejected("Invalid action sequence or step limit exceeded.");
 
-  const working: PreviewVariables = { ...variables };
+  const working: PreviewScopedState = {
+    globals: { ...state.globals },
+    context: { ...state.context }
+  };
   const changes: string[] = [];
   const batchKinds = new Map<string, "set" | "updatecontext">();
   for (const step of actions) {
-    const issue = applyStep(source, step, working, changes, batchKinds);
+    const issue = applyStep(source, step, working, changes, batchKinds, legacyCollisionGuard);
     if (issue) return rejected(issue);
   }
   const unique = [...new Set(changes)];
   return {
-    ok: true, variables: working, changes: unique,
+    ok: true, state: working, variables: previewScopedSymbols(working),
+    changes: unique,
     message: unique.length ? "Simulated: " + unique.join(", ") : "No local changes."
   };
+}
+
+/** New scope-aware API for a single selected screen; no state is persisted. */
+export function simulateScopedPreviewBehavior(
+  formula: unknown,
+  state: PreviewScopedState = { globals: {}, context: {} }
+): PreviewScopedActionResult {
+  return simulateBehavior(formula, state, false);
+}
+
+/** Backwards-compatible flat preview API; conservatively rejects mixed-scope writes. */
+export function simulatePreviewBehavior(
+  formula: unknown,
+  variables: PreviewVariables = {}
+): PreviewActionResult {
+  const { ok, variables: next, changes, message } = simulateBehavior(
+    formula, { globals: variables, context: {} }, true
+  );
+  return { ok, variables: next, changes, message };
 }
