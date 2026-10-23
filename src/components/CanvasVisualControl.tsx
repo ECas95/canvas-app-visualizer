@@ -1,8 +1,10 @@
 import type { CanvasControl, PreviewMediaAsset } from "../types/canvas";
 import { literalNumber } from "../core/layout/layout";
+import { staticBoolean, staticString } from "../core/powerfx/staticEval";
+import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, resolvePreviewImage } from "../core/layout/previewMedia";
 import {
-  previewColor, previewFontSize, previewFontWeight, previewHorizontalAlign,
+  previewColorWithSymbols, previewDisplayMode, previewFontSize, previewFontWeight, previewHorizontalAlign,
   previewIsChecked, previewItalic, previewKind, previewText, previewTextDecoration,
   previewVerticalAlign
 } from "../core/layout/previewAppearance";
@@ -10,6 +12,7 @@ import {
 interface Props {
   control: CanvasControl;
   mediaAssets?: PreviewMediaAsset[];
+  simulationSymbols?: PreviewVariables;
   x: number;
   y: number;
   width: number;
@@ -20,24 +23,37 @@ interface Props {
 const FAMILY = '"Segoe UI",system-ui,sans-serif';
 
 export function CanvasVisualControl({
-  control, x, y, width, height, clipId, mediaAssets = []
+  control, x, y, width, height, clipId, mediaAssets = [], simulationSymbols
 }: Props) {
   // Editor groups are organizational, not rendered Canvas controls.
   if (control.controlType.toLowerCase() === "group") return null;
   const props = control.properties;
   const kind = previewKind(control.controlType);
   const media = kind === "image" ? resolvePreviewImage(props.Image, mediaAssets) : undefined;
-  const explicitFill = previewColor(props.Fill);
-  const foreground = previewColor(props.Color) ?? "#242424";
-  const borderColor = previewColor(props.BorderColor);
+  const displayMode = previewDisplayMode(props.DisplayMode, simulationSymbols);
+  const disabled = displayMode === "disabled";
+  const explicitFill = previewColorWithSymbols(
+    disabled ? props.DisabledFill ?? props.Fill : props.Fill, simulationSymbols
+  );
+  const foreground = previewColorWithSymbols(
+    disabled ? props.DisabledColor ?? props.Color : props.Color, simulationSymbols
+  ) ?? "#242424";
+  const borderColor = previewColorWithSymbols(props.BorderColor, simulationSymbols);
   const thickness = literalNumber(props.BorderThickness);
-  const label = previewText(control);
+  const rawText = kind === "input"
+    ? props.Default ?? props.Value ?? props.HintText
+    : kind === "select"
+      ? props.Default ?? props.InputTextPlaceholder
+      : props.Text ?? props.Label;
+  const label = (simulationSymbols && staticString(rawText, simulationSymbols)) ?? previewText(control);
   const fontSize = previewFontSize(control);
   const text = label?.slice(0, 240);
   const inset = Math.min(12, Math.max(3, width * 0.04));
   const radius = Math.min(width / 2, height / 2,
     Math.max(0, literalNumber(props.RadiusTopLeft) ?? 4));
-  const selected = previewIsChecked(control);
+  const selected = simulationSymbols
+    ? [props.Default, props.Checked, props.Value].some(value => staticBoolean(value, simulationSymbols) === true)
+    : previewIsChecked(control);
   const horizontalAlign = previewHorizontalAlign(control);
   const verticalAlign = previewVerticalAlign(control);
   const fontWeight = previewFontWeight(control);
@@ -109,7 +125,7 @@ export function CanvasVisualControl({
   };
 
   return (
-    <g>
+    <g opacity={disabled ? 0.66 : displayMode === "view" ? 0.86 : 1}>
       <defs>
         <clipPath id={clipId}>
           <rect x={x + 1} y={y + 1} width={Math.max(0, width - 2)}
@@ -125,10 +141,12 @@ export function CanvasVisualControl({
 
       <g clipPath={`url(#${clipId})`}>
         {kind === "button" && svgText(text ?? (props.Text ? "…" : "Button"), x + width / 2, "middle",
-          previewColor(props.Color) ?? "#ffffff")}
+          previewColorWithSymbols(
+            disabled ? props.DisabledColor ?? props.Color : props.Color, simulationSymbols
+          ) ?? (disabled ? "#555555" : "#ffffff"))}
         {kind === "label" && text && svgText(text)}
         {kind === "input" && svgText(text ?? (props.Default || props.Value ? "…" : ""),
-          x + inset, "start", previewColor(props.Color) ??
+          x + inset, "start", previewColorWithSymbols(props.Color, simulationSymbols) ??
           (label ? "#242424" : "#7f8792"))}
         {kind === "select" && (
           <>

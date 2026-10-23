@@ -22,6 +22,7 @@ export const DEMO_FILES: SourceFile[] = [
   Home:
     Properties:
       Fill: =RGBA(248, 249, 252, 1)
+      OnVisible: =Set(varShowHint, false)
     Children:
       - Title:
           Control: Label
@@ -65,6 +66,36 @@ export const DEMO_FILES: SourceFile[] = [
             Width: =160
             Height: =44
             OnSelect: =ClearCollect(colInventory, Inventory)
+      - ToggleDetailsButton:
+          Control: Button
+          Properties:
+            Text: =If(varShowHint, "Hide hint", "Show hint")
+            X: =780
+            Y: =320
+            Width: =180
+            Height: =44
+            Fill: =If(varShowHint, Color.Green, Color.Gray)
+            OnSelect: =Set(varShowHint, !varShowHint)
+      - DetailsHint:
+          Control: Label
+          Properties:
+            Text: ="This text is controlled by a simulated local variable."
+            Visible: =varShowHint
+            X: =780
+            Y: =378
+            Width: =360
+            Height: =60
+      - PreviewEnabledButton:
+          Control: Button
+          Properties:
+            Text: ="Enabled when hint is visible"
+            X: =780
+            Y: =455
+            Width: =240
+            Height: =42
+            DisplayMode: =If(varShowHint, DisplayMode.Edit, DisplayMode.Disabled)
+            DisabledFill: =Color.LightGray
+            OnSelect: =Set(varPressed, true)
       - StatusIcon:
           Control: Classic/Icon
           Variant: Check

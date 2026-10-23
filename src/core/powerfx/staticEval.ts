@@ -334,14 +334,24 @@ class Parser {
     qualifiedName: string,
     args: Array<StaticPowerFxValue | null>
   ): StaticPowerFxValue | null {
-    const name = qualifiedName.split(".").at(-1)?.toLowerCase() ?? "";
+    // Qualified calls can refer to connectors or user-defined functions.
+    // Never interpret Connector.If(...) or Source.Min(...) as a pure built-in.
+    if (qualifiedName.includes(".")) return null;
+    const name = qualifiedName.toLowerCase();
 
     if (name === "if") {
-      const condition = args[0];
-      if (condition === null) return null;
-      if (typeof condition !== "boolean") return this.fail();
-      if (condition) return args[1] ?? null;
-      return args.length >= 3 ? args[2] ?? null : false;
+      // Power Fx If accepts condition/result pairs followed by an optional
+      // default. Only a proven-true branch may be selected; unknown
+      // conditions or missing/Blank defaults remain unresolved in preview.
+      // https://learn.microsoft.com/power-platform/power-fx/reference/function-if
+      if (args.length < 2) return this.fail();
+      for (let i = 0; i + 1 < args.length; i += 2) {
+        const condition = args[i];
+        if (condition === null) return null;
+        if (typeof condition !== "boolean") return this.fail();
+        if (condition) return args[i + 1] ?? null;
+      }
+      return args.length % 2 === 1 ? args[args.length - 1] ?? null : null;
     }
 
     if (args.some(value => value === null)) return null;
@@ -360,15 +370,31 @@ class Parser {
       return Math.abs(values[0]);
     }
 
-    if (
-      ["round", "roundup", "rounddown"].includes(name) &&
-      typeof values[0] === "number"
-    ) {
-      const digits = typeof values[1] === "number" ? values[1] : 0;
-      const scale = Math.pow(10, digits);
-      if (name === "round") return Math.round(values[0] * scale) / scale;
-      if (name === "roundup") return Math.ceil(values[0] * scale) / scale;
-      return Math.floor(values[0] * scale) / scale;
+    if (["round", "roundup", "rounddown"].includes(name)) {
+      // Microsoft Power Fx: Round breaks .5 ties away from zero; RoundUp
+      // moves away from zero and RoundDown moves toward zero for both signs.
+      // DecimalPlaces is required. Decline values beyond this conservative
+      // JS-number preview range rather than inventing a precise result.
+      // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-round
+      if (values.length !== 2 ||
+          typeof values[0] !== "number" ||
+          typeof values[1] !== "number" ||
+          !Number.isInteger(values[1]) || Math.abs(values[1]) > 12) return null;
+      const digits = values[1];
+      // Decimal exponent shifting avoids common binary scaling artifacts
+      // (e.g. 1.005 * 100 is slightly below 100.5 in JavaScript).
+      const shift = (number: number, exponent: number): number => {
+        const [coefficient, existingExponent = "0"] = String(number).split("e");
+        return Number(`${coefficient}e${Number(existingExponent) + exponent}`);
+      };
+      const scaled = shift(values[0], digits);
+      if (!Number.isFinite(scaled) ||
+          Math.abs(scaled) > Number.MAX_SAFE_INTEGER) return null;
+      const magnitude = Math.abs(scaled);
+      const roundedMagnitude = name === "round" ? Math.round(magnitude) :
+        name === "roundup" ? Math.ceil(magnitude) : Math.floor(magnitude);
+      const result = shift(Math.sign(scaled) * roundedMagnitude, -digits);
+      return Number.isFinite(result) ? result : null;
     }
 
     if (name === "coalesce") {

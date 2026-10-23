@@ -1,0 +1,101 @@
+# Local preview interactions (experimental)
+
+The **Simulate local state** switch is off by default. When enabled, clicking a control with an `OnSelect` formula tries to apply a narrow subset of Microsoft Power Fx *locally in memory*. Use **Run OnVisible** to explicitly test a screen event; it never fires automatically. Use **Reset** or switch modes/screens to discard the state.
+
+## Supported in this first increment
+
+- Literal/scalar values (boolean, number, text), existing simulated variables, pure arithmetic/comparisons/If expressions from the existing static preview evaluator.
+- `Set(variable, expression)` and `UpdateContext({ name: expression, ... })` when their targets and all values can be resolved entirely locally.
+- Sequential `; ` statements, within fixed step, input-length and variable-count limits.
+- Each `UpdateContext` literal record is evaluated from one pre-call variable snapshot; duplicate field names (ignoring case) and dependencies on fields created in the same record are rejected. Separate `;` actions still see earlier completed actions.
+
+- Reactive preview visibility via `Visible` and static simulated variable state; text and checkbox/toggle state where resolvable.
+- All actions are transactional: if any call or value is unsupported, **nothing** is committed.
+- The preview validates **every nested call**, including calls inside unselected `If` branches, against a small pure-function allowlist (`If`, `Min`, `Max`, `Abs`, `Round`, `RoundUp`, `RoundDown`, `Coalesce`). Qualified calls such as `Connector.Max` and all other functions are rejected before any state update; this is a conservative preview safety rule, not a claim that Power Fx evaluates unselected branches.
+
+
+## Static numeric rounding fidelity
+
+The local static preview now follows the documented Power Fx direction for
+`Round` (half ties away from zero), `RoundUp` (away from zero) and
+`RoundDown` (toward zero), including negative values and negative decimal
+places. Decimal exponent shifting avoids common JavaScript binary scaling
+artifacts such as `Round(1.005, 2)`. Unsupported precision, nonintegral
+decimal places, missing/extra arguments, and unsafe numeric ranges remain
+**unresolved** rather than guessing a result. This affects both static
+geometry and opt-in local behavior expressions; it does not execute external
+effects.
+
+Microsoft reference: https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-round
+
+## DisplayMode interaction guard
+
+A simulated `OnSelect` is allowed only when the control's `DisplayMode` is absent (the preview's editable default) or resolves to `DisplayMode.Edit`. Explicit `DisplayMode.Disabled`, `DisplayMode.View`, and unresolved/dynamic values do not run behavior formulas; the control can still be selected for **inspection**. `If` formulas depending on known local preview variables are rechecked on each click. This conservative guard does not claim to reproduce all inherited Form/DataCard display modes or actual runtime permissions.
+
+Microsoft documents that a disabled button does not trigger `OnSelect`: https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-button
+
+## Host-object name safety
+
+The preview conservatively rejects variable names that collide with JavaScript
+object-prototype members (for example, `__proto__`, `constructor`,
+`toString`) rather than reporting a successful assignment that the
+in-memory JavaScript record cannot safely represent. This is a simulator
+implementation guard, **not** a restriction asserted by Microsoft Power Fx.
+The entire action batch rolls back when such a target is encountered.
+
+## Scoped variables and state inspection
+
+The interactive preview keeps separate in-memory global variables (written by `Set`) and screen-context variables (written by `UpdateContext`). Context variables take precedence when an unqualified formula reads the same name. Use **Inspect state** to examine both stores. State is reset when changing screens, disabling the simulator, or pressing **Reset**.
+
+The backwards-compatible flat test API intentionally rejects ambiguous cross-scope name collisions within one batch. The actual UI uses the scoped API. Neither approach claims full Canvas runtime parity, and no variables persist outside the local browser session.
+
+Official semantics:
+- https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-set
+- https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-updatecontext
+- https://learn.microsoft.com/en-us/power-platform/power-fx/variables
+
+## Reactive preview appearance
+
+When a local scalar value is known, the viewer can update `Visible`, `Text`, checkbox/toggle state, `Fill` and `Color` (including safe `If` branches with known boolean conditions), `DisplayMode`, and dependent geometry. Color strings are restricted to valid hex values or known Power Apps color literals; arbitrary CSS is not accepted. `DisabledFill` and `DisabledColor` apply when a control is known disabled. An unresolved condition remains unresolved rather than inventing a runtime value.
+
+The bundled synthetic demo demonstrates the effect: run `OnVisible`, click **Show hint**, and observe the button color, dependent label, and an enabled/disabled control. The preview can inspect disabled controls but does not trigger their `OnSelect` behavior.
+
+## Explicitly blocked and out of scope
+
+`Patch`, `SubmitForm`, `ClearCollect`, `Collect`, `Remove`, `Refresh`, `Navigate`, flow invocation, `User()`, SQL, Dataverse, external connector calls, custom functions, arbitrary browser/JS code and all other non-allowlisted functions are **never executed**. Missing runtime values are not invented.
+
+The scope of the preview variables is the current screen/session; this does **not** assert parity with Power Apps global and screen context scopes. The browser does not persist them. An `OnVisible` containing even one unsupported call is rejected wholesale; the simulator cannot partially replay real initialization. No security/permission decisions should be inferred from these simulated values.
+
+As a result, the six SQL-backed records in scrMain remain unavailable unless verified source data is separately supplied. This mode is for UI behavior investigation, not functional UAT.
+
+## Microsoft upstream references
+
+- Power Fx behavior formulas and sequencing: https://github.com/microsoft/Power-Fx/blob/main/docs/imperative.md
+- Variables and recomputation: https://github.com/microsoft/Power-Fx/blob/main/docs/variables.md
+
+This limited local action validator is **not** a replacement for the official Microsoft parser in PR #13. Later development should use official Power Fx AST/binding before expanding allowable semantics.
+
+- Microsoft UpdateContext record semantics: https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-updatecontext
+
+
+## Scope-aware state (incremental)
+
+The interactive Canvas preview now maintains two distinct, in-memory stores for
+the **selected screen**: `globals` written by `Set`, and `context` written
+by `UpdateContext`. Formulas see a merged read-only symbol view in which
+screen context values take precedence over same-name globals, case-insensitively.
+A later `Set` still writes the global store even if a context value hides it.
+State persists across clicks and explicit `OnVisible` runs, and is discarded
+when the preview is reset, disabled, or switched to another screen.
+
+This removes the earlier cross-scope collision limitation for the interactive
+preview. The backwards-compatible flat helper `simulatePreviewBehavior`
+continues to reject ambiguous mixed-scope assignments within one batch;
+the UI uses `simulateScopedPreviewBehavior` instead. Neither API supports
+cross-screen navigation, connector data, collections, `Patch`, or
+`ClearCollect`. The model is a conservative scalar-only approximation, not
+Power Apps runtime or app-aware binding.
+
+Official Microsoft scope semantics:
+https://github.com/microsoft/Power-Fx/blob/main/docs/variables.md
+https://learn.microsoft.com/en-us/power-platform/power-fx/variables

@@ -11,6 +11,15 @@ Open a modern `.msapp` package or current `.pa.yaml` source and inspect screens,
 
 > Canvas App Visualizer is an independent project and is not affiliated with or endorsed by Microsoft. It does not replace Power Apps Studio or the Power Apps runtime.
 
+## v0.3.0 — Opt-in local interactive preview
+
+- **Simulate local state** is off by default. When enabled, safe scalar Power Fx `Set` and `UpdateContext` behavior can update local preview variables without executing SQL or connectors.
+- **Preview interactions:** use a control's `OnSelect`, explicitly trigger `Screen.OnVisible`, inspect scoped state and reset it. Formulas with external or unsupported behavior are rejected transactionally.
+- **Reactive visual properties:** statically resolvable `Visible`, `Text`, `Fill`, `Color`, `DisplayMode`, checkbox state, and dependent layout values respond to known local variables.
+- **Safety:** no Power Apps runtime, user permissions, remote data, navigation, or external mutation. The built-in synthetic demo provides a safe toggle example.
+
+See [Local Preview Interactions](docs/LOCAL_PREVIEW_INTERACTIONS.md) and [v0.3.0 release notes](docs/RELEASE_V0.3.0.md).
+
 ## v0.2.0 — Source-faithful workbench
 
 - **Visual / Structure previews** with responsive viewport profiles, zoom, focused selection and source-based control styling.

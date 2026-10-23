@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CanvasControl } from "../../types/canvas";
 import {
-  isDefinitelyHidden, previewColor, previewFontSize, previewFontWeight,
+  isDefinitelyHidden, previewCanRunOnSelect, previewColor, previewColorWithSymbols, previewDisplayMode, previewFontSize, previewFontWeight,
   previewHorizontalAlign, previewIsChecked, previewItalic, previewKind,
   previewText, previewTextDecoration, previewVerticalAlign
 } from "./previewAppearance";
@@ -94,4 +94,63 @@ describe("semantic preview classification", () => {
     expect(previewIsChecked(control("Toggle", { Default: "=true" }))).toBe(true);
     expect(previewIsChecked(control("Checkbox", { Checked: "=false" }))).toBe(false);
   });
+
+  it("only runs simulated OnSelect for a confirmed editable DisplayMode", () => {
+    const action = (mode?: string) => control("Classic/Button@2.2.0", {
+      OnSelect: "=Set(clicked, true)",
+      ...(mode === undefined ? {} : { DisplayMode: mode })
+    });
+    // YAML omits properties at their defaults.
+    expect(previewCanRunOnSelect(action())).toBe(true);
+    expect(previewCanRunOnSelect(action("=DisplayMode.Edit"))).toBe(true);
+    expect(previewCanRunOnSelect(action("=DisplayMode.Disabled"))).toBe(false);
+    expect(previewCanRunOnSelect(action("=DisplayMode.View"))).toBe(false);
+    expect(previewCanRunOnSelect(action("=varMode"))).toBe(false);
+    expect(previewCanRunOnSelect(action("=If(varReady, DisplayMode.Edit, DisplayMode.Disabled)"), {varReady: true})).toBe(true);
+    expect(previewCanRunOnSelect(action("=If(varReady, DisplayMode.Edit, DisplayMode.Disabled)"), {varReady: false})).toBe(false);
+    expect(previewCanRunOnSelect(action("=If(varReady, DisplayMode.Edit, DisplayMode.Disabled)"))).toBe(false);
+    expect(previewCanRunOnSelect(action("=If(true, DisplayMode.Edit, DisplayMode.Disabled)"))).toBe(true);
+    expect(previewCanRunOnSelect(action("=Connector.DisplayMode()"))).toBe(false);
+  });
+  it("renders variable-dependent Fill using the source-selected If branch", () => {
+    const raw = '=If(varActive, Color.Green, Color.Gray)';
+    expect(previewColorWithSymbols(raw, { varActive: true })).toBe("#008000");
+    expect(previewColorWithSymbols(raw, { varActive: false })).toBe("#808080");
+    expect(previewColorWithSymbols(raw, {})).toBeNull();
+  });
+
+  it("supports nested and multi-condition color branches without guessing data", () => {
+    const formula = '=If(varLoading, Color.Orange, varReady, RGBA(10, 20, 30, 0.5), Color.Red)';
+    expect(previewColorWithSymbols(formula, { varLoading: false, varReady: true }))
+      .toBe("rgba(10,20,30,0.5)");
+    expect(previewColorWithSymbols(formula, { varLoading: false, varReady: false }))
+      .toBe("#ff0000");
+    expect(previewColorWithSymbols(formula, { varLoading: true, varReady: false }))
+      .toBe("#ffa500");
+    expect(previewColorWithSymbols(formula, { varLoading: false })).toBeNull();
+  });
+
+  it("accepts only validated hex values from a local color string", () => {
+    expect(previewColorWithSymbols("=ColorValue(varHex)", { varHex: "#369abc" }))
+      .toBe("#369abc");
+    expect(previewColorWithSymbols("=varHex", { varHex: "#abc" })).toBe("#abc");
+    expect(previewColorWithSymbols("=varHex", { varHex: "url(https://example.com)" }))
+      .toBeNull();
+    expect(previewColorWithSymbols("=ColorValue(varHex)", { varHex: "red;background:evil" }))
+      .toBeNull();
+  });
+
+  it("distinguishes known and unresolved display modes for visual state", () => {
+    expect(previewDisplayMode(undefined)).toBe("edit");
+    expect(previewDisplayMode("=DisplayMode.Disabled")).toBe("disabled");
+    expect(previewDisplayMode("=DisplayMode.View")).toBe("view");
+    expect(previewDisplayMode("=If(varReady, DisplayMode.Edit, DisplayMode.Disabled)", { varReady: true }))
+      .toBe("edit");
+    expect(previewDisplayMode("=If(varReady, DisplayMode.Edit, DisplayMode.Disabled)", { varReady: false }))
+      .toBe("disabled");
+    expect(previewDisplayMode("=If(varReady, DisplayMode.Edit, DisplayMode.Disabled)", {}))
+      .toBe("unresolved");
+  });
+
+
 });

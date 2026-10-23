@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import type { CanvasControl, CanvasScreen, PreviewMediaAsset } from "../types/canvas";
 import {
   autoLayoutChildren,
@@ -9,8 +9,9 @@ import {
   isGallery,
   rgba
 } from "../core/layout/layout";
-import { isDefinitelyHidden, previewColor } from "../core/layout/previewAppearance";
+import { isDefinitelyHidden, previewCanRunOnSelect, previewColorWithSymbols } from "../core/layout/previewAppearance";
 import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/layout/previewDataState";
+import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScopedState, type PreviewVariables } from "../core/powerfx/previewBehavior";
 import { CanvasVisualControl } from "./CanvasVisualControl";
 import { Icon } from "./Icon";
 
@@ -53,14 +54,16 @@ function flatten(
   ancestors: string[] = [],
   templateWidth?: number,
   templateHeight?: number,
-  parentControl?: CanvasControl
+  parentControl?: CanvasControl,
+  simulationSymbols: PreviewVariables = {}
 ): DrawItem[] {
   const output: DrawItem[] = [];
   const baseContext = {
-    parentWidth, parentHeight, appWidth, appHeight, templateWidth, templateHeight
+    parentWidth, parentHeight, appWidth, appHeight, templateWidth, templateHeight,
+    symbols: simulationSymbols
   };
   const siblingSymbols = buildSiblingGeometrySymbols(controls, baseContext);
-  const context = { ...baseContext, symbols: siblingSymbols };
+  const context = { ...baseContext, symbols: { ...siblingSymbols, ...simulationSymbols } };
   const positioned =
     parentControl && isAutoLayout(parentControl)
       ? autoLayoutChildren(parentControl, context)
@@ -74,7 +77,8 @@ function flatten(
     const visibilitySymbols = {
       ...siblingSymbols,
       "App.Width": appWidth, "App.Height": appHeight,
-      "Parent.Width": parentWidth, "Parent.Height": parentHeight
+      "Parent.Width": parentWidth, "Parent.Height": parentHeight,
+      ...simulationSymbols
     };
     if (isDefinitelyHidden(control, visibilitySymbols) ||
         dependsOnRuntimeGalleryItems(control)) continue;
@@ -101,7 +105,8 @@ function flatten(
       [...ancestors, control.id],
       editorGroup ? templateWidth : template?.width,
       editorGroup ? templateHeight : template?.height,
-      editorGroup ? parentControl : control
+      editorGroup ? parentControl : control,
+      simulationSymbols
     ));
   }
   return output;
@@ -121,12 +126,40 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
   const [mode, setMode] = useState<PreviewMode>("visual");
   const [zoom, setZoom] = useState<Zoom>("fit");
   const [focusSelection, setFocusSelection] = useState(false);
+  const [interactive, setInteractive] = useState(false);
+  const [scopedState, setScopedState] = useState<PreviewScopedState>({ globals: {}, context: {} });
+  const variables = useMemo(() => previewScopedSymbols(scopedState), [scopedState]);
+  const [simulationMessage, setSimulationMessage] = useState("Simulation off. No behavior formulas are executed.");
   const instanceId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+
+  useEffect(() => {
+    setInteractive(false);
+    setScopedState({ globals: {}, context: {} });
+    setSimulationMessage("Simulation off. No behavior formulas are executed.");
+  }, [screen]);
+
+  function simulate(formula: unknown) {
+    const result = simulateScopedPreviewBehavior(formula, scopedState);
+    if (result.ok) setScopedState(result.state);
+    setSimulationMessage(result.message);
+  }
+
+  function selectControl(control: CanvasControl) {
+    onSelect(control);
+    if (interactive && mode === "visual" && control.properties.OnSelect) {
+      if (previewCanRunOnSelect(control, variables)) {
+        simulate(control.properties.OnSelect);
+      } else {
+        setSimulationMessage("OnSelect skipped: DisplayMode is not confirmed Edit.");
+      }
+    }
+  }
   const { width, height } = PROFILES[profile];
 
   const items = useMemo(
-    () => screen ? flatten(screen.children, 0, 0, width, height, width, height) : [],
-    [screen, width, height]
+    () => screen ? flatten(screen.children, 0, 0, width, height, width, height,
+      0, [], undefined, undefined, undefined, variables) : [],
+    [screen, width, height, variables]
   );
   const itemById = useMemo(
     () => new Map(items.map(item => [item.control.id, item])),
@@ -156,7 +189,8 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
     );
   }
 
-  const fill = previewColor(screen.properties.Fill) ?? rgba(screen.properties.Fill) ?? "#ffffff";
+  const fill = previewColorWithSymbols(screen.properties.Fill, interactive ? variables : undefined)
+    ?? rgba(screen.properties.Fill) ?? "#ffffff";
   const zoomWidth = zoom === "fit" ? "min(100%,1120px)"
     : `${Math.round(width * Number(zoom) / 100)}px`;
 
@@ -200,6 +234,19 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
               onChange={event => setFocusSelection(event.target.checked)} />
             Isolate selection
           </label>
+          <label className="preview-focus" title="Enable local-only, reversible behavior simulation">
+            <input type="checkbox" checked={interactive} onChange={event => {
+              setInteractive(event.target.checked);
+              setScopedState({ globals: {}, context: {} });
+              setSimulationMessage(event.target.checked ? "Local simulator ready. Click a control or run OnVisible." : "Simulation off. No behavior formulas are executed.");
+            }} />
+            Simulate local state
+          </label>
+          {interactive && <button type="button" className="simulation-action"
+            onClick={() => simulate(screen.properties.OnVisible)}
+            disabled={!screen.properties.OnVisible}>Run OnVisible</button>}
+          {interactive && <button type="button" className="simulation-action"
+            onClick={() => { setScopedState({ globals: {}, context: {} }); setSimulationMessage("Local state reset."); }}>Reset</button>}
           <span className="preview-dimensions">{width} × {height}</span>
         </div>
       </div>
@@ -227,15 +274,16 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                 <g className="visual-control" key={item.control.id}
                   role="button" tabIndex={0}
                   aria-label={`Inspect ${item.control.name} (${item.control.controlType})`}
-                  onClick={event => { event.stopPropagation(); onSelect(item.control); }}
+                  onClick={event => { event.stopPropagation(); selectControl(item.control); }}
                   onKeyDown={event => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      onSelect(item.control);
+                      selectControl(item.control);
                     }
                   }}>
                   {mode === "visual" ? (
                     <CanvasVisualControl control={item.control} mediaAssets={mediaAssets}
+                      simulationSymbols={interactive ? variables : undefined}
                       x={item.x} y={item.y} width={item.width} height={item.height}
                       clipId={`${instanceId}-text-${index}`} />
                   ) : (
@@ -310,6 +358,35 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
       <div className="preview-note">
         <span>{mode === "visual" ? "Static visual approximation" : "Control structure"}</span>
         <span>{visibleItems.length} visible nodes · {unresolved} unresolved layouts</span>
+        {interactive && <span className="simulation-status" aria-live="polite">
+          {simulationMessage} · {Object.keys(variables).length} local variable(s)
+        </span>}
+        {interactive && (
+          <details className="simulation-vars">
+            <summary>Inspect state ({Object.keys(variables).length})</summary>
+            <div className="simulation-vars-panel">
+              <strong>Preview state · browser only</strong>
+              {(["globals", "context"] as const).map(scope => (
+                <div key={scope}>
+                  <span className="simulation-vars-scope">{scope === "globals" ? "Global · Set" : "Screen · UpdateContext"}</span>
+                  {Object.entries(scopedState[scope]).length === 0 ? (
+                    <p>None</p>
+                  ) : (
+                    <dl>
+                      {Object.entries(scopedState[scope]).map(([name, value]) => (
+                        <div key={name}>
+                          <dt>{name}</dt>
+                          <dd>{JSON.stringify(value)}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+                </div>
+              ))}
+              <small>Context variables take precedence when names overlap. No data source is queried.</small>
+            </div>
+          </details>
+        )}
         <span>Gallery templates are illustrative; runtime records are not evaluated.</span>
         <span>Viewport profiles simulate dimensions; no formulas or connectors are executed.</span>
       </div>
