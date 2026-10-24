@@ -1,13 +1,13 @@
 import type { CanvasControl, PreviewMediaAsset } from "../types/canvas";
 import { literalNumber } from "../core/layout/layout";
 import { previewCornerRadii, previewRoundedRectPath } from "../core/layout/previewCorners";
-import { staticBoolean, staticNumber, staticString } from "../core/powerfx/staticEval";
+import { staticNumber, staticString } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, previewImageFlipTransform, previewImagePosition, previewImageRotationTransform, previewRasterCssImage, resolvePreviewImage } from "../core/layout/previewMedia";
 import { PREVIEW_ICON_PATHS, previewIconName, previewIconRotation } from "../core/layout/previewIcon";
 import {
   previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewDropShadowFilter, previewIsOpaqueColor, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
-  previewIsChecked, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration,
+  previewCheckedState, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration,
   previewVerticalAlign
 } from "../core/layout/previewAppearance";
 
@@ -65,9 +65,10 @@ export function CanvasVisualControl({
   const inset = Math.min(12, Math.max(3, width * 0.04));
   const corners = previewCornerRadii(props, width, height, simulationSymbols);
   const outline = previewRoundedRectPath(x, y, width, height, corners);
-  const selected = simulationSymbols
-    ? [props.Default, props.Checked, props.Value].some(value => staticBoolean(value, simulationSymbols) === true)
-    : previewIsChecked(control);
+  const checkedState = (kind === "checkbox" || kind === "toggle")
+    ? previewCheckedState(control, simulationSymbols) : "unchecked";
+  const selected = checkedState === "checked";
+  const checkedUnknown = checkedState === "unknown";
   const horizontalAlign = previewHorizontalAlign(control, simulationSymbols);
   const verticalAlign = previewVerticalAlign(control, simulationSymbols);
   const fontWeight = previewFontWeight(control, simulationSymbols);
@@ -239,23 +240,33 @@ export function CanvasVisualControl({
           </>
         )}
         {kind === "checkbox" && (
-          <>
+          <g data-preview-checked={checkedState}>
             <rect x={x + 5} y={y + (height - 18) / 2} width={18} height={18}
-              rx={3} fill={selected ? "#0f6cbd" : "#ffffff"}
+              rx={3} fill={selected ? "#0f6cbd" : checkedUnknown ? "#eaf0f5" : "#ffffff"}
               stroke={selected ? "#0f6cbd" : "#737b86"}/>
             {selected && <path d={`M ${x + 9} ${y + height / 2} l 4 4 l 7 -9`}
               stroke="white" strokeWidth={2} fill="none"/>}
+            {checkedUnknown && <>
+              <text x={x + 14} y={y + height / 2 + 4} textAnchor="middle"
+                fontSize={12} fill="#596b7f" pointerEvents="none">?</text>
+              <title>Checked state unknown — runtime formula unavailable</title>
+            </>}
             {text && svgText(text, x + 29)}
-          </>
+          </g>
         )}
         {kind === "toggle" && (
-          <>
+          <g data-preview-checked={checkedState}>
             <rect x={x + 4} y={y + (height - 20) / 2} width={38} height={20} rx={10}
-              fill={selected ? "#0f6cbd" : "#999fa8"}/>
-            <circle cx={x + (selected ? 30 : 15)} cy={y + height / 2} r={7}
-              fill="#ffffff"/>
+              fill={selected ? "#0f6cbd" : checkedUnknown ? "#cbd5e1" : "#999fa8"}/>
+            <circle cx={x + (checkedUnknown ? 23 : selected ? 30 : 15)}
+              cy={y + height / 2} r={7} fill="#ffffff"/>
+            {checkedUnknown && <>
+              <text x={x + 23} y={y + height / 2 + 4} textAnchor="middle"
+                fontSize={11} fill="#596b7f" pointerEvents="none">?</text>
+              <title>Checked state unknown — runtime formula unavailable</title>
+            </>}
             {text && svgText(text, x + 50)}
-          </>
+          </g>
         )}
         {kind === "icon" && (() => {
           const icon = previewIconName(
