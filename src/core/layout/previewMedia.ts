@@ -75,7 +75,7 @@ export function previewImageFlipTransform(
 export function previewImageRotation(raw: unknown): 0 | 90 | 180 | 270 | null {
   if (raw === undefined || raw === null) return 0;
   if (typeof raw !== "string") return null;
-  const match = /^=?\\s*ImageRotation\\.(None|Rotate90|Rotate180|Rotate270)\\s*$/i.exec(raw.trim());
+  const match = /^=?\s*ImageRotation\.(None|Rotate90|Rotate180|Rotate270)\s*$/i.exec(raw.trim());
   if (!match) return null;
   switch (match[1].toLowerCase()) {
     case "none": return 0;
