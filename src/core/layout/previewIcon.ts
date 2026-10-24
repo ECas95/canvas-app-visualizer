@@ -45,6 +45,9 @@ export function previewIconName(raw: unknown, modern = false): PreviewIconResult
     name = literal?.[1]?.toLowerCase();
   }
   if (name === "none") return "none";
+  // Modern Fluent uses "Delete" where the supported classic glyph is Trash.
+  // Keep the alias scoped to modern controls; do not infer arbitrary names.
+  if (modern && name === "delete") name = "trash";
   return name && iconNames.has(name) ? name as PreviewIconName : null;
 }
 
