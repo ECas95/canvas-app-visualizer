@@ -359,3 +359,50 @@ describe("Canvas container DropShadow source parsing", () => {
     expect(previewDropShadowFilter("=DropShadow.Bold")).not.toContain("var(");
   });
 });
+
+describe("verified responsive Canvas typography", () => {
+  const text = control("ModernText@1.0.0", {
+    Align: "=If(App.Width < 720, Align.Center, Align.Right)",
+    VerticalAlign: "=If(App.Width < 720, VerticalAlign.Top, VerticalAlign.Bottom)",
+    FontWeight: "=If(App.Width < 720, FontWeight.Bold, FontWeight.Normal)",
+    Italic: "=App.Width < 720",
+    Underline: "=App.Width < 720",
+    Strikethrough: "=App.Width >= 720"
+  });
+
+  it("resolves alignment, weight and emphasis from verified viewport dimensions", () => {
+    const phone = { "App.Width": 390 };
+    const desktop = { "App.Width": 1366 };
+    expect(previewHorizontalAlign(text, phone)).toBe("middle");
+    expect(previewHorizontalAlign(text, desktop)).toBe("end");
+    expect(previewVerticalAlign(text, phone)).toBe("top");
+    expect(previewVerticalAlign(text, desktop)).toBe("bottom");
+    expect(previewFontWeight(text, phone)).toBe(700);
+    expect(previewFontWeight(text, desktop)).toBe(400);
+    expect(previewItalic(text, phone)).toBe(true);
+    expect(previewItalic(text, desktop)).toBe(false);
+    expect(previewTextDecoration(text, phone)).toBe("underline");
+    expect(previewTextDecoration(text, desktop)).toBe("line-through");
+  });
+
+  it("keeps runtime-only conditions and non-enum branches unresolved", () => {
+    expect(previewHorizontalAlign(text)).toBeNull();
+    expect(previewVerticalAlign(text)).toBeNull();
+    expect(previewFontWeight(text)).toBeUndefined();
+    expect(previewHorizontalAlign(control("Label", {
+      Align: "=If(varAuthorized, Align.Right, Align.Left)"
+    }), { "App.Width": 390 })).toBeNull();
+    expect(previewFontWeight(control("Label", {
+      FontWeight: '=If(App.Width < 720, "FontWeight.Bold", FontWeight.Normal)'
+    }), { "App.Width": 390 })).toBeUndefined();
+    expect(previewHorizontalAlign(control("Label", {
+      Align: "=If(App.Width < 720, Align.Center, localString)"
+    }), { "App.Width": 1366, localString: "Align.Right" })).toBeNull();
+    expect(previewVerticalAlign(control("Label", {
+      VerticalAlign: "=If(App.Width < 720, Other.Top, VerticalAlign.Bottom)"
+    }), { "App.Width": 390 })).toBeNull();
+    expect(previewItalic(control("Label", { Italic: "=varRuntimeItalic" }))).toBe(false);
+    expect(previewTextDecoration(control("Label", { Underline: "=varRuntimeUnderline" })))
+      .toBeUndefined();
+  });
+});
