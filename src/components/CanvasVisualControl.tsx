@@ -3,7 +3,7 @@ import { literalNumber } from "../core/layout/layout";
 import { previewCornerRadii, previewRoundedRectPath } from "../core/layout/previewCorners";
 import { staticBoolean, staticNumber, staticString } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
-import { previewImageFit, previewImagePosition, previewRasterCssImage, resolvePreviewImage } from "../core/layout/previewMedia";
+import { previewImageFit, previewImageFlipTransform, previewImagePosition, previewRasterCssImage, resolvePreviewImage } from "../core/layout/previewMedia";
 import { PREVIEW_ICON_PATHS, previewIconName, previewIconRotation } from "../core/layout/previewIcon";
 import {
   previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewDropShadowFilter, previewIsOpaqueColor, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
@@ -33,6 +33,9 @@ export function CanvasVisualControl({
   const imagePosition = kind === "image" ? previewImagePosition(props.ImagePosition) : null;
   // Native-size Center/Tile use a browser raster background. The importer
   // supplies only bounded local PNG/JPEG/GIF/WebP data URLs, never remote URLs.
+  const imageFlip = kind === "image" ? previewImageFlipTransform(
+    props.FlipHorizontal, props.FlipVertical, x, y, width, height, simulationSymbols
+  ) : null;
   const rasterCssImage = media && (imagePosition === "center" || imagePosition === "tile")
     ? previewRasterCssImage(media.dataUrl) : null;
   const displayMode = previewDisplayMode(props.DisplayMode, simulationSymbols);
@@ -274,7 +277,8 @@ export function CanvasVisualControl({
           );
         })()}
         {kind === "image" && (
-          media ? (
+          <g transform={imageFlip || undefined}>
+          {media ? (
             imagePosition === "center" || imagePosition === "tile" ? (
               rasterCssImage ? (
                 <foreignObject x={x} y={y} width={width} height={height}
@@ -301,7 +305,8 @@ export function CanvasVisualControl({
               fill="none" stroke="#7d90a4" strokeWidth={2}/>
             <circle cx={x + Math.min(width - 12, 24)} cy={y + 22} r={4} fill="#9ab0c5"/>
             </>
-          )
+          )}
+          </g>
         )}
         {kind === "unknown" && (
           <>{svgText(control.name, x + 8, "start", "#606977")}</>
