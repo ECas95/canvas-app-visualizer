@@ -73,13 +73,18 @@ export function CanvasVisualControl({
     return { x: x + inset, anchor };
   }
 
-  function alignedY(defaultY: number): number {
-    const topPadding = Math.max(0, literalNumber(props.PaddingTop) ?? 0);
-    const bottomPadding = Math.max(0, literalNumber(props.PaddingBottom) ?? 0);
+  // Anchor the complete multiline block, not its center, to Top/Bottom.
+  // The former center-first calculation shifted the first line above Top
+  // padding and the last line below Bottom padding when text had newlines.
+  function firstTextLineY(defaultY: number, lineCount: number, lineHeight: number): number {
+    const topPadding = padding(props.PaddingTop);
+    const bottomPadding = padding(props.PaddingBottom);
     if (verticalAlign === "top") return y + topPadding + fontSize / 2;
-    if (verticalAlign === "bottom") return y + height - bottomPadding - fontSize / 2;
-    if (verticalAlign === "middle") return y + height / 2;
-    return defaultY;
+    if (verticalAlign === "bottom") {
+      return y + height - bottomPadding - fontSize / 2 - (lineCount - 1) * lineHeight;
+    }
+    const centerY = verticalAlign === "middle" ? y + height / 2 : defaultY;
+    return centerY - ((lineCount - 1) * lineHeight) / 2;
   }
 
   const isContainer = kind === "container" || kind === "gallery" || kind === "form";
@@ -134,8 +139,7 @@ export function CanvasVisualControl({
     const point = alignedTextPoint(atX, anchor);
     const lines = value.split(/\r?\n/).slice(0, 5);
     const lineHeight = fontSize * 1.2;
-    const centralY = alignedY(atY);
-    const firstY = centralY - ((lines.length - 1) * lineHeight) / 2;
+    const firstY = firstTextLineY(atY, lines.length, lineHeight);
     return (
       <text x={point.x} y={firstY} dominantBaseline="middle"
         textAnchor={point.anchor} fill={color} fontFamily={fontFamily}
