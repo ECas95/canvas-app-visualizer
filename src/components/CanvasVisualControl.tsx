@@ -30,14 +30,14 @@ export function CanvasVisualControl({
   const props = control.properties;
   const kind = previewKind(control.controlType);
   const media = kind === "image" ? resolvePreviewImage(props.Image, mediaAssets) : undefined;
-  const imagePosition = kind === "image" ? previewImagePosition(props.ImagePosition) : null;
+  const imagePosition = kind === "image" ? previewImagePosition(props.ImagePosition, simulationSymbols) : null;
   // Native-size Center/Tile use a browser raster background. The importer
   // supplies only bounded local PNG/JPEG/GIF/WebP data URLs, never remote URLs.
   const imageFlip = kind === "image" ? previewImageFlipTransform(
     props.FlipHorizontal, props.FlipVertical, x, y, width, height, simulationSymbols
   ) : null;
   const imageRotation = kind === "image" && media ? previewImageRotationTransform(
-    props.ImageRotation, x, y, width, height
+    props.ImageRotation, x, y, width, height, simulationSymbols
   ) : null;
   const rasterCssImage = media && (imagePosition === "center" || imagePosition === "tile")
     ? previewRasterCssImage(media.dataUrl) : null;
@@ -299,7 +299,7 @@ export function CanvasVisualControl({
             ) : (
               <image x={x} y={y} width={width} height={height}
                 href={media.dataUrl}
-                preserveAspectRatio={previewImageFit(props.ImagePosition)} />
+                preserveAspectRatio={previewImageFit(props.ImagePosition, simulationSymbols)} />
             )
           ) : (
             <>

@@ -95,3 +95,36 @@ describe("source-only Canvas ImageRotation", () => {
       .toBeNull();
   });
 });
+
+describe("verified responsive Canvas image enumerations", () => {
+  const phone = { "App.Width": 390 };
+  const desktop = { "App.Width": 1366 };
+
+  it("selects native-size ImagePosition only from a proven viewport branch", () => {
+    const formula = "=If(App.Width < 720, ImagePosition.Tile, ImagePosition.Fit)";
+    expect(previewImagePosition(formula, phone)).toBe("tile");
+    expect(previewImagePosition(formula, desktop)).toBe("fit");
+    expect(previewImagePosition(formula)).toBeNull();
+    expect(previewImageFit(formula, desktop)).toBe("xMidYMid meet");
+    expect(previewImagePosition("=If(varAccess, ImagePosition.Tile, ImagePosition.Fit)", phone))
+      .toBeNull();
+    expect(previewImagePosition('=If(App.Width < 720, "ImagePosition.Tile", ImagePosition.Fit)', phone))
+      .toBeNull();
+    expect(previewImagePosition("=User.Tile", phone)).toBeNull();
+  });
+
+  it("rotates only for known responsive enum results", () => {
+    const formula = "=If(App.Width < 720, ImageRotation.Rotate90, ImageRotation.None)";
+    expect(previewImageRotation(formula, phone)).toBe(90);
+    expect(previewImageRotation(formula, desktop)).toBe(0);
+    expect(previewImageRotation(formula)).toBeNull();
+    expect(previewImageRotationTransform(formula, 10, 20, 140, 64, phone))
+      .toBe("rotate(90 80 52)");
+    expect(previewImageRotationTransform(formula, 10, 20, 140, 64, desktop)).toBe("");
+    expect(previewImageRotation("=If(varAccess, ImageRotation.Rotate90, ImageRotation.None)", phone))
+      .toBeNull();
+    expect(previewImageRotation('=If(App.Width < 720, "ImageRotation.Rotate90", ImageRotation.None)', phone))
+      .toBeNull();
+    expect(previewImageRotation("=User.Rotate90", phone)).toBeNull();
+  });
+});

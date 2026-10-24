@@ -1,6 +1,6 @@
 import type { PreviewMediaAsset } from "../../types/canvas";
 import { literalText } from "./layout";
-import { staticBoolean, type StaticPowerFxValue } from "../powerfx/staticEval";
+import { staticBoolean, staticString, type StaticPowerFxValue } from "../powerfx/staticEval";
 
 /** Resolve only exact, locally imported raster media names. Never fetch remote URLs. */
 export function resolvePreviewImage(
@@ -23,15 +23,27 @@ export function resolvePreviewImage(
  */
 export type PreviewImagePosition = "fit" | "fill" | "stretch" | "center" | "tile";
 
-export function previewImagePosition(raw: unknown): PreviewImagePosition | null {
+export function previewImagePosition(
+  raw: unknown, symbols?: Record<string, StaticPowerFxValue>
+): PreviewImagePosition | null {
   if (typeof raw !== "string") return null;
-  const match = /^=?\s*ImagePosition\.(Fit|Fill|Stretch|Center|Tile)\s*$/i.exec(raw.trim());
+  const exact = /^=?\s*ImagePosition\.(Fit|Fill|Stretch|Center|Tile)\s*$/i.exec(raw.trim());
+  if (exact) return exact[1].toLowerCase() as PreviewImagePosition;
+  // Only a proven viewport/local branch selecting a real Power Fx enum may
+  // change image layout. Strings that merely spell an enum are not enums.
+  if (!/\bImagePosition\.(?:Fit|Fill|Stretch|Center|Tile)\b/i.test(raw) ||
+      /["']ImagePosition\.(?:Fit|Fill|Stretch|Center|Tile)["']/i.test(raw)) return null;
+  const resolved = staticString(raw, symbols);
+  const match = typeof resolved === "string"
+    ? /^ImagePosition\.(Fit|Fill|Stretch|Center|Tile)$/i.exec(resolved) : null;
   return match ? match[1].toLowerCase() as PreviewImagePosition : null;
 }
 
 /** Map scalable ImagePosition modes to SVG preserveAspectRatio. */
-export function previewImageFit(raw: unknown): string {
-  switch (previewImagePosition(raw)) {
+export function previewImageFit(
+  raw: unknown, symbols?: Record<string, StaticPowerFxValue>
+): string {
+  switch (previewImagePosition(raw, symbols)) {
     case "stretch": return "none";
     case "fill": return "xMidYMid slice";
     default: return "xMidYMid meet";
@@ -72,10 +84,17 @@ export function previewImageFlipTransform(
  * Positive SVG angles rotate clockwise in the screen's downward Y axis.
  * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-image
  */
-export function previewImageRotation(raw: unknown): 0 | 90 | 180 | 270 | null {
+export function previewImageRotation(
+  raw: unknown, symbols?: Record<string, StaticPowerFxValue>
+): 0 | 90 | 180 | 270 | null {
   if (raw === undefined || raw === null) return 0;
   if (typeof raw !== "string") return null;
-  const match = /^=?\s*ImageRotation\.(None|Rotate90|Rotate180|Rotate270)\s*$/i.exec(raw.trim());
+  const exact = /^=?\s*ImageRotation\.(None|Rotate90|Rotate180|Rotate270)\s*$/i.exec(raw.trim());
+  if (!exact && (!/\bImageRotation\.(?:None|Rotate90|Rotate180|Rotate270)\b/i.test(raw) ||
+      /["']ImageRotation\.(?:None|Rotate90|Rotate180|Rotate270)["']/i.test(raw))) return null;
+  const resolved = exact?.[0] ?? staticString(raw, symbols);
+  const match = typeof resolved === "string"
+    ? /^=?\s*ImageRotation\.(None|Rotate90|Rotate180|Rotate270)\s*$/i.exec(resolved) : null;
   if (!match) return null;
   switch (match[1].toLowerCase()) {
     case "none": return 0;
@@ -88,9 +107,10 @@ export function previewImageRotation(raw: unknown): 0 | 90 | 180 | 270 | null {
 
 /** Rotate the bitmap around its control center, leaving its border and clip fixed. */
 export function previewImageRotationTransform(
-  raw: unknown, x: number, y: number, width: number, height: number
+  raw: unknown, x: number, y: number, width: number, height: number,
+  symbols?: Record<string, StaticPowerFxValue>
 ): string | null {
-  const angle = previewImageRotation(raw);
+  const angle = previewImageRotation(raw, symbols);
   if (angle === null || ![x, y, width, height].every(Number.isFinite)) return null;
   return angle === 0 ? "" : `rotate(${angle} ${x + width / 2} ${y + height / 2})`;
 }

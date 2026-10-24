@@ -12,6 +12,8 @@ const ENUM_PREFIXES = new Set([
   "layoutjustifycontent",
   "alignincontainer",
   "layoutoverflow",
+  "imageposition",
+  "imagerotation",
   "displaymode",
   "sortorder"
 ]);

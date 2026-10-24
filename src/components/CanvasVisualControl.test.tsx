@@ -513,3 +513,44 @@ describe("Canvas ImageRotation SVG content geometry", () => {
     expect(html).toContain('preserveAspectRatio="xMidYMid meet"');
   });
 });
+
+describe("Canvas responsive ImagePosition and ImageRotation integration", () => {
+  const asset = { name: "companylogo", path: "Resources/CompanyLogo.png",
+    dataUrl: "data:image/png;base64,AA==" };
+  const image = {
+    ...label({
+      Image: "=Media.CompanyLogo",
+      ImagePosition: "=If(App.Width < 720, ImagePosition.Tile, ImagePosition.Fit)",
+      ImageRotation: "=If(App.Width < 720, ImageRotation.Rotate90, ImageRotation.None)"
+    }),
+    controlType: "Classic/Image@2.1.0"
+  };
+  function atWidth(width: number) {
+    return renderToStaticMarkup(<svg><CanvasVisualControl
+      control={image} mediaAssets={[asset]} x={10} y={20} width={140} height={64}
+      clipId="responsive-image-clip" simulationSymbols={{ "App.Width": width }} /></svg>);
+  }
+
+  it("uses native tiled pixels and clockwise rotation on a phone viewport", () => {
+    const html = atWidth(390);
+    expect(html).toContain("background-repeat:repeat");
+    expect(html).toContain('transform="rotate(90 80 52)"');
+    expect(html).toContain('clip-path="url(#responsive-image-clip)"');
+    expect(html).not.toContain("preserveAspectRatio=");
+  });
+
+  it("uses scalable Fit without rotation on desktop", () => {
+    const html = atWidth(1366);
+    expect(html).toContain('preserveAspectRatio="xMidYMid meet"');
+    expect(html).not.toContain("background-repeat:repeat");
+    expect(html).not.toContain('transform="rotate(');
+  });
+
+  it("does not infer responsive image state without viewport symbols", () => {
+    const html = renderToStaticMarkup(<svg><CanvasVisualControl
+      control={image} mediaAssets={[asset]} x={10} y={20} width={140} height={64}
+      clipId="unknown-image-clip" /></svg>);
+    expect(html).not.toContain('transform="rotate(');
+    expect(html).not.toContain("background-repeat:repeat");
+  });
+});
