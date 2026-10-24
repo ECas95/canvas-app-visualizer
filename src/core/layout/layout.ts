@@ -582,8 +582,12 @@ export function galleryTemplateLayout(
   return {
     x: rect.x,
     y: rect.y,
-    width: horizontal ? Math.min(rect.width, size) : rect.width / wrapCount,
-    height: horizontal ? rect.height / wrapCount : Math.min(rect.height, size),
+    // TemplateSize is an item dimension, not a viewport-bound dimension.
+    // The gallery viewport clips the template guide; shrinking the template
+    // would misrepresent tall vertical / wide horizontal gallery items.
+    // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-gallery
+    width: horizontal ? size : rect.width / wrapCount,
+    height: horizontal ? rect.height / wrapCount : size,
     orientation: horizontal ? "horizontal" : "vertical",
     variableHeight,
     padding,
