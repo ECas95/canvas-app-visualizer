@@ -10,6 +10,11 @@ export type PreviewKind =
 
 export function previewKind(controlType: string): PreviewKind {
   const type = controlType.toLowerCase();
+  // Microsoft serializes its modern display-only Text control as
+  // ModernText@1.0.0, not as a Label. Match the exact control family so
+  // ModernTextInput and other text-bearing controls retain their own kind.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-text
+  if (/^moderntext(?:@|$)/.test(type)) return "label";
   if (type.includes("gallery")) return "gallery";
   if (type.includes("datacard") || type.includes("form")) return "form";
   if (type.includes("container") || type.includes("group")) return "container";
@@ -251,7 +256,10 @@ export function previewFontSize(
 ): number {
   const resolved = staticNumber(control.properties.Size, symbols) ??
     staticNumber(control.properties.FontSize, symbols);
-  return resolved !== null && resolved > 0 ? Math.min(256, resolved) : 14;
+  // The documented ModernText default is 15 pt; classic labels keep their
+  // existing approximation. Explicit Size / legacy FontSize always wins.
+  return resolved !== null && resolved > 0 ? Math.min(256, resolved) :
+    /^moderntext(?:@|$)/i.test(control.controlType) ? 15 : 14;
 }
 
 export type PreviewVisibility = "visible" | "hidden" | "unknown";
