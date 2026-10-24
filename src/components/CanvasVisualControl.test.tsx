@@ -139,3 +139,44 @@ describe("source-faithful Canvas label wrapping", () => {
   });
 
 });
+
+function renderContainer(properties: Record<string, unknown>, type = "GroupContainer@1.3.0") {
+  return renderToStaticMarkup(
+    <CanvasVisualControl
+      control={{ ...label(properties), controlType: type, name: "SyntheticContainer" }}
+      x={10} y={20} width={140} height={64} clipId="test-container-clip"
+    />
+  );
+}
+
+describe("Canvas container DropShadow rendering", () => {
+  it("adds a bounded shadow to the source-colored container outline only", () => {
+    const html = renderContainer({
+      Fill: "=Color.White", DropShadow: "=DropShadow.Regular",
+      RadiusTopLeft: "=12", RadiusTopRight: "=0",
+      RadiusBottomRight: "=6", RadiusBottomLeft: "=2"
+    });
+    expect(html).toContain("filter:drop-shadow(");
+    expect(html).toContain("M 22 20");
+    expect(html.match(/filter:drop-shadow\\(/g)).toHaveLength(1);
+  });
+
+  it("does not add shadows for None, unknown runtime formulas or absent Fill", () => {
+    const props = { Fill: "=Color.White" };
+    expect(renderContainer({ ...props, DropShadow: "=DropShadow.None" }))
+      .not.toContain("filter:drop-shadow(");
+    expect(renderContainer({ ...props, DropShadow: "=varShadow" }))
+      .not.toContain("filter:drop-shadow(");
+    expect(renderContainer({ DropShadow: "=DropShadow.Bold" }))
+      .not.toContain("filter:drop-shadow(");
+    expect(renderContainer({ Fill: "=Color.Transparent", DropShadow: "=DropShadow.Bold" }))
+      .not.toContain("filter:drop-shadow(");
+  });
+
+  it("does not apply container-only DropShadow to labels or galleries", () => {
+    const props = { Fill: "=Color.White", DropShadow: "=DropShadow.Bold" };
+    expect(render(props)).not.toContain("filter:drop-shadow(");
+    expect(renderContainer(props, "Gallery@2.15.0"))
+      .not.toContain("filter:drop-shadow(");
+  });
+});
