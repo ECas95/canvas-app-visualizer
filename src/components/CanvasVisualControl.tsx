@@ -4,6 +4,7 @@ import { previewCornerRadii, previewRoundedRectPath } from "../core/layout/previ
 import { staticBoolean, staticNumber, staticString } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, resolvePreviewImage } from "../core/layout/previewMedia";
+import { PREVIEW_ICON_PATHS, previewIconName } from "../core/layout/previewIcon";
 import {
   previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewDropShadowFilter, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
   previewIsChecked, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration,
@@ -228,11 +229,25 @@ export function CanvasVisualControl({
             {text && svgText(text, x + 50)}
           </>
         )}
-        {kind === "icon" && svgText(
-          String(props.Icon ?? "").toLowerCase().includes("add") ? "+" :
-          String(props.Icon ?? "").toLowerCase().includes("search") ? "⌕" : "◇",
-          x + width / 2, "middle", foreground, y + height / 2
-        )}
+        {kind === "icon" && (() => {
+          const icon = previewIconName(
+            props.Icon, control.controlType.toLowerCase().startsWith("modern/")
+          );
+          if (icon === "none") return null;
+          // Unsupported/runtime-dependent icons are explicitly unknown, not
+          // silently represented as a different Power Apps icon.
+          if (icon === null) return svgText("?", x + width / 2, "middle", "#7c8794");
+          const size = Math.max(0, Math.min(width, height) - 8);
+          return (
+            <svg x={x + (width - size) / 2} y={y + (height - size) / 2}
+              width={size} height={size} viewBox="0 0 24 24"
+              fill="none" stroke={foreground} strokeWidth={2}
+              strokeLinecap="round" strokeLinejoin="round"
+              aria-label={icon}>
+              <path d={PREVIEW_ICON_PATHS[icon]} />
+            </svg>
+          );
+        })()}
         {kind === "image" && (
           media ? (
             <image x={x} y={y} width={width} height={height}
