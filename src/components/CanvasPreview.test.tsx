@@ -121,3 +121,39 @@ describe("CanvasPreview gallery source vs runtime rows", () => {
     expect(html).not.toContain("Template only — runtime records unavailable");
   });
 });
+
+
+function renderSourceOnlyGalleryGuide(variant: "Vertical" | "Horizontal") {
+  const templateLabel = control("PrivateRow", "Classic/Label@2.5.1", {
+    Text: '="Not a verified row"', Width: "=100", Height: "=20"
+  });
+  const gallery = control("SourceGallery", "Classic/Gallery@2.3.0", {
+    X: "=20", Y: "=30", Width: "=600", Height: "=300",
+    Items: "=RemoteTable", WrapCount: "=3",
+    TemplateSize: "=292", TemplatePadding: "=8"
+  }, [templateLabel]);
+  gallery.variant = variant;
+  const screen: CanvasScreen = {
+    id: "Fixture", name: "Fixture", properties: {}, children: [gallery],
+    sourceFile: "Src/Fixture.pa.yaml", sourceFormat: "pa-yaml-v3"
+  };
+  return renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+}
+
+describe("CanvasPreview source-only gallery guide clipping", () => {
+  it("clips the template guide to the gallery instead of spilling into siblings", () => {
+    const html = renderSourceOnlyGalleryGuide("Vertical");
+    expect(html).toMatch(/<g[^>]*clip-path="url\(#[^"]+-bounds-0\)"/);
+    expect(html).toContain('x="228" y="38" width="184" height="276"');
+    expect(html).toContain("Template only — runtime records unavailable");
+    expect(html).not.toContain("Not a verified row");
+    expect(html).not.toContain("Inspect PrivateRow");
+  });
+
+  it("draws horizontal gallery WrapCount guide slots vertically", () => {
+    const html = renderSourceOnlyGalleryGuide("Horizontal");
+    expect(html).toContain('x="28" y="138" width="276" height="84"');
+    expect(html).toContain('x="28" y="238" width="276" height="84"');
+    expect(html).not.toContain("Inspect PrivateRow");
+  });
+});
