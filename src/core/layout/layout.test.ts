@@ -493,6 +493,67 @@ describe("layout literal helpers", () => {
   });
 
 
+  it("uses the documented one-pixel Gallery.TemplateSize minimum", () => {
+    const makeGallery = (size: string): CanvasControl => ({
+      id: "g", name: "Gallery", controlType: "Gallery", variant: "Vertical",
+      properties: { TemplateSize: size, WrapCount: "=2", TemplatePadding: "=0" },
+      children: [], sourceFile: "Src/Synthetic.pa.yaml",
+      sourcePath: "Screens/Synthetic/Gallery", zIndex: 1, sourceFormat: "pa-yaml-v3"
+    });
+    const rect = { x: 0, y: 0, width: 300, height: 200, dynamic: false };
+    expect(galleryTemplateLayout(makeGallery("=0"), rect)?.height).toBe(1);
+    expect(galleryTemplateLayout(makeGallery("=-10"), rect)?.height).toBe(1);
+    expect(galleryTemplateLayout(makeGallery("=1"), rect)?.height).toBe(1);
+  });
+
+  it("marks unresolved TemplatePadding as dynamic rather than verified zero", () => {
+    const gallery: CanvasControl = {
+      id: "g", name: "Gallery", controlType: "Gallery", variant: "Vertical",
+      properties: {
+        TemplateSize: "=292", WrapCount: "=2", TemplatePadding: "=varRuntimePadding"
+      },
+      children: [], sourceFile: "Src/Synthetic.pa.yaml",
+      sourcePath: "Screens/Synthetic/Gallery", zIndex: 1, sourceFormat: "pa-yaml-v3"
+    };
+    const template = galleryTemplateLayout(gallery,
+      { x: 0, y: 0, width: 600, height: 400, dynamic: false },
+      { parentWidth: 600, parentHeight: 400, appWidth: 900, appHeight: 768 });
+    expect(template).toMatchObject({ wrapCount: 2, height: 292, padding: 0, dynamic: true });
+  });
+
+  it("resolves TemplatePadding for known viewport branches without marking dynamic", () => {
+    const gallery: CanvasControl = {
+      id: "g", name: "Gallery", controlType: "Gallery", variant: "Vertical",
+      properties: {
+        TemplateSize: "=292",
+        WrapCount: "=If(App.Width < 720, 1, 3)",
+        TemplatePadding: "=If(App.Width < 720, 4, 8)"
+      },
+      children: [], sourceFile: "Src/Synthetic.pa.yaml",
+      sourcePath: "Screens/Synthetic/Gallery", zIndex: 1, sourceFormat: "pa-yaml-v3"
+    };
+    const rect = { x: 0, y: 0, width: 600, height: 400, dynamic: false };
+    const at = (appWidth: number) => galleryTemplateLayout(gallery, rect, {
+      parentWidth: 600, parentHeight: 400, appWidth, appHeight: 768
+    });
+    expect(at(390)).toMatchObject({ wrapCount: 1, padding: 4, dynamic: false });
+    expect(at(1366)).toMatchObject({ wrapCount: 3, padding: 8, dynamic: false });
+  });
+
+  it("propagates unresolved host geometry to the gallery template", () => {
+    const gallery: CanvasControl = {
+      id: "g", name: "Gallery", controlType: "Gallery", variant: "Vertical",
+      properties: { TemplateSize: "=292", TemplatePadding: "=8", WrapCount: "=3" },
+      children: [], sourceFile: "Src/Synthetic.pa.yaml",
+      sourcePath: "Screens/Synthetic/Gallery", zIndex: 1, sourceFormat: "pa-yaml-v3"
+    };
+    const template = galleryTemplateLayout(gallery, {
+      x: 0, y: 0, width: 600, height: 400, dynamic: true
+    });
+    expect(template).toMatchObject({ width: 200, height: 292, padding: 8, dynamic: true });
+  });
+
+
 });
 
 
