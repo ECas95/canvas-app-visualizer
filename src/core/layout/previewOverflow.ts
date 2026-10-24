@@ -23,6 +23,8 @@ export interface PreviewScrollItem {
   height: number;
   dynamic: boolean;
   visibilityUnknown: boolean;
+  /** Canvas editor Group is not a layout/scroll box; its children stay in parent coordinates. */
+  editorGroup?: boolean;
   overflowX?: unknown;
   overflowY?: unknown;
   /** Trailing auto-layout padding can extend the scrollable content bounds. */
@@ -61,13 +63,27 @@ export function previewScrollRanges(
   items: readonly PreviewScrollItem[]
 ): Record<string, PreviewScrollRange> {
   const ranges: Record<string, PreviewScrollRange> = Object.create(null);
+  const byId = new Map(items.map(item => [item.id, item]));
   for (const host of items) {
+    // Editor Groups are organizational only. Their serialized bounding boxes
+    // do not contribute layout geometry or create independent scroll hosts.
+    if (host.editorGroup) continue;
     const horizontal = previewOverflowMode(host.overflowX, host.symbols) === "scroll";
     const vertical = previewOverflowMode(host.overflowY, host.symbols) === "scroll";
     if ((!horizontal && !vertical) || host.dynamic || host.visibilityUnknown ||
         !Number.isFinite(host.width) || !Number.isFinite(host.height) ||
         host.width <= 0 || host.height <= 0) continue;
-    const children = items.filter(item => item.ancestors.at(-1) === host.id);
+    const children = items.filter(item => {
+      if (item.editorGroup) return false;
+      const hostIndex = item.ancestors.indexOf(host.id);
+      if (hostIndex < 0) return false;
+      // A Group does not introduce a layout boundary. Count descendants
+      // through editor Groups as direct content of the actual scroll host,
+      // but stop at real nested containers, galleries and other controls.
+      return item.ancestors.slice(hostIndex + 1).every(id =>
+        byId.get(id)?.editorGroup === true
+      );
+    });
     if (!children.length || children.some(item =>
       item.dynamic || item.visibilityUnknown ||
       ![item.x, item.y, item.width, item.height].every(Number.isFinite)
