@@ -143,3 +143,52 @@ describe("Canvas Icon.Rotation source fidelity", () => {
     expect(html).toContain('transform="rotate(90 12 12)"');
   });
 });
+
+
+describe("versioned ModernIcon .pa.yaml source fidelity", () => {
+  it.each(["ModernIcon@1.1.0", "Modern/Icon@1.0.0"])(
+    "renders a Fluent string icon with IconColor for %s", type => {
+      const html = renderIcon('="Add"', type, "=Color.Blue", {
+        IconColor: "=Color.Red"
+      });
+      expect(html).toContain('d="' + PREVIEW_ICON_PATHS.add + '"');
+      expect(html).toContain('stroke="#ff0000"');
+      expect(html).not.toContain(">?</tspan>");
+    }
+  );
+
+  it("maps documented modern Fluent Delete without changing classic enum rules", () => {
+    expect(previewIconName('="Delete"', true)).toBe("trash");
+    expect(previewIconName('="Delete"', false)).toBeNull();
+    expect(previewIconName("=Icon.Delete")).toBeNull();
+    expect(renderIcon('="Delete"', "ModernIcon@1.1.0"))
+      .toContain('d="' + PREVIEW_ICON_PATHS.trash + '"');
+  });
+
+  it("imports and renders a synthetic versioned ModernIcon from .pa.yaml", () => {
+    const yaml = [
+      "Screens:",
+      "  Synthetic:",
+      "    Children:",
+      "      - DeleteIcon:",
+      "          Control: ModernIcon@1.1.0",
+      "          Properties:",
+      '            Icon: ="Delete"',
+      "            IconColor: =Color.Red",
+      "            Width: =32",
+      "            Height: =32"
+    ].join("\n");
+    const model = buildCanvasModel([{
+      path: "Src/SyntheticModernIcon.pa.yaml", name: "SyntheticModernIcon.pa.yaml",
+      content: yaml, origin: "yaml", format: "pa-yaml-v3"
+    }], "yaml");
+    expect(model.screens).toHaveLength(1);
+    const control = model.screens[0].children[0];
+    const html = renderToStaticMarkup(<svg><CanvasVisualControl
+      control={control} x={10} y={20} width={32} height={32}
+      clipId="fixture-modern-icon-clip" /></svg>);
+    expect(html).toContain('d="' + PREVIEW_ICON_PATHS.trash + '"');
+    expect(html).toContain('stroke="#ff0000"');
+    expect(html).not.toContain(">?</tspan>");
+  });
+});
