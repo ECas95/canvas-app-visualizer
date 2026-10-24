@@ -82,6 +82,30 @@ describe("source-faithful Canvas label wrapping", () => {
     expect(html).toContain("text-align:right");
   });
 
+  it("justifies wrapped text from the documented Align.Justify enum", () => {
+    const html = render({
+      Text: '="A paragraph of text with multiple words to justify"',
+      Wrap: "=true", Align: "=Align.Justify", FontWeight: "=FontWeight.Lighter"
+    });
+    expect(html).toContain("text-align:justify");
+    expect(html).toContain("font-weight:300");
+  });
+
+  it("keeps SVG text on a valid anchor when justification cannot be measured", () => {
+    const html = render({
+      Text: '="No browser wrapping"', Wrap: "=false", Align: "=Align.Justify"
+    });
+    expect(html).toContain('text-anchor="start"');
+    expect(html).not.toContain('text-anchor="justify"');
+    expect(html).not.toContain("<foreignObject");
+  });
+
+  it("does not render unrelated Power Fx members as verified text alignment", () => {
+    const html = render({ Text: '="Unverified"', Align: "=User.Right" });
+    expect(html).toMatch(/<text[^>]* x="15\.6/);
+    expect(html).not.toContain('text-anchor="end"');
+  });
+
   it("keeps unresolved data-source text absent and never synthesizes gallery rows", () => {
     const html = render({ Text: "=ThisItem.Name", Wrap: "=true" });
     expect(html).not.toContain("<foreignObject");
