@@ -373,3 +373,37 @@ describe("CanvasPreview gallery guide formula scope", () => {
     expect(html).not.toContain("Inspect UnverifiedTemplateChild");
   });
 });
+
+
+describe("CanvasPreview trailing padding scroll integration", () => {
+  function renderPaddedHost(paddingBottom: string) {
+    const host = control("PaddedHost", "GroupContainer@1.3.0", {
+      X: "=20", Y: "=30", Width: "=100", Height: "=100",
+      LayoutDirection: "=LayoutDirection.Vertical",
+      LayoutOverflowY: "=LayoutOverflow.Scroll",
+      PaddingBottom: paddingBottom
+    }, [control("PaddedChild", "Classic/Label@2.5.1", {
+      Width: "=100", Height: "=90", Text: '="Synthetic local content"'
+    })]);
+    host.variant = "AutoLayout";
+    const screen: CanvasScreen = {
+      id: "PaddingFixture", name: "PaddingFixture", properties: {},
+      children: [host], sourceFile: "Src/PaddingFixture.pa.yaml",
+      sourceFormat: "pa-yaml-v3"
+    };
+    return renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+  }
+
+  it("shows a scroll indicator when verified trailing padding extends the content", () => {
+    const html = renderPaddedHost("=20");
+    expect(html).toContain('data-preview-scrollbar="vertical"');
+    expect(html).toContain("Inspect PaddedChild");
+    expect(html).toContain("Synthetic local content");
+  });
+
+  it("does not claim scrollability when padding is absent or runtime-dependent", () => {
+    expect(renderPaddedHost("=0")).not.toContain('data-preview-scrollbar="vertical"');
+    expect(renderPaddedHost("=varUnknownPadding"))
+      .not.toContain('data-preview-scrollbar="vertical"');
+  });
+});
