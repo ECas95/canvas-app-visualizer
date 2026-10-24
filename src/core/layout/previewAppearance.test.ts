@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CanvasControl } from "../../types/canvas";
 import {
-  isDefinitelyHidden, previewVisibility, previewCanRunOnSelect, previewBorderStyle, previewColor, previewColorWithSymbols, previewDisplayMode, previewFontFamily, PREVIEW_DEFAULT_FONT, previewFontSize, previewFontWeight,
+  isDefinitelyHidden, previewVisibility, previewCanRunOnSelect, previewBorderStyle, previewDropShadow, previewDropShadowFilter, previewColor, previewColorWithSymbols, previewDisplayMode, previewFontFamily, PREVIEW_DEFAULT_FONT, previewFontSize, previewFontWeight,
   previewHorizontalAlign, previewIsChecked, previewItalic, previewKind,
   previewText, previewTextDecoration, previewVerticalAlign, previewSelectionBehaviorGate
 } from "./previewAppearance";
@@ -252,5 +252,29 @@ describe("local OnSelect preview safety gate", () => {
     expect(previewSelectionBehaviorGate(action({ Visible: "=varLocalReady" }),
       { varLocalReady: true }, { ancestorVisibilityUnknown: true }))
       .toBe("visibility-unverified");
+  });
+});
+
+describe("Canvas container DropShadow source parsing", () => {
+  it("recognizes only explicit supported Power Fx enum values", () => {
+    for (const level of ["None", "Light", "Semilight", "Regular", "Semibold", "Bold", "ExtraBold"]) {
+      expect(previewDropShadow("=DropShadow." + level)).toBe(level.toLowerCase());
+    }
+    expect(previewDropShadow("= DropShadow.Regular ")).toBe("regular");
+  });
+
+  it("does not infer a shadow from runtime-dependent or unsupported formulas", () => {
+    expect(previewDropShadow("=varShadow")).toBeNull();
+    expect(previewDropShadow("=If(varReady, DropShadow.Bold, DropShadow.None)")).toBeNull();
+    expect(previewDropShadow("=DropShadow.Unknown")).toBeNull();
+    expect(previewDropShadow('="Bold"')).toBeNull();
+    expect(previewDropShadowFilter("=varShadow")).toBeUndefined();
+  });
+
+  it("keeps None unshadowed and uses fixed, source-independent CSS filters", () => {
+    expect(previewDropShadowFilter("=DropShadow.None")).toBeUndefined();
+    expect(previewDropShadowFilter("=DropShadow.Light")).toContain("drop-shadow(");
+    expect(previewDropShadowFilter("=DropShadow.Bold")).toContain("drop-shadow(");
+    expect(previewDropShadowFilter("=DropShadow.Bold")).not.toContain("var(");
   });
 });
