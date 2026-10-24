@@ -5,7 +5,7 @@ import { staticBoolean, staticNumber, staticString } from "../core/powerfx/stati
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, resolvePreviewImage } from "../core/layout/previewMedia";
 import {
-  previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
+  previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewDropShadowFilter, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
   previewIsChecked, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration,
   previewVerticalAlign
 } from "../core/layout/previewAppearance";
@@ -103,11 +103,23 @@ export function CanvasVisualControl({
     : borderStyle === "dotted"
       ? `0 ${Math.max(2, borderWidth * 2)}` : undefined;
 
+  // The source DropShadow enum applies to Canvas containers, not to text
+  // or arbitrary controls. Apply the approximate SVG filter to the host
+  // outline only (never its children), and only with a known opaque fill.
+  // Runtime-dependent shadow formulas and transparent backgrounds stay unset.
+  const shadowFilter =
+    kind === "container" &&
+    control.controlType.toLowerCase().includes("groupcontainer") &&
+    explicitFill !== null && explicitFill !== "transparent"
+      ? previewDropShadowFilter(props.DropShadow)
+      : undefined;
+
   const basicRect = (
     <path d={outline}
       fill={fill} stroke={stroke}
       strokeWidth={borderWidth} strokeDasharray={borderDasharray}
       strokeLinecap={borderStyle === "dotted" ? "round" : undefined}
+      style={shadowFilter ? { filter: shadowFilter } : undefined}
     />
   );
 
