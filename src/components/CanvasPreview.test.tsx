@@ -80,3 +80,44 @@ describe("CanvasPreview runtime gallery state", () => {
     expect(html).not.toContain("Gallery state unknown");
   });
 });
+
+
+function renderGalleryItems(items?: string) {
+  const templateLabel = control("TemplateLabel", "Classic/Label@2.5.1", {
+    X: "=8", Y: "=8", Width: "=160", Height: "=28",
+    Text: '="Example template, not a verified row"'
+  });
+  const gallery = control("DataGallery", "Classic/VerticalGallery@2.3.0", {
+    X: "=20", Y: "=30", Width: "=620", Height: "=320",
+    TemplateSize: "=292", TemplatePadding: "=8", WrapCount: "=2",
+    ...(items === undefined ? {} : { Items: items })
+  }, [templateLabel]);
+  const screen: CanvasScreen = {
+    id: "Synthetic", name: "Synthetic", properties: {}, children: [gallery],
+    sourceFile: "Src/Synthetic.pa.yaml", sourceFormat: "pa-yaml-v3"
+  };
+  return renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+}
+
+describe("CanvasPreview gallery source vs runtime rows", () => {
+  it("does not turn a SQL Items formula into a visible template row", () => {
+    const html = renderGalleryItems("=Filter(Modules, IsEnabled)");
+    expect(html).toContain("Inspect DataGallery");
+    expect(html).toContain("Template only — runtime records unavailable");
+    expect(html).not.toContain("Inspect TemplateLabel");
+    expect(html).not.toContain("Example template, not a verified row");
+  });
+
+  it("does not treat a source-only Table expression as an explicit verified snapshot", () => {
+    const html = renderGalleryItems('=Table({Title: "Demo"})');
+    expect(html).toContain("Template only — runtime records unavailable");
+    expect(html).not.toContain("Inspect TemplateLabel");
+  });
+
+  it("keeps structural template inspection when no Items source was serialized", () => {
+    const html = renderGalleryItems();
+    expect(html).toContain("Inspect TemplateLabel");
+    expect(html).toContain("Example template, not a verified row");
+    expect(html).not.toContain("Template only — runtime records unavailable");
+  });
+});
