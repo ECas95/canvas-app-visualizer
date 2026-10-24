@@ -102,13 +102,16 @@ export function rgba(value: unknown): string | null {
   return `rgba(${channels.join(',')},${alpha})`;
 }
 
+// More specific control families must win over substrings such as "text":
+// Classic/TextInput and ModernTextInput must not inherit Text label geometry.
+// These are preview fallbacks only when Width/Height cannot be resolved.
+const DEFAULT_SIZE_KEYS = Object.keys(DEFAULTS).sort((a, b) => b.length - a.length);
+
 export function defaultControlSize(
   type: string
 ): { width: number; height: number } {
   const lower = type.toLowerCase();
-  const key = Object.keys(DEFAULTS).find(candidate =>
-    lower.includes(candidate)
-  );
+  const key = DEFAULT_SIZE_KEYS.find(candidate => lower.includes(candidate));
   return key ? DEFAULTS[key] : { width: 180, height: 56 };
 }
 
