@@ -439,7 +439,7 @@ export function autoLayoutChildren(
     const childAlignValue = enumTail(staticString(item.control.properties.AlignInContainer, symbols));
     // SetByContainer inherits the container's cross-axis alignment.
     const inheritsAlign = childAlignValue === null || childAlignValue === "setbycontainer";
-    const childAlign = inheritsAlign ? parentAlignValue ?? "start" : childAlignValue;
+    const childAlign = inheritsAlign ? parentAlignValue ?? "start" : childAlignValue ?? "start";
     const alignUnknown =
       (item.control.properties.AlignInContainer !== undefined && childAlignValue === null) ||
       (inheritsAlign && parent.properties.LayoutAlignItems !== undefined && parentAlignValue === null) ||
