@@ -29,6 +29,9 @@ export function CanvasVisualControl({
   if (control.controlType.toLowerCase() === "group") return null;
   const props = control.properties;
   const kind = previewKind(control.controlType);
+  // Microsoft .pa.yaml uses ModernIcon@1.1.0 (not only Modern/Icon).
+  // Modern Icon.Icon is a Fluent string and its color is IconColor.
+  const isModernIcon = kind === "icon" && /^modern\/?icon(?:@|$)/i.test(control.controlType);
   const media = kind === "image" ? resolvePreviewImage(props.Image, mediaAssets) : undefined;
   const imagePosition = kind === "image" ? previewImagePosition(props.ImagePosition, simulationSymbols) : null;
   // Native-size Center/Tile use a browser raster background. The importer
@@ -47,7 +50,9 @@ export function CanvasVisualControl({
     disabled ? props.DisabledFill ?? props.Fill : props.Fill, simulationSymbols
   );
   const foreground = previewColorWithSymbols(
-    disabled ? props.DisabledColor ?? props.Color : props.Color, simulationSymbols
+    isModernIcon ? props.IconColor ?? props.Color :
+      disabled ? props.DisabledColor ?? props.Color : props.Color,
+    simulationSymbols
   ) ?? "#242424";
   const borderColor = previewColorWithSymbols(props.BorderColor, simulationSymbols);
   const thickness = literalNumber(props.BorderThickness);
@@ -270,7 +275,7 @@ export function CanvasVisualControl({
         )}
         {kind === "icon" && (() => {
           const icon = previewIconName(
-            props.Icon, control.controlType.toLowerCase().startsWith("modern/")
+            props.Icon, isModernIcon
           );
           if (icon === "none") return null;
           // Unsupported/runtime-dependent icons are explicitly unknown, not
