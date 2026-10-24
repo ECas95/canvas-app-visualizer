@@ -13,6 +13,7 @@ import { previewVisibility, previewCanRunOnSelect, previewColorWithSymbols } fro
 import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/layout/previewDataState";
 import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScopedState, type PreviewVariables } from "../core/powerfx/previewBehavior";
 import { CanvasVisualControl } from "./CanvasVisualControl";
+import { previewChildClipPath } from "../core/layout/previewCorners";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -278,7 +279,8 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
             <defs>
               {items.map((item, index) => (
                 <clipPath key={item.control.id} id={`${instanceId}-bounds-${index}`}>
-                  <rect x={item.x} y={item.y} width={item.width} height={item.height} />
+                  <path d={previewChildClipPath(item.control.properties,
+                    item.x, item.y, item.width, item.height)} />
                 </clipPath>
               ))}
             </defs>
