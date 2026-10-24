@@ -56,7 +56,7 @@ export function CanvasVisualControl({
   ) ?? "#242424";
   const borderColor = previewColorWithSymbols(props.BorderColor, simulationSymbols);
   const thickness = literalNumber(props.BorderThickness);
-  const borderStyle = previewBorderStyle(props.BorderStyle);
+  const borderStyle = previewBorderStyle(props.BorderStyle, simulationSymbols);
   const rawText = kind === "input"
     ? props.Default ?? props.Value ?? props.HintText
     : kind === "select"

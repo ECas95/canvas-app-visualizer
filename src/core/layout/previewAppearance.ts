@@ -214,11 +214,42 @@ export function previewDropShadowFilter(
 
 export type PreviewBorderStyle = "solid" | "dashed" | "dotted" | "none";
 
-/** Read only explicit Canvas BorderStyle enum literals. Dynamic Power Fx stays unknown. */
-export function previewBorderStyle(raw: unknown): PreviewBorderStyle | null {
-  if (typeof raw !== "string") return null;
-  const match = /^=?\s*BorderStyle\.(Solid|Dashed|Dotted|None)\s*$/i.exec(raw.trim());
-  return match ? match[1].toLowerCase() as PreviewBorderStyle : null;
+/**
+ * Resolve a Canvas BorderStyle only from an explicit enum or a provably
+ * selected Power Fx If branch. Unknown runtime conditions, text that merely
+ * resembles an enum and unsupported expressions remain unresolved.
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/properties-color-border
+ * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+ */
+export function previewBorderStyle(
+  raw: unknown,
+  symbols?: Record<string, StaticPowerFxValue>,
+  depth = 0
+): PreviewBorderStyle | null {
+  if (typeof raw !== "string" || depth > 6) return null;
+  const source = raw.trim();
+  const match = /^=?\s*BorderStyle\.(Solid|Dashed|Dotted|None)\s*$/i.exec(source);
+  if (match) return match[1].toLowerCase() as PreviewBorderStyle;
+  if (!symbols) return null;
+
+  const lexed = lexPowerFx(source);
+  if (lexed.diagnostics.length) return null;
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+  if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
+      tokens[tokens.length - 1]?.value !== ")") return null;
+  const branches = splitIfArguments(tokens.slice(2, -1));
+  if (!branches || branches.length < 2) return null;
+
+  for (let i = 0; i + 1 < branches.length; i += 2) {
+    const condition = staticBoolean("=" + expressionText(source, branches[i]), symbols);
+    if (condition === null) return null;
+    if (condition) {
+      return previewBorderStyle("=" + expressionText(source, branches[i + 1]), symbols, depth + 1);
+    }
+  }
+  const fallback = branches.length % 2 === 1 ? branches[branches.length - 1] : undefined;
+  return fallback ? previewBorderStyle("=" + expressionText(source, fallback), symbols, depth + 1) : null;
 }
 
 export type PreviewDisplayMode = "edit" | "disabled" | "view" | "unresolved";

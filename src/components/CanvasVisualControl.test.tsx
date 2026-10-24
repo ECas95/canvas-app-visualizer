@@ -221,6 +221,31 @@ describe("source-faithful Canvas label wrapping", () => {
     expect(html).toContain("No border");
   });
 
+  it("renders source BorderStyle responsively for phone, tablet and desktop", () => {
+    const props = {
+      Text: '="Responsive outline"', BorderColor: "=Color.Red",
+      BorderThickness: "=2",
+      BorderStyle: "=If(App.Width < 600, BorderStyle.None, App.Width < 1000, BorderStyle.Dotted, BorderStyle.Dashed)"
+    };
+    const phone = render(props, { "App.Width": 390 });
+    const tablet = render(props, { "App.Width": 820 });
+    const desktop = render(props, { "App.Width": 1366 });
+    expect(phone).toContain('stroke-width="0"');
+    expect(phone).not.toContain("stroke-dasharray=");
+    expect(tablet).toContain('stroke-dasharray="0 4"');
+    expect(tablet).toContain('stroke-linecap="round"');
+    expect(desktop).toContain('stroke-dasharray="6 4"');
+  });
+
+  it("does not suppress or dash borders based on unknown permission variables", () => {
+    const html = render({
+      Text: '="Unverified"', BorderColor: "=Color.Red", BorderThickness: "=2",
+      BorderStyle: "=If(varSqlPermission, BorderStyle.None, BorderStyle.Dotted)"
+    }, { "App.Width": 1366 });
+    expect(html).toContain('stroke-width="2"');
+    expect(html).not.toContain("stroke-dasharray=");
+  });
+
   it("does not guess a runtime-dependent BorderStyle", () => {
     const html = render({
       Text: '="Unknown style"', Fill: "=Color.White", BorderColor: "=Color.Red",

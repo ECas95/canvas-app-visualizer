@@ -359,6 +359,30 @@ describe("semantic preview classification", () => {
   });
 
 
+  it("resolves responsive Canvas BorderStyle only from verified If branches", () => {
+    const formula = "=If(App.Width < 600, BorderStyle.None, App.Width < 1000, BorderStyle.Dotted, BorderStyle.Dashed)";
+    expect(previewBorderStyle(formula, { "App.Width": 390 })).toBe("none");
+    expect(previewBorderStyle(formula, { "App.Width": 820 })).toBe("dotted");
+    expect(previewBorderStyle(formula, { "App.Width": 1366 })).toBe("dashed");
+    expect(previewBorderStyle("=If(varReady, BorderStyle.Solid, BorderStyle.None)",
+      { varReady: true })).toBe("solid");
+    expect(previewBorderStyle("=If(App.Width < 600, BorderStyle.None, If(App.Width < 1000, BorderStyle.Dotted, BorderStyle.Solid))",
+      { "App.Width": 900 })).toBe("dotted");
+  });
+
+  it("keeps unresolved or invalid BorderStyle conditions and text unverified", () => {
+    expect(previewBorderStyle("=If(varSqlPermission, BorderStyle.None, BorderStyle.Solid)",
+      { "App.Width": 390 })).toBeNull();
+    expect(previewBorderStyle('=If(App.Width < 600, "BorderStyle.None", BorderStyle.Solid)',
+      { "App.Width": 390 })).toBeNull();
+    expect(previewBorderStyle("=If(App.Width < 600, BorderStyle.Invalid, BorderStyle.Solid)",
+      { "App.Width": 390 })).toBeNull();
+    expect(previewBorderStyle("=If(App.Width < 600, BorderStyle.None, BorderStyle.Solid)",
+      {})).toBeNull();
+    expect(previewBorderStyle("=If(App.Width < 600, BorderStyle.None, BorderStyle.Solid)"))
+      .toBeNull();
+  });
+
   it("recognizes only explicit Canvas border style enums", () => {
     expect(previewBorderStyle("=BorderStyle.Dashed")).toBe("dashed");
     expect(previewBorderStyle("= BorderStyle.Dotted ")).toBe("dotted");
