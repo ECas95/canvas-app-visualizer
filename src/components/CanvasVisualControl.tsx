@@ -5,7 +5,7 @@ import { staticBoolean, staticNumber, staticString } from "../core/powerfx/stati
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, resolvePreviewImage } from "../core/layout/previewMedia";
 import {
-  previewColorWithSymbols, previewDisplayMode, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
+  previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
   previewIsChecked, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration,
   previewVerticalAlign
 } from "../core/layout/previewAppearance";
@@ -39,6 +39,7 @@ export function CanvasVisualControl({
   ) ?? "#242424";
   const borderColor = previewColorWithSymbols(props.BorderColor, simulationSymbols);
   const thickness = literalNumber(props.BorderThickness);
+  const borderStyle = previewBorderStyle(props.BorderStyle);
   const rawText = kind === "input"
     ? props.Default ?? props.Value ?? props.HintText
     : kind === "select"
@@ -93,10 +94,20 @@ export function CanvasVisualControl({
     kind === "unknown" ? "#9ca3af" : "transparent"
   );
 
+  // A known BorderStyle.None suppresses even an explicitly colored/thick border.
+  // Unsupported or runtime-dependent styles retain the existing approximation.
+  const borderWidth = borderStyle === "none" ? 0 :
+    thickness ?? (stroke === "transparent" ? 0 : 1);
+  const borderDasharray = borderStyle === "dashed"
+    ? `${Math.max(2, borderWidth * 3)} ${Math.max(2, borderWidth * 2)}`
+    : borderStyle === "dotted"
+      ? `0 ${Math.max(2, borderWidth * 2)}` : undefined;
+
   const basicRect = (
     <path d={outline}
       fill={fill} stroke={stroke}
-      strokeWidth={thickness ?? (stroke === "transparent" ? 0 : 1)}
+      strokeWidth={borderWidth} strokeDasharray={borderDasharray}
+      strokeLinecap={borderStyle === "dotted" ? "round" : undefined}
     />
   );
 
@@ -138,7 +149,9 @@ export function CanvasVisualControl({
       </defs>
       {kind === "shape" && control.controlType.toLowerCase().includes("circle")
         ? <ellipse cx={x + width / 2} cy={y + height / 2} rx={width / 2} ry={height / 2}
-            fill={fill} stroke={stroke} strokeWidth={thickness ?? 0} />
+            fill={fill} stroke={stroke} strokeWidth={borderStyle === "none" ? 0 : thickness ?? 0}
+            strokeDasharray={borderDasharray}
+            strokeLinecap={borderStyle === "dotted" ? "round" : undefined} />
         : kind === "label" || kind === "icon" ? (
           explicitFill ? basicRect : null
         ) : basicRect}
