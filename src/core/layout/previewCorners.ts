@@ -5,7 +5,10 @@ import { staticNumber, type StaticPowerFxValue } from "../powerfx/staticEval";
  * Canvas controls expose four independent radius properties. SVG rect.rx
  * rounds every corner equally, so construct a source-based outline instead.
  * Unspecified/dynamic values retain the existing approximate 4px preview
- * default; they are not treated as verified runtime values.
+ * default; they are not treated as verified runtime values. Do not cap each
+ * corner at half the shorter side: Microsoft explicitly documents 300px
+ * opposite corners on a 300px square button as a leaf shape.
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-button
  */
 export interface PreviewCornerRadii {
   topLeft: number;
@@ -20,11 +23,10 @@ export function previewCornerRadii(
   height: number,
   symbols?: Record<string, StaticPowerFxValue>
 ): PreviewCornerRadii {
-  const maximum = Math.max(0, Math.min(width, height) / 2);
   const radius = (raw: unknown): number => {
     const source = literalNumber(raw) ?? (symbols ? staticNumber(raw, symbols) : null);
     const approximate = source !== null && Number.isFinite(source) ? source : 4;
-    return Math.min(maximum, Math.max(0, approximate));
+    return Math.max(0, approximate);
   };
   return {
     topLeft: radius(properties.RadiusTopLeft),
@@ -42,15 +44,31 @@ export function previewRoundedRectPath(
   height: number,
   corners: PreviewCornerRadii
 ): string {
-  const w = Math.max(0, width);
-  const h = Math.max(0, height);
-  const cap = Math.min(w, h) / 2;
+  const w = Number.isFinite(width) ? Math.max(0, width) : 0;
+  const h = Number.isFinite(height) ? Math.max(0, height) : 0;
   const clamp = (radius: number) =>
-    Number.isFinite(radius) ? Math.max(0, Math.min(cap, radius)) : 0;
-  const tl = clamp(corners.topLeft);
-  const tr = clamp(corners.topRight);
-  const br = clamp(corners.bottomRight);
-  const bl = clamp(corners.bottomLeft);
+    Number.isFinite(radius) ? Math.max(0, radius) : 0;
+  const topLeft = clamp(corners.topLeft);
+  const topRight = clamp(corners.topRight);
+  const bottomRight = clamp(corners.bottomRight);
+  const bottomLeft = clamp(corners.bottomLeft);
+  // Match CSS corner-radius overlap normalization: all corners share one
+  // scale factor when adjacent radii exceed an edge. A single large corner
+  // can legitimately exceed half the shortest edge (e.g. Canvas leaf buttons).
+  // This applies identically to the visual outline and descendant clipping.
+  const edgeScale = (edge: number, first: number, second: number) =>
+    first + second > 0 ? Math.min(1, edge / (first + second)) : 1;
+  const scale = Math.min(
+    1,
+    edgeScale(w, topLeft, topRight),
+    edgeScale(w, bottomLeft, bottomRight),
+    edgeScale(h, topLeft, bottomLeft),
+    edgeScale(h, topRight, bottomRight)
+  );
+  const tl = topLeft * scale;
+  const tr = topRight * scale;
+  const br = bottomRight * scale;
+  const bl = bottomLeft * scale;
   return [
     `M ${x + tl} ${y}`,
     `H ${x + w - tr}`,
