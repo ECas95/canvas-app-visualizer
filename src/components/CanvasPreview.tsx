@@ -32,6 +32,7 @@ interface DrawItem {
   dynamic: boolean;
   renderSymbols: PreviewVariables;
   visibilityUnknown: boolean;
+  runtimeGalleryStateUnknown: boolean;
   ancestors: string[];
 }
 
@@ -85,8 +86,11 @@ function flatten(
       ...simulationSymbols
     };
     const visibility = previewVisibility(control, visibilitySymbols);
-    if (visibility === "hidden" || dependsOnRuntimeGalleryItems(control)) continue;
-    const visibilityUnknown = ancestorVisibilityUnknown || visibility === "unknown";
+    if (visibility === "hidden") continue;
+    // AllItems is loaded only at runtime. Preserve the control's geometry as
+    // an explicitly unknown placeholder, never as a verified empty/visible UI.
+    const runtimeGalleryStateUnknown = dependsOnRuntimeGalleryItems(control);
+    const visibilityUnknown = ancestorVisibilityUnknown || visibility === "unknown" || runtimeGalleryStateUnknown;
     const x = offsetX + rect.x;
     const y = offsetY + rect.y;
     const renderSymbols: PreviewVariables = {
@@ -100,9 +104,11 @@ function flatten(
     };
     output.push({
       control, x, y, width: rect.width, height: rect.height,
-      dynamic: rect.dynamic, renderSymbols, visibilityUnknown, ancestors
+      dynamic: rect.dynamic, renderSymbols, visibilityUnknown, runtimeGalleryStateUnknown, ancestors
     });
-    if (depth >= 24 || control.children.length === 0) continue;
+    // Conditional descendants must not leak source-only content or imply that
+    // an unavailable gallery is empty. The parent remains inspectable.
+    if (runtimeGalleryStateUnknown || depth >= 24 || control.children.length === 0) continue;
     const editorGroup = control.controlType.toLowerCase() === "group";
     const template = isGallery(control)
       ? galleryTemplateLayout(control, {
@@ -162,7 +168,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
   function selectControl(control: CanvasControl) {
     onSelect(control);
     if (interactive && mode === "visual" && control.properties.OnSelect) {
-      if (previewCanRunOnSelect(control, variables)) {
+      if (dependsOnRuntimeGalleryItems(control)) {
+        setSimulationMessage("OnSelect skipped: gallery AllItems state is unavailable.");
+      } else if (previewCanRunOnSelect(control, variables)) {
         simulate(control.properties.OnSelect);
       } else {
         setSimulationMessage("OnSelect skipped: DisplayMode is not confirmed Edit.");
@@ -299,7 +307,17 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                       selectControl(item.control);
                     }
                   }}>
-                  {mode === "visual" ? (
+                  {mode === "visual" && item.runtimeGalleryStateUnknown ? (
+                    <>
+                      <rect x={item.x} y={item.y} width={item.width} height={item.height}
+                        fill="#f3f6fa" fillOpacity={0.8} stroke="#8194ac"
+                        strokeDasharray="5 4" />
+                      <text x={item.x + 8} y={item.y + Math.min(20, item.height / 2 + 4)}
+                        fontSize={12} fill="#42536b" pointerEvents="none">
+                        Gallery state unknown — not an empty result
+                      </text>
+                    </>
+                  ) : mode === "visual" ? (
                     <CanvasVisualControl control={item.control} mediaAssets={mediaAssets}
                       simulationSymbols={item.renderSymbols}
                       x={item.x} y={item.y} width={item.width} height={item.height}
@@ -322,7 +340,8 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                   )}
                   <title>{item.control.name} · {item.control.controlType}
                     {item.dynamic ? " · unresolved layout" : ""}
-                    {item.visibilityUnknown ? " · runtime visibility not verified" : ""}</title>
+                    {item.visibilityUnknown ? " · runtime visibility not verified" : ""}
+                    {item.runtimeGalleryStateUnknown ? " · AllItems unavailable; content intentionally withheld" : ""}</title>
                 </g>
               );
               // Clip children in layout hosts only; plain editor Groups do not clip.
