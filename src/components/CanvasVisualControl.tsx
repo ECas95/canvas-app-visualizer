@@ -1,12 +1,12 @@
 import type { CanvasControl, PreviewMediaAsset } from "../types/canvas";
 import { literalNumber } from "../core/layout/layout";
 import { previewCornerRadii, previewRoundedRectPath } from "../core/layout/previewCorners";
-import { staticBoolean, staticString } from "../core/powerfx/staticEval";
+import { staticBoolean, staticNumber, staticString } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, resolvePreviewImage } from "../core/layout/previewMedia";
 import {
   previewColorWithSymbols, previewDisplayMode, previewFontSize, previewFontWeight, previewHorizontalAlign,
-  previewIsChecked, previewItalic, previewKind, previewText, previewTextDecoration,
+  previewIsChecked, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration,
   previewVerticalAlign
 } from "../core/layout/previewAppearance";
 
@@ -48,7 +48,8 @@ export function CanvasVisualControl({
       : props.Text ?? props.Label;
   const label = (simulationSymbols && staticString(rawText, simulationSymbols)) ?? previewText(control);
   const fontSize = previewFontSize(control, simulationSymbols);
-  const text = label?.slice(0, 240);
+  // Bound pathological imported strings while retaining normal multiline labels.
+  const text = label?.slice(0, 4096);
   const inset = Math.min(12, Math.max(3, width * 0.04));
   const corners = previewCornerRadii(props, width, height);
   const outline = previewRoundedRectPath(x, y, width, height, corners);
@@ -60,6 +61,8 @@ export function CanvasVisualControl({
   const fontWeight = previewFontWeight(control);
   const italic = previewItalic(control);
   const textDecoration = previewTextDecoration(control);
+  const wraps = previewLabelWrap(control, simulationSymbols);
+  const padding = (raw: unknown) => Math.max(0, staticNumber(raw, simulationSymbols) ?? 0);
 
   function alignedTextPoint(defaultX: number, defaultAnchor: "start" | "middle" | "end") {
     const anchor = horizontalAlign ?? defaultAnchor;
@@ -146,7 +149,32 @@ export function CanvasVisualControl({
           previewColorWithSymbols(
             disabled ? props.DisabledColor ?? props.Color : props.Color, simulationSymbols
           ) ?? (disabled ? "#555555" : "#ffffff"))}
-        {kind === "label" && text && svgText(text)}
+        {kind === "label" && text && (wraps ? (
+          // HTML layout measures glyphs in the browser: SVG <text> does not wrap.
+          // Only serialized Wrap=true (or a provably true local expression) opts in.
+          <foreignObject x={x} y={y} width={width} height={height} pointerEvents="none">
+            <div xmlns="http://www.w3.org/1999/xhtml" style={{
+              boxSizing: "border-box", display: "flex", width: "100%", height: "100%",
+              overflow: "hidden",
+              alignItems: verticalAlign === "top" ? "flex-start" :
+                verticalAlign === "bottom" ? "flex-end" : "center",
+              paddingTop: padding(props.PaddingTop),
+              paddingRight: padding(props.PaddingRight),
+              paddingBottom: padding(props.PaddingBottom),
+              paddingLeft: padding(props.PaddingLeft),
+              color: foreground, fontFamily: FAMILY, fontSize,
+              fontWeight, fontStyle: italic ? "italic" : undefined,
+              textDecoration
+            }}>
+              <span style={{
+                display: "block", width: "100%", whiteSpace: "pre-wrap",
+                overflowWrap: "break-word", wordBreak: "normal",
+                textAlign: horizontalAlign === "middle" ? "center" :
+                  horizontalAlign === "end" ? "right" : "left"
+              }}>{text}</span>
+            </div>
+          </foreignObject>
+        ) : svgText(text))}
         {kind === "input" && svgText(text ?? (props.Default || props.Value ? "…" : ""),
           x + inset, "start", previewColorWithSymbols(props.Color, simulationSymbols) ??
           (label ? "#242424" : "#7f8792"))}
