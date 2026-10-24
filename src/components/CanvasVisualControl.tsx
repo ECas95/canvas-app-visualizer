@@ -6,7 +6,7 @@ import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, resolvePreviewImage } from "../core/layout/previewMedia";
 import { PREVIEW_ICON_PATHS, previewIconName, previewIconRotation } from "../core/layout/previewIcon";
 import {
-  previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewDropShadowFilter, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
+  previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewDropShadowFilter, previewIsOpaqueColor, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
   previewIsChecked, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration,
   previewVerticalAlign
 } from "../core/layout/previewAppearance";
@@ -126,7 +126,7 @@ export function CanvasVisualControl({
   const shadowFilter =
     kind === "container" &&
     control.controlType.toLowerCase().includes("groupcontainer") &&
-    explicitFill !== null && explicitFill !== "transparent"
+    previewIsOpaqueColor(explicitFill)
       ? previewDropShadowFilter(props.DropShadow)
       : undefined;
 
