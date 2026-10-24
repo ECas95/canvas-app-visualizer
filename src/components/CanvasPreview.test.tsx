@@ -326,3 +326,50 @@ describe("CanvasPreview loaded gallery count uncertainty", () => {
     expect(html).not.toContain("Synthetic only");
   });
 });
+
+
+function renderScopedGallery(parentWidth: number): string {
+  const gallery = control("ScopedGallery", "Classic/Gallery@2.3.0", {
+    X: "=20", Y: "=20", Width: "=Parent.Width / 2", Height: "=200",
+    Items: "=RemoteRecords",
+    WrapCount: "=If(Parent.Width > 600, 2, 1)",
+    TemplateSize: "=Parent.Width / 4",
+    TemplatePadding: "=If(Parent.Width > 600, 12, 4)"
+  }, [control("UnverifiedTemplateChild", "Classic/Label@2.5.1", {
+    Text: '="No verified row"', Width: "=100", Height: "=20"
+  })]);
+  gallery.variant = "Vertical";
+  const parent = control("OuterContainer", "GroupContainer@1.3.0", {
+    X: "=30", Y: "=40", Width: `=${parentWidth}`, Height: "=400"
+  }, [gallery]);
+  const screen: CanvasScreen = {
+    id: "ScopedFixture", name: "ScopedFixture", properties: {},
+    children: [parent], sourceFile: "Src/ScopedFixture.pa.yaml",
+    sourceFormat: "pa-yaml-v3"
+  };
+  return renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+}
+
+describe("CanvasPreview gallery guide formula scope", () => {
+  it("uses the actual parent width for WrapCount, TemplateSize and padding", () => {
+    // Outer width=800; gallery viewport width=400. The guide must use 800
+    // for Parent.Width, yielding 2 columns, 200px templates and 12px padding.
+    // Using gallery viewport width would incorrectly yield only 1 column.
+    const html = renderScopedGallery(800);
+    expect(html).toContain("Inspect ScopedGallery");
+    expect(html).toContain('x="262" y="72" width="176" height="176"');
+    expect(html).toContain("Template only — runtime records unavailable");
+    expect(html).not.toContain("Inspect UnverifiedTemplateChild");
+    expect(html).not.toContain("No verified row");
+  });
+
+  it("re-evaluates nested gallery geometry for a narrower parent without inventing rows", () => {
+    // Parent.Width=500 selects WrapCount=1, TemplateSize=125, Padding=4.
+    // A single-column gallery has no additional guide slot.
+    const html = renderScopedGallery(500);
+    expect(html).toContain("Inspect ScopedGallery");
+    expect(html).not.toContain('x="262" y="72" width="176" height="176"');
+    expect(html).toContain("Template only — runtime records unavailable");
+    expect(html).not.toContain("Inspect UnverifiedTemplateChild");
+  });
+});
