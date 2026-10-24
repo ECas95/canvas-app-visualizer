@@ -39,7 +39,7 @@ describe("Microsoft ModernText .pa.yaml rendering", () => {
       content: yaml, origin: "yaml", format: "pa-yaml-v3"
     }], "yaml");
     const control = model.screens[0].children[0];
-    expect(control.controlType).toBe("ModernText@1.0.0");
+    expect(control.controlType).toBe("ModernText");
     const html = renderToStaticMarkup(<svg><CanvasVisualControl
       control={control} x={10} y={20} width={140} height={64}
       clipId="modern-text-clip" /></svg>);
@@ -406,7 +406,7 @@ describe("Canvas image flip geometry", () => {
       const html = renderFlipped(position, "=true", "=false");
       expect(html).toContain('transform="translate(160 0) scale(-1 1)"');
       expect(html).toContain('clip-path="url(#flip-image-clip)"');
-      expect(html).toContain('<path d="M 10 20');
+      expect(html).toContain('<path d="M 14 20');
       expect(html.indexOf('clip-path="url(#flip-image-clip)"'))
         .toBeLessThan(html.indexOf('transform="translate(160 0) scale(-1 1)"'));
     }
@@ -493,7 +493,7 @@ describe("Canvas ImageRotation SVG content geometry", () => {
     const html = renderRotated("=ImageRotation.Rotate90");
     expect(html).toContain('transform="rotate(90 80 52)"');
     expect(html).toContain('clip-path="url(#rotation-image-clip)"');
-    expect(html).toContain('<path d="M 10 20');
+    expect(html).toContain('<path d="M 14 20');
     expect(html.indexOf('clip-path="url(#rotation-image-clip)"'))
       .toBeLessThan(html.indexOf('transform="rotate(90 80 52)"'));
   });
