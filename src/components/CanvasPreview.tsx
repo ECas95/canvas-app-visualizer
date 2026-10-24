@@ -36,6 +36,7 @@ interface DrawItem {
   renderSymbols: PreviewVariables;
   visibilityUnknown: boolean;
   runtimeGalleryStateUnknown: boolean;
+  galleryTemplate: ReturnType<typeof galleryTemplateLayout>;
   ancestors: string[];
 }
 
@@ -105,9 +106,18 @@ function flatten(
         "Self.X": rect.x, "Self.Y": rect.y
       } : {})
     };
+    // Compute template geometry in the gallery's own formula scope. Parent
+    // refers to its actual parent container/screen, not the gallery viewport.
+    // Reuse this geometry for both layout and source-only guides.
+    const galleryTemplate = isGallery(control)
+      ? galleryTemplateLayout(control, {
+          x: 0, y: 0, width: rect.width, height: rect.height, dynamic: rect.dynamic
+        }, context)
+      : null;
     output.push({
       control, x, y, width: rect.width, height: rect.height,
-      dynamic: rect.dynamic, renderSymbols, visibilityUnknown, runtimeGalleryStateUnknown, ancestors
+      dynamic: rect.dynamic, renderSymbols, visibilityUnknown,
+      runtimeGalleryStateUnknown, galleryTemplate, ancestors
     });
     // Conditional descendants must not leak source-only content or imply that
     // an unavailable gallery is empty. The parent remains inspectable.
@@ -121,11 +131,7 @@ function flatten(
     if (visibilityUnknown || runtimeGalleryStateUnknown || galleryRecordsUnknown(control) ||
         depth >= 24 || control.children.length === 0) continue;
     const editorGroup = control.controlType.toLowerCase() === "group";
-    const template = isGallery(control)
-      ? galleryTemplateLayout(control, {
-          x: 0, y: 0, width: rect.width, height: rect.height, dynamic: rect.dynamic
-        }, context)
-      : null;
+    const template = galleryTemplate;
     output.push(...flatten(
       control.children,
       editorGroup ? offsetX : x + (template?.x ?? 0),
@@ -476,13 +482,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
               const clipped = clipToAncestors(draw, item.ancestors);
               const template = mode === "visual" &&
                 galleryRecordsUnknown(item.control) && !item.visibilityUnknown
-                ? galleryTemplateLayout(item.control, {
-                    x: 0, y: 0, width: item.width, height: item.height,
-                    dynamic: item.dynamic
-                  }, {
-                    parentWidth: item.width, parentHeight: item.height,
-                    appWidth: width, appHeight: height
-                  })
+                ? item.galleryTemplate
                 : null;
               const slots = template ? Math.min(6, template.wrapCount) : 0;
               const guide = template && (
