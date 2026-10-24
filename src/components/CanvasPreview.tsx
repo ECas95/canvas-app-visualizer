@@ -10,7 +10,7 @@ import {
   isGallery,
   rgba
 } from "../core/layout/layout";
-import { previewVisibility, previewCanRunOnSelect, previewColorWithSymbols } from "../core/layout/previewAppearance";
+import { previewVisibility, previewSelectionBehaviorGate, previewColorWithSymbols } from "../core/layout/previewAppearance";
 import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/layout/previewDataState";
 import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScopedState, type PreviewVariables } from "../core/powerfx/previewBehavior";
 import { CanvasVisualControl } from "./CanvasVisualControl";
@@ -171,13 +171,21 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
     setSimulationMessage(result.message);
   }
 
-  function selectControl(control: CanvasControl) {
+  function selectControl(item: DrawItem) {
+    const control = item.control;
     onSelect(control);
     if (interactive && mode === "visual" && control.properties.OnSelect) {
-      if (dependsOnRuntimeGalleryItems(control)) {
-        setSimulationMessage("OnSelect skipped: gallery AllItems state is unavailable.");
-      } else if (previewCanRunOnSelect(control, variables)) {
+      const gate = previewSelectionBehaviorGate(control, item.renderSymbols, {
+        ancestorVisibilityUnknown: item.visibilityUnknown,
+        runtimeGalleryStateUnknown: item.runtimeGalleryStateUnknown,
+        galleryRecordsUnknown: galleryRecordsUnknown(control)
+      });
+      if (gate === "allowed") {
         simulate(control.properties.OnSelect);
+      } else if (gate === "visibility-unverified") {
+        setSimulationMessage("OnSelect skipped: Visible is not confirmed for this control or an ancestor.");
+      } else if (gate === "gallery-unverified") {
+        setSimulationMessage("OnSelect skipped: gallery runtime records are unavailable.");
       } else {
         setSimulationMessage("OnSelect skipped: DisplayMode is not confirmed Edit.");
       }
@@ -306,11 +314,11 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                 <g className="visual-control" key={item.control.id}
                   role="button" tabIndex={0}
                   aria-label={`Inspect ${item.control.name} (${item.control.controlType})`}
-                  onClick={event => { event.stopPropagation(); selectControl(item.control); }}
+                  onClick={event => { event.stopPropagation(); selectControl(item); }}
                   onKeyDown={event => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      selectControl(item.control);
+                      selectControl(item);
                     }
                   }}>
                   {mode === "visual" && item.runtimeGalleryStateUnknown ? (
