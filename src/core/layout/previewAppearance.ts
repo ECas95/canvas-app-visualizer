@@ -302,21 +302,39 @@ export function previewIsChecked(control: CanvasControl): boolean {
  * Only serialized styling may override approximate defaults. Unknown or
  * runtime-dependent values stay undefined rather than being guessed.
  */
-function enumValue(raw: unknown, namespace: "Align" | "VerticalAlign" | "FontWeight"): string | null {
+function enumValue(
+  raw: unknown, namespace: "Align" | "VerticalAlign" | "FontWeight",
+  symbols?: Record<string, StaticPowerFxValue>
+): string | null {
   if (typeof raw !== "string") return null;
   // Power Fx enum members must belong to their documented namespace.
-  // Bare identifiers and unrelated records (e.g. User.Right) are runtime
-  // expressions, not evidence of a static alignment or font weight.
-  const match = /^=?\s*([A-Za-z]+)\.([A-Za-z]+)\s*$/i.exec(raw.trim());
-  return match && match[1].toLowerCase() === namespace.toLowerCase()
-    ? match[2].toLowerCase() : null;
+  // Bare identifiers, quoted strings and unrelated records (e.g. User.Right)
+  // are not evidence of a static alignment or font weight.
+  const exact = /^=?\s*([A-Za-z]+)\.([A-Za-z]+)\s*$/i.exec(raw.trim());
+  if (exact) return exact[1].toLowerCase() === namespace.toLowerCase()
+    ? exact[2].toLowerCase() : null;
+
+  // A three-argument If with literal enum-valued arms can be selected using
+  // verified App/Parent/Self/local symbols. Never promote a string variable
+  // or a quoted enum lookalike into an enum value.
+  if (!symbols) return null;
+  const conditional = /^=?\s*If\(\s*[\s\S]+?,\s*([A-Za-z]+)\.([A-Za-z]+)\s*,\s*([A-Za-z]+)\.([A-Za-z]+)\s*\)$/i.exec(raw.trim());
+  if (!conditional || conditional[1].toLowerCase() !== namespace.toLowerCase() ||
+      conditional[3].toLowerCase() !== namespace.toLowerCase()) return null;
+  const resolved = staticString(raw, symbols);
+  const selected = typeof resolved === "string"
+    ? /^([A-Za-z]+)\.([A-Za-z]+)$/i.exec(resolved) : null;
+  return selected && selected[1].toLowerCase() === namespace.toLowerCase()
+    ? selected[2].toLowerCase() : null;
 }
 
 export type PreviewHorizontalAlign = "start" | "middle" | "end" | "justify";
 export type PreviewVerticalAlign = "top" | "middle" | "bottom";
 
-export function previewHorizontalAlign(control: CanvasControl): PreviewHorizontalAlign | null {
-  const value = enumValue(control.properties.Align ?? control.properties.TextAlign, "Align");
+export function previewHorizontalAlign(
+  control: CanvasControl, symbols?: Record<string, StaticPowerFxValue>
+): PreviewHorizontalAlign | null {
+  const value = enumValue(control.properties.Align ?? control.properties.TextAlign, "Align", symbols);
   if (value === "center" || value === "middle") return "middle";
   if (value === "justify") return "justify";
   if (value === "right" || value === "end") return "end";
@@ -324,16 +342,20 @@ export function previewHorizontalAlign(control: CanvasControl): PreviewHorizonta
   return null;
 }
 
-export function previewVerticalAlign(control: CanvasControl): PreviewVerticalAlign | null {
-  const value = enumValue(control.properties.VerticalAlign ?? control.properties.TextVerticalAlignment, "VerticalAlign");
+export function previewVerticalAlign(
+  control: CanvasControl, symbols?: Record<string, StaticPowerFxValue>
+): PreviewVerticalAlign | null {
+  const value = enumValue(control.properties.VerticalAlign ?? control.properties.TextVerticalAlignment, "VerticalAlign", symbols);
   if (value === "top") return "top";
   if (value === "bottom") return "bottom";
   if (value === "middle" || value === "center") return "middle";
   return null;
 }
 
-export function previewFontWeight(control: CanvasControl): number | undefined {
-  const value = enumValue(control.properties.FontWeight, "FontWeight");
+export function previewFontWeight(
+  control: CanvasControl, symbols?: Record<string, StaticPowerFxValue>
+): number | undefined {
+  const value = enumValue(control.properties.FontWeight, "FontWeight", symbols);
   if (value === "bold") return 700;
   if (value === "semibold") return 600;
   if (value === "normal" || value === "regular") return 400;
@@ -341,14 +363,18 @@ export function previewFontWeight(control: CanvasControl): number | undefined {
   return undefined;
 }
 
-export function previewItalic(control: CanvasControl): boolean {
-  return staticBoolean(control.properties.Italic) === true;
+export function previewItalic(
+  control: CanvasControl, symbols?: Record<string, StaticPowerFxValue>
+): boolean {
+  return staticBoolean(control.properties.Italic, symbols) === true;
 }
 
-export function previewTextDecoration(control: CanvasControl): string | undefined {
+export function previewTextDecoration(
+  control: CanvasControl, symbols?: Record<string, StaticPowerFxValue>
+): string | undefined {
   const decorations: string[] = [];
-  if (staticBoolean(control.properties.Underline) === true) decorations.push("underline");
-  if (staticBoolean(control.properties.Strikethrough) === true) decorations.push("line-through");
+  if (staticBoolean(control.properties.Underline, symbols) === true) decorations.push("underline");
+  if (staticBoolean(control.properties.Strikethrough, symbols) === true) decorations.push("line-through");
   return decorations.length ? decorations.join(" ") : undefined;
 }
 
