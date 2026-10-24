@@ -402,28 +402,41 @@ export function previewIsChecked(control: CanvasControl): boolean {
  */
 function enumValue(
   raw: unknown, namespace: "Align" | "VerticalAlign" | "FontWeight",
-  symbols?: Record<string, StaticPowerFxValue>
+  symbols?: Record<string, StaticPowerFxValue>, depth = 0
 ): string | null {
-  if (typeof raw !== "string") return null;
-  // Power Fx enum members must belong to their documented namespace.
-  // Bare identifiers, quoted strings and unrelated records (e.g. User.Right)
-  // are not evidence of a static alignment or font weight.
-  const exact = /^=?\s*([A-Za-z]+)\.([A-Za-z]+)\s*$/i.exec(raw.trim());
+  if (typeof raw !== "string" || depth > 6) return null;
+  const source = raw.trim();
+  // Accept only real Power Fx enum members, never quoted strings, variables,
+  // or unrelated namespaces that happen to have the same member name.
+  const exact = /^=?\s*([A-Za-z]+)\.([A-Za-z]+)\s*$/i.exec(source);
   if (exact) return exact[1].toLowerCase() === namespace.toLowerCase()
     ? exact[2].toLowerCase() : null;
 
-  // A three-argument If with literal enum-valued arms can be selected using
-  // verified App/Parent/Self/local symbols. Never promote a string variable
-  // or a quoted enum lookalike into an enum value.
   if (!symbols) return null;
-  const conditional = /^=?\s*If\(\s*([\s\S]+?),\s*([A-Za-z]+)\.([A-Za-z]+)\s*,\s*([A-Za-z]+)\.([A-Za-z]+)\s*\)$/i.exec(raw.trim());
-  if (!conditional || conditional[2].toLowerCase() !== namespace.toLowerCase() ||
-      conditional[4].toLowerCase() !== namespace.toLowerCase()) return null;
-  // The generic scalar evaluator intentionally does not treat Align,
-  // VerticalAlign or FontWeight as string-valued enums. Resolve only the
-  // verified boolean condition, then select a literal enum arm ourselves.
-  const condition = staticBoolean("=" + conditional[1], symbols);
-  return condition === null ? null : (condition ? conditional[3] : conditional[5]).toLowerCase();
+  // Power Fx If supports condition/result pairs and an optional default,
+  // including nested If expressions. Only evaluate a selected branch when
+  // every preceding condition is statically proven false. No connectors or
+  // runtime-only variables are evaluated.
+  // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+  const lexed = lexPowerFx(source);
+  if (lexed.diagnostics.length) return null;
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+  if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
+      tokens[tokens.length - 1]?.value !== ")") return null;
+  const branches = splitIfArguments(tokens.slice(2, -1));
+  if (!branches || branches.length < 2) return null;
+  for (let i = 0; i + 1 < branches.length; i += 2) {
+    const condition = staticBoolean("=" + expressionText(source, branches[i]), symbols);
+    if (condition === null) return null;
+    if (condition) {
+      return enumValue("=" + expressionText(source, branches[i + 1]), namespace, symbols, depth + 1);
+    }
+  }
+  const fallback = branches.length % 2 === 1 ? branches[branches.length - 1] : undefined;
+  return fallback
+    ? enumValue("=" + expressionText(source, fallback), namespace, symbols, depth + 1)
+    : null;
 }
 
 export type PreviewHorizontalAlign = "start" | "middle" | "end" | "justify";
