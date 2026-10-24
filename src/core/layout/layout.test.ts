@@ -3,6 +3,7 @@ import {
   autoLayoutChildren,
   buildSiblingGeometrySymbols,
   controlRect,
+  defaultControlSize,
   galleryTemplateLayout,
   galleryTemplateGuideRect,
   literalNumber,
@@ -10,6 +11,37 @@ import {
   rgba
 } from "./layout";
 import type { CanvasControl } from "../../types/canvas";
+
+describe("Canvas fallback geometry by control family", () => {
+  const fixture = (type: string, properties: Record<string, unknown> = {}): CanvasControl => ({
+    id: "SyntheticInput", name: "SyntheticInput", controlType: type,
+    properties, children: [], sourceFile: "Src/Synthetic.pa.yaml",
+    sourcePath: "Screens/Synthetic/SyntheticInput", sourceFormat: "pa-yaml-v3", zIndex: 1
+  });
+
+  it("prefers TextInput over the shorter Text substring in classic and modern controls", () => {
+    expect(defaultControlSize("Classic/TextInput@2.3.2")).toEqual({ width: 240, height: 44 });
+    expect(defaultControlSize("ModernTextInput@1.0.0")).toEqual({ width: 240, height: 44 });
+    expect(defaultControlSize("ModernText@1.0.0")).toEqual({ width: 220, height: 40 });
+    expect(defaultControlSize("Classic/HtmlText@1.0.0")).toEqual({ width: 220, height: 40 });
+  });
+
+  it("uses the input-family fallback consistently across phone, tablet and desktop", () => {
+    for (const [appWidth, appHeight] of [[390, 844], [768, 1024], [1366, 768]]) {
+      const rect = controlRect(fixture("Classic/TextInput@2.3.2", {
+        X: "=Parent.Width - Self.Width", Y: "=20"
+      }), 0, { appWidth, appHeight, parentWidth: appWidth, parentHeight: appHeight });
+      expect(rect).toEqual({ x: appWidth - 240, y: 20, width: 240, height: 44, dynamic: false });
+    }
+  });
+
+  it("does not replace explicitly resolved dimensions with approximate family defaults", () => {
+    const rect = controlRect(fixture("ModernTextInput@1.0.0", {
+      X: "=Parent.Width - Self.Width", Width: "=120", Height: "=36"
+    }), 0, { appWidth: 390, appHeight: 844, parentWidth: 390, parentHeight: 844 });
+    expect(rect).toEqual({ x: 270, y: 0, width: 120, height: 36, dynamic: false });
+  });
+});
 
 describe("layout literal helpers", () => {
   it("parses numeric formulas", () => {
