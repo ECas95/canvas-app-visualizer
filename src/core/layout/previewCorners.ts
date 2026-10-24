@@ -62,3 +62,29 @@ export function previewRoundedRectPath(
     "Z"
   ].join(" ");
 }
+
+
+/**
+ * Child clipping uses only provable source radii. Unknown runtime formulas do
+ * not authorize rounded clipping: a square fallback avoids hiding content
+ * based on an invented corner value. This differs intentionally from the
+ * approximate 4px outline used for visual control placeholders.
+ */
+export function previewChildClipPath(
+  properties: Record<string, unknown>,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): string {
+  const radius = (key: string): number => {
+    const value = literalNumber(properties[key]);
+    return value !== null && Number.isFinite(value) ? Math.max(0, value) : 0;
+  };
+  return previewRoundedRectPath(x, y, width, height, {
+    topLeft: radius("RadiusTopLeft"),
+    topRight: radius("RadiusTopRight"),
+    bottomRight: radius("RadiusBottomRight"),
+    bottomLeft: radius("RadiusBottomLeft")
+  });
+}
