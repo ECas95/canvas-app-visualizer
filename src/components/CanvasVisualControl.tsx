@@ -68,11 +68,11 @@ export function CanvasVisualControl({
   const selected = simulationSymbols
     ? [props.Default, props.Checked, props.Value].some(value => staticBoolean(value, simulationSymbols) === true)
     : previewIsChecked(control);
-  const horizontalAlign = previewHorizontalAlign(control);
-  const verticalAlign = previewVerticalAlign(control);
-  const fontWeight = previewFontWeight(control);
-  const italic = previewItalic(control);
-  const textDecoration = previewTextDecoration(control);
+  const horizontalAlign = previewHorizontalAlign(control, simulationSymbols);
+  const verticalAlign = previewVerticalAlign(control, simulationSymbols);
+  const fontWeight = previewFontWeight(control, simulationSymbols);
+  const italic = previewItalic(control, simulationSymbols);
+  const textDecoration = previewTextDecoration(control, simulationSymbols);
   const wraps = previewLabelWrap(control, simulationSymbols);
   const padding = (raw: unknown) => Math.max(0, staticNumber(raw, simulationSymbols) ?? 0);
 
