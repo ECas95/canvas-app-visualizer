@@ -123,6 +123,35 @@ export function previewColorWithSymbols(
   return fallback ? previewColorWithSymbols("=" + expressionText(value, fallback), symbols, depth + 1) : null;
 }
 
+/**
+ * Canvas container DropShadow is a Power Fx enum. Accept only explicit enum
+ * literals from source; unknown runtime formulas must not be interpreted as
+ * a confirmed shadow level. CSS values below are visual approximations.
+ */
+export type PreviewDropShadow =
+  | "none" | "light" | "semilight" | "regular" | "semibold" | "bold" | "extrabold";
+
+export function previewDropShadow(raw: unknown): PreviewDropShadow | null {
+  if (typeof raw !== "string") return null;
+  const match = /^=?\\s*DropShadow\\.(None|Light|Semilight|Regular|Semibold|Bold|ExtraBold)\\s*$/i.exec(raw.trim());
+  return match ? match[1].toLowerCase() as PreviewDropShadow : null;
+}
+
+const PREVIEW_SHADOW_FILTERS: Record<Exclude<PreviewDropShadow, "none">, string> = {
+  light: "drop-shadow(0px 1px 2px rgba(0,0,0,0.12))",
+  semilight: "drop-shadow(0px 2px 3px rgba(0,0,0,0.16))",
+  regular: "drop-shadow(0px 3px 6px rgba(0,0,0,0.18))",
+  semibold: "drop-shadow(0px 4px 8px rgba(0,0,0,0.22))",
+  bold: "drop-shadow(0px 6px 12px rgba(0,0,0,0.26))",
+  extrabold: "drop-shadow(0px 8px 16px rgba(0,0,0,0.30))"
+};
+
+/** Deterministic SVG-compatible CSS; never interpolates imported formulas. */
+export function previewDropShadowFilter(raw: unknown): string | undefined {
+  const level = previewDropShadow(raw);
+  return level && level !== "none" ? PREVIEW_SHADOW_FILTERS[level] : undefined;
+}
+
 export type PreviewBorderStyle = "solid" | "dashed" | "dotted" | "none";
 
 /** Read only explicit Canvas BorderStyle enum literals. Dynamic Power Fx stays unknown. */
