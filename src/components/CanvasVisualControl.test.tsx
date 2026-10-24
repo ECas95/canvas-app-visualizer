@@ -390,3 +390,59 @@ describe("Canvas SVG text content-box padding", () => {
     expect(html).toMatch(/<text[^>]* x="39"/);
   });
 });
+
+
+describe("native-size Canvas ImagePosition rendering", () => {
+  const asset = {
+    name: "companylogo",
+    path: "Resources/CompanyLogo.png",
+    dataUrl: "data:image/png;base64,AA=="
+  };
+  function renderImage(position: string, dataUrl = asset.dataUrl) {
+    return renderToStaticMarkup(<svg><CanvasVisualControl
+      control={{
+        ...label({ Image: "=Media.CompanyLogo", ImagePosition: position }),
+        controlType: "Classic/Image@2.1.0"
+      }}
+      mediaAssets={[{ ...asset, dataUrl }]}
+      x={10} y={20} width={140} height={64} clipId="synthetic-image-clip"
+    /></svg>);
+  }
+
+  it("centers imported raster at intrinsic size without stretching", () => {
+    const html = renderImage("=ImagePosition.Center");
+    expect(html).toContain("<foreignObject");
+    expect(html).toContain("background-size:auto");
+    expect(html).toContain("background-repeat:no-repeat");
+    expect(html).toContain("background-position:center");
+    expect(html).not.toContain("preserveAspectRatio=");
+  });
+
+  it("tiles imported raster at intrinsic size within the control clip", () => {
+    const html = renderImage("=ImagePosition.Tile");
+    expect(html).toContain("<foreignObject");
+    expect(html).toContain("background-repeat:repeat");
+    expect(html).toContain("background-position:left top");
+    expect(html).toContain("background-size:auto");
+    expect(html).toContain('clip-path="url(#synthetic-image-clip)"');
+  });
+
+  it("preserves SVG Fit, Fill, Stretch and unresolved mode behavior", () => {
+    expect(renderImage("=ImagePosition.Fit"))
+      .toContain('preserveAspectRatio="xMidYMid meet"');
+    expect(renderImage("=ImagePosition.Fill"))
+      .toContain('preserveAspectRatio="xMidYMid slice"');
+    expect(renderImage("=ImagePosition.Stretch"))
+      .toContain('preserveAspectRatio="none"');
+    const unknown = renderImage("=varImagePosition");
+    expect(unknown).not.toContain("<foreignObject");
+    expect(unknown).toContain('preserveAspectRatio="xMidYMid meet"');
+  });
+
+  it("does not interpolate unsafe image URLs into native-size CSS", () => {
+    const html = renderImage("=ImagePosition.Tile", "https://example.com/tracker.png");
+    expect(html).not.toContain("<foreignObject");
+    expect(html).not.toContain("example.com");
+    expect(html).not.toContain("background-image:");
+  });
+});
