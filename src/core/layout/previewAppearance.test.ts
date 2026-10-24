@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CanvasControl } from "../../types/canvas";
 import {
   isDefinitelyHidden, previewVisibility, previewCanRunOnSelect, previewBorderStyle, previewDropShadow, previewDropShadowFilter, previewColor, previewColorWithSymbols, previewDisplayMode, previewFontFamily, PREVIEW_DEFAULT_FONT, previewFontSize, previewFontWeight,
-  previewHorizontalAlign, previewIsChecked, previewItalic, previewKind,
+  previewHorizontalAlign, previewCheckedState, previewIsChecked, previewItalic, previewKind,
   previewText, previewTextDecoration, previewVerticalAlign, previewSelectionBehaviorGate
 } from "./previewAppearance";
 
@@ -404,5 +404,41 @@ describe("verified responsive Canvas typography", () => {
     expect(previewItalic(control("Label", { Italic: "=varRuntimeItalic" }))).toBe(false);
     expect(previewTextDecoration(control("Label", { Underline: "=varRuntimeUnderline" })))
       .toBeUndefined();
+  });
+});
+
+describe("source-only checkbox and toggle state", () => {
+  it("does not mistake unknown runtime values for unchecked controls", () => {
+    expect(previewCheckedState(control("Classic/CheckBox@2.1.0", {
+      Default: "=varHasPermission"
+    }))).toBe("unknown");
+    expect(previewCheckedState(control("Modern/Checkbox@1.0.0", {
+      Checked: "=ThisItem.Enabled"
+    }))).toBe("unknown");
+    expect(previewCheckedState(control("Modern/Toggle@1.0.0", {
+      Checked: "=varIsOn"
+    }), { "App.Width": 390 })).toBe("unknown");
+  });
+
+  it("uses verified local symbols and respects Checked over Default/Value", () => {
+    const modern = control("Modern/Checkbox@1.0.0", {
+      Checked: "=varEnabled", Default: "=true", Value: "=true"
+    });
+    expect(previewCheckedState(modern)).toBe("unknown");
+    expect(previewCheckedState(modern, { varEnabled: false })).toBe("unchecked");
+    expect(previewCheckedState(modern, { varEnabled: true })).toBe("checked");
+    expect(previewCheckedState(control("Classic/Toggle@2.1.0", {
+      Default: "=false", Value: "=true"
+    }))).toBe("unchecked");
+  });
+
+  it("retains known literals and a conservative omitted-property fallback", () => {
+    expect(previewCheckedState(control("Classic/CheckBox@2.1.0", {
+      Default: "=true"
+    }))).toBe("checked");
+    expect(previewCheckedState(control("Classic/Toggle@2.1.0", {
+      Default: "=false"
+    }))).toBe("unchecked");
+    expect(previewCheckedState(control("Classic/Toggle@2.1.0"))).toBe("unchecked");
   });
 });
