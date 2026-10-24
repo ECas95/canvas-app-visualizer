@@ -63,5 +63,5 @@ export function previewImageFlipTransform(
   if (flipX === null || flipY === null ||
       ![x, y, width, height].every(Number.isFinite)) return null;
   if (!flipX && !flipY) return "";
-  return `translate(${flipX ? 2 * x + width : 0} ${flipY ? 2 * y + height}) scale(${flipX ? -1 : 1} ${flipY ? -1 : 1})`;
+  return `translate(${flipX ? 2 * x + width : 0} ${flipY ? 2 * y + height : 0}) scale(${flipX ? -1 : 1} ${flipY ? -1 : 1})`;
 }
