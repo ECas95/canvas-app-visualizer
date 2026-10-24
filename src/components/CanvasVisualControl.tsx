@@ -5,7 +5,7 @@ import { staticBoolean, staticNumber, staticString } from "../core/powerfx/stati
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, resolvePreviewImage } from "../core/layout/previewMedia";
 import {
-  previewColorWithSymbols, previewDisplayMode, previewFontSize, previewFontWeight, previewHorizontalAlign,
+  previewColorWithSymbols, previewDisplayMode, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
   previewIsChecked, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration,
   previewVerticalAlign
 } from "../core/layout/previewAppearance";
@@ -20,8 +20,6 @@ interface Props {
   height: number;
   clipId: string;
 }
-
-const FAMILY = '"Segoe UI",system-ui,sans-serif';
 
 export function CanvasVisualControl({
   control, x, y, width, height, clipId, mediaAssets = [], simulationSymbols
@@ -48,6 +46,7 @@ export function CanvasVisualControl({
       : props.Text ?? props.Label;
   const label = (simulationSymbols && staticString(rawText, simulationSymbols)) ?? previewText(control);
   const fontSize = previewFontSize(control, simulationSymbols);
+  const fontFamily = previewFontFamily(control);
   // Bound pathological imported strings while retaining normal multiline labels.
   const text = label?.slice(0, 4096);
   const inset = Math.min(12, Math.max(3, width * 0.04));
@@ -115,7 +114,7 @@ export function CanvasVisualControl({
     const firstY = centralY - ((lines.length - 1) * lineHeight) / 2;
     return (
       <text x={point.x} y={firstY} dominantBaseline="middle"
-        textAnchor={point.anchor} fill={color} fontFamily={FAMILY}
+        textAnchor={point.anchor} fill={color} fontFamily={fontFamily}
         fontSize={fontSize} fontWeight={fontWeight}
         fontStyle={italic ? "italic" : undefined}
         textDecoration={textDecoration}>
@@ -162,7 +161,7 @@ export function CanvasVisualControl({
               paddingRight: padding(props.PaddingRight),
               paddingBottom: padding(props.PaddingBottom),
               paddingLeft: padding(props.PaddingLeft),
-              color: foreground, fontFamily: FAMILY, fontSize,
+              color: foreground, fontFamily, fontSize,
               fontWeight, fontStyle: italic ? "italic" : undefined,
               textDecoration
             }}>
