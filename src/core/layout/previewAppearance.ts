@@ -133,7 +133,7 @@ export type PreviewDropShadow =
 
 export function previewDropShadow(raw: unknown): PreviewDropShadow | null {
   if (typeof raw !== "string") return null;
-  const match = /^=?\\s*DropShadow\\.(None|Light|Semilight|Regular|Semibold|Bold|ExtraBold)\\s*$/i.exec(raw.trim());
+  const match = /^=?\s*DropShadow\.(None|Light|Semilight|Regular|Semibold|Bold|ExtraBold)\s*$/i.exec(raw.trim());
   return match ? match[1].toLowerCase() as PreviewDropShadow : null;
 }
 
