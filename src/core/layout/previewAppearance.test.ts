@@ -127,6 +127,30 @@ describe("semantic preview classification", () => {
     expect(previewFontSize(label)).toBe(24);
   });
 
+  it("recognizes documented Justify and Lighter enums without guessing arbitrary members", () => {
+    expect(previewHorizontalAlign(control("ModernText@1.0.0", {
+      Align: "=Align.Justify"
+    }))).toBe("justify");
+    expect(previewFontWeight(control("ModernText@1.0.0", {
+      FontWeight: "=FontWeight.Lighter"
+    }))).toBe(300);
+    expect(previewFontWeight(control("ModernText@1.0.0", {
+      FontWeight: "=FontWeight.Semibold"
+    }))).toBe(600);
+  });
+
+  it("rejects unrelated Power Fx namespaces and bare identifiers as style enums", () => {
+    expect(previewHorizontalAlign(control("Label", { Align: "=User.Right" }))).toBeNull();
+    expect(previewHorizontalAlign(control("Label", { Align: "=Right" }))).toBeNull();
+    expect(previewHorizontalAlign(control("Label", { Align: '="Align.Right"' }))).toBeNull();
+    expect(previewVerticalAlign(control("Label", { VerticalAlign: "=App.Top" }))).toBeNull();
+    expect(previewVerticalAlign(control("Label", { VerticalAlign: "=Top" }))).toBeNull();
+    expect(previewFontWeight(control("Label", { FontWeight: "=Theme.Bold" }))).toBeUndefined();
+    expect(previewFontWeight(control("Label", { FontWeight: "=Bold" }))).toBeUndefined();
+    expect(previewFontWeight(control("Label", { FontWeight: "=If(varReady, FontWeight.Bold, FontWeight.Normal)" })))
+      .toBeUndefined();
+  });
+
   it("does not guess unsupported dynamic style formulas", () => {
     const label = control("Label", {
       Align: "=If(varCentered, Align.Center, Align.Left)",
