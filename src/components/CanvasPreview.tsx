@@ -261,7 +261,8 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
     width: item.width, height: item.height, dynamic: item.dynamic,
     visibilityUnknown: item.visibilityUnknown,
     overflowX: item.control.properties.LayoutOverflowX,
-    overflowY: item.control.properties.LayoutOverflowY
+    overflowY: item.control.properties.LayoutOverflowY,
+    symbols: item.renderSymbols
   }))), [rawItems]);
   // Clamp previous offsets when the viewport changes; unknown geometry
   // cannot establish a scrollable content extent.

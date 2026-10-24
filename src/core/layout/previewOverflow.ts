@@ -1,3 +1,5 @@
+import { staticString, type StaticPowerFxValue } from "../powerfx/staticEval";
+
 /**
  * Source-only scroll geometry for Canvas auto-layout containers.
  *
@@ -23,12 +25,23 @@ export interface PreviewScrollItem {
   visibilityUnknown: boolean;
   overflowX?: unknown;
   overflowY?: unknown;
+  /** Known App/Parent/Self/local-only symbols; no SQL or inferred permissions. */
+  symbols?: Record<string, StaticPowerFxValue>;
 }
 
-export function previewOverflowMode(raw: unknown): PreviewOverflowMode {
+export function previewOverflowMode(
+  raw: unknown,
+  symbols?: Record<string, StaticPowerFxValue>
+): PreviewOverflowMode {
   if (raw === undefined || raw === null) return "hide";
   if (typeof raw !== "string") return "unknown";
-  const match = /^=?\s*LayoutOverflow\.(Scroll|Hide)\s*$/i.exec(raw.trim());
+  const literal = /^=?\s*LayoutOverflow\.(Scroll|Hide)\s*$/i.exec(raw.trim());
+  if (literal) return literal[1].toLowerCase() as "scroll" | "hide";
+  // Power Fx If can select an enum using verified viewport/parent dimensions.
+  // Unknown conditions and unsupported expressions never enable scrolling.
+  const resolved = staticString(raw, symbols);
+  const match = typeof resolved === "string"
+    ? /^LayoutOverflow\.(Scroll|Hide)$/i.exec(resolved) : null;
   return match ? match[1].toLowerCase() as "scroll" | "hide" : "unknown";
 }
 
@@ -42,8 +55,8 @@ export function previewScrollRanges(
 ): Record<string, PreviewScrollRange> {
   const ranges: Record<string, PreviewScrollRange> = Object.create(null);
   for (const host of items) {
-    const horizontal = previewOverflowMode(host.overflowX) === "scroll";
-    const vertical = previewOverflowMode(host.overflowY) === "scroll";
+    const horizontal = previewOverflowMode(host.overflowX, host.symbols) === "scroll";
+    const vertical = previewOverflowMode(host.overflowY, host.symbols) === "scroll";
     if ((!horizontal && !vertical) || host.dynamic || host.visibilityUnknown ||
         !Number.isFinite(host.width) || !Number.isFinite(host.height) ||
         host.width <= 0 || host.height <= 0) continue;

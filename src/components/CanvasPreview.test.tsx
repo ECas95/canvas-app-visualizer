@@ -286,6 +286,15 @@ describe("CanvasPreview local-only container scrolling", () => {
     expect(html).not.toContain('data-preview-scrollbar="vertical"');
   });
 
+  it("uses verified viewport symbols for responsive overflow in the renderer", () => {
+    expect(renderOverflowHost("vertical",
+      "=If(App.Width > 720, LayoutOverflow.Scroll, LayoutOverflow.Hide)"))
+      .toContain('data-preview-scrollbar="vertical"');
+    expect(renderOverflowHost("vertical",
+      "=If(App.Width < 720, LayoutOverflow.Scroll, LayoutOverflow.Hide)"))
+      .not.toContain('data-preview-scrollbar="vertical"');
+  });
+
   it("does not fabricate scrollability for Hide or dynamic Power Fx", () => {
     expect(renderOverflowHost("vertical", "=LayoutOverflow.Hide"))
       .not.toContain('data-preview-scrollbar="vertical"');

@@ -21,6 +21,27 @@ describe("Canvas overflow semantics", () => {
     expect(previewOverflowMode(undefined)).toBe("hide");
   });
 
+  it("resolves viewport-dependent overflow enums without running behaviors", () => {
+    const formula = "=If(App.Width < 720, LayoutOverflow.Scroll, LayoutOverflow.Hide)";
+    expect(previewOverflowMode(formula, { "App.Width": 390 })).toBe("scroll");
+    expect(previewOverflowMode(formula, { "App.Width": 1366 })).toBe("hide");
+    expect(previewOverflowMode(formula)).toBe("unknown");
+    expect(previewOverflowMode("=If(varCanScroll, LayoutOverflow.Scroll, LayoutOverflow.Hide)",
+      { "App.Width": 390 })).toBe("unknown");
+  });
+
+  it("computes scroll extents only at viewports with proven Scroll", () => {
+    const host = item("Host", [], 0, 0, 100, 100, {
+      overflowY: "=If(App.Width < 720, LayoutOverflow.Scroll, LayoutOverflow.Hide)"
+    });
+    const child = item("Child", ["Host"], 0, 0, 100, 180);
+    expect(previewScrollRanges([{ ...host, symbols: { "App.Width": 390 } }, child]))
+      .toEqual({ Host: { x: 0, y: 80 } });
+    expect(previewScrollRanges([{ ...host, symbols: { "App.Width": 1366 } }, child]))
+      .not.toHaveProperty("Host");
+    expect(previewScrollRanges([host, child])).not.toHaveProperty("Host");
+  });
+
   it("calculates a vertical scroll range from known child geometry", () => {
     const nodes = [
       item("Host", [], 10, 20, 200, 100, { overflowY: "=LayoutOverflow.Scroll" }),
