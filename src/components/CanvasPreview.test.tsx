@@ -129,7 +129,7 @@ describe("CanvasPreview gallery source vs runtime rows", () => {
 });
 
 
-function renderSourceOnlyGalleryGuide(variant: "Vertical" | "Horizontal") {
+function renderSourceOnlyGalleryGuide(variant: "Vertical" | "Horizontal", laterSibling = false) {
   const templateLabel = control("PrivateRow", "Classic/Label@2.5.1", {
     Text: '="Not a verified row"', Width: "=100", Height: "=20"
   });
@@ -140,7 +140,10 @@ function renderSourceOnlyGalleryGuide(variant: "Vertical" | "Horizontal") {
   }, [templateLabel]);
   gallery.variant = variant;
   const screen: CanvasScreen = {
-    id: "Fixture", name: "Fixture", properties: {}, children: [gallery],
+    id: "Fixture", name: "Fixture", properties: {},
+    children: laterSibling ? [gallery, control("OverlaySibling", "Classic/Label@2.5.1", {
+      X: "=20", Y: "=30", Width: "=600", Height: "=300", Text: '="Later sibling"'
+    })] : [gallery],
     sourceFile: "Src/Fixture.pa.yaml", sourceFormat: "pa-yaml-v3"
   };
   return renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
@@ -154,6 +157,14 @@ describe("CanvasPreview source-only gallery guide clipping", () => {
     expect(html).toContain("Template only — runtime records unavailable");
     expect(html).not.toContain("Not a verified row");
     expect(html).not.toContain("Inspect PrivateRow");
+  });
+
+  it("paints the gallery guide before later overlapping siblings", () => {
+    const html = renderSourceOnlyGalleryGuide("Vertical", true);
+    const guide = html.indexOf("Template only — runtime records unavailable");
+    const sibling = html.indexOf('aria-label="Inspect OverlaySibling');
+    expect(guide).toBeGreaterThan(0);
+    expect(sibling).toBeGreaterThan(guide);
   });
 
   it("draws horizontal gallery WrapCount guide slots vertically", () => {
@@ -228,7 +239,7 @@ describe("CanvasPreview unresolved ancestor visibility", () => {
 });
 
 
-function renderOverflowHost(axis: "horizontal" | "vertical", overflow: string) {
+function renderOverflowHost(axis: "horizontal" | "vertical", overflow: string, laterSibling = false) {
   const children = ["First", "Second"].map(name => control(name, "Classic/Label@2.5.1", {
     Width: axis === "horizontal" ? "=80" : "=100",
     Height: axis === "vertical" ? "=80" : "=60",
@@ -241,7 +252,10 @@ function renderOverflowHost(axis: "horizontal" | "vertical", overflow: string) {
   }, children);
   host.variant = "AutoLayout";
   const screen: CanvasScreen = {
-    id: "OverflowFixture", name: "OverflowFixture", properties: {}, children: [host],
+    id: "OverflowFixture", name: "OverflowFixture", properties: {},
+    children: laterSibling ? [host, control("OverlaySibling", "Classic/Label@2.5.1", {
+      X: "=20", Y: "=30", Width: "=100", Height: "=100", Text: '="Later sibling"'
+    })] : [host],
     sourceFile: "Src/OverflowFixture.pa.yaml", sourceFormat: "pa-yaml-v3"
   };
   return renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
@@ -254,6 +268,16 @@ describe("CanvasPreview local-only container scrolling", () => {
     expect(html).toContain("Wheel scrolling is local to this preview");
     expect(html).toContain("Inspect First");
     expect(html).toContain("Inspect Second");
+  });
+
+  it("paints the scrollbar above its children but below a later sibling", () => {
+    const html = renderOverflowHost("vertical", "=LayoutOverflow.Scroll", true);
+    const child = html.indexOf('aria-label="Inspect Second');
+    const scrollbar = html.indexOf('data-preview-scrollbar="vertical"');
+    const sibling = html.indexOf('aria-label="Inspect OverlaySibling');
+    expect(child).toBeGreaterThan(0);
+    expect(scrollbar).toBeGreaterThan(child);
+    expect(sibling).toBeGreaterThan(scrollbar);
   });
 
   it("shows horizontal scroll affordance for a horizontal layout", () => {
