@@ -266,6 +266,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
     id: item.control.id, ancestors: item.ancestors, x: item.x, y: item.y,
     width: item.width, height: item.height, dynamic: item.dynamic,
     visibilityUnknown: item.visibilityUnknown,
+    editorGroup: item.control.controlType.toLowerCase() === "group",
     overflowX: item.control.properties.LayoutOverflowX,
     overflowY: item.control.properties.LayoutOverflowY,
     paddingRight: item.control.properties.PaddingRight,
