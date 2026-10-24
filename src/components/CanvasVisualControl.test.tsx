@@ -20,6 +20,20 @@ function render(properties: Record<string, unknown>, symbols?: Record<string, st
 }
 
 describe("source-faithful Canvas label wrapping", () => {
+  it("uses the same source Font family in SVG and wrapped HTML labels", () => {
+    const props = { Text: '="Font sample"', Font: "=Font.Arial" };
+    const singleLine = render({ ...props, Wrap: "=false" });
+    const wrapped = render({ ...props, Wrap: "=true" });
+    expect(singleLine).toContain('font-family="Arial,sans-serif"');
+    expect(wrapped).toContain("font-family:Arial,sans-serif");
+    expect(wrapped).toContain("<foreignObject");
+  });
+
+  it("does not treat an unknown runtime Font as a verified font", () => {
+    const html = render({ Text: '="Safe"', Font: "=varUserFont", Wrap: "=true" });
+    expect(html).toContain("font-family:&quot;Segoe UI&quot;,system-ui,sans-serif");
+  });
+
   it("wraps only when the serialized Wrap property resolves true", () => {
     const html = render({
       Text: '="A label with enough words to wrap across several lines"',
