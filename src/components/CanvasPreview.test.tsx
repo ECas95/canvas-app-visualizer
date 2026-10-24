@@ -157,3 +157,66 @@ describe("CanvasPreview source-only gallery guide clipping", () => {
     expect(html).not.toContain("Inspect PrivateRow");
   });
 });
+
+
+function renderUnresolvedVisibility(visible: string, childText = "Synthetic protected content") {
+  const child = control("ConditionalChild", "Classic/Label@2.5.1", {
+    X: "=5", Y: "=5", Width: "=180", Height: "=30", Text: '="' + childText + '"'
+  });
+  const host = control("ConditionalHost", "GroupContainer@1.3.0", {
+    X: "=20", Y: "=20", Width: "=280", Height: "=120", Visible: visible
+  }, [child]);
+  const screen: CanvasScreen = {
+    id: "SafeFixture", name: "SafeFixture", properties: {}, children: [host],
+    sourceFile: "Src/SafeFixture.pa.yaml", sourceFormat: "pa-yaml-v3"
+  };
+  return renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+}
+
+describe("CanvasPreview unresolved ancestor visibility", () => {
+  it("keeps an unknown parent inspectable without exposing its descendants", () => {
+    const html = renderUnresolvedVisibility("=varHasPermission");
+    expect(html).toContain("Inspect ConditionalHost");
+    expect(html).toContain("Visible unknown");
+    expect(html).toContain("runtime condition unavailable");
+    expect(html).not.toContain("Inspect ConditionalChild");
+    expect(html).not.toContain("Synthetic protected content");
+  });
+
+  it("renders known-visible descendants and omits known-hidden parents", () => {
+    const visible = renderUnresolvedVisibility("=true");
+    expect(visible).toContain("Inspect ConditionalChild");
+    expect(visible).toContain("Synthetic protected content");
+    expect(visible).not.toContain("Visible unknown");
+
+    const hidden = renderUnresolvedVisibility("=false");
+    expect(hidden).not.toContain("Inspect ConditionalHost");
+    expect(hidden).not.toContain("Inspect ConditionalChild");
+  });
+
+  it("resolves viewport-only visibility without treating unknown variables as true", () => {
+    expect(renderUnresolvedVisibility("=App.Width > 720"))
+      .toContain("Inspect ConditionalChild");
+    expect(renderUnresolvedVisibility("=varHasPermission && App.Width > 720"))
+      .not.toContain("Inspect ConditionalChild");
+  });
+
+  it("does not show gallery template guides behind unresolved Visible", () => {
+    const gallery = control("ConditionalGallery", "Classic/VerticalGallery@2.3.0", {
+      X: "=10", Y: "=10", Width: "=420", Height: "=240",
+      Visible: "=varCanRead", Items: "=RemoteRecords",
+      TemplateSize: "=100", WrapCount: "=2"
+    }, [control("TemplateChild", "Classic/Label@2.5.1", {
+      Text: '="Not a verified record"'
+    })]);
+    const screen: CanvasScreen = {
+      id: "GalleryFixture", name: "GalleryFixture", properties: {}, children: [gallery],
+      sourceFile: "Src/GalleryFixture.pa.yaml", sourceFormat: "pa-yaml-v3"
+    };
+    const html = renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+    expect(html).toContain("Inspect ConditionalGallery");
+    expect(html).toContain("Visible unknown");
+    expect(html).not.toContain("Template only — runtime records unavailable");
+    expect(html).not.toContain("Inspect TemplateChild");
+  });
+});
