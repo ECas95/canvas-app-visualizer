@@ -65,3 +65,32 @@ export function previewImageFlipTransform(
   if (!flipX && !flipY) return "";
   return `translate(${flipX ? 2 * x + width : 0} ${flipY ? 2 * y + height : 0}) scale(${flipX ? -1 : 1} ${flipY ? -1 : 1})`;
 }
+
+/**
+ * Canvas ImageRotation is an enum, not a free-form numeric angle. Only exact
+ * source values can be rendered without evaluating runtime state.
+ * Positive SVG angles rotate clockwise in the screen's downward Y axis.
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-image
+ */
+export function previewImageRotation(raw: unknown): 0 | 90 | 180 | 270 | null {
+  if (raw === undefined || raw === null) return 0;
+  if (typeof raw !== "string") return null;
+  const match = /^=?\\s*ImageRotation\\.(None|Rotate90|Rotate180|Rotate270)\\s*$/i.exec(raw.trim());
+  if (!match) return null;
+  switch (match[1].toLowerCase()) {
+    case "none": return 0;
+    case "rotate90": return 90;
+    case "rotate180": return 180;
+    case "rotate270": return 270;
+    default: return null;
+  }
+}
+
+/** Rotate the bitmap around its control center, leaving its border and clip fixed. */
+export function previewImageRotationTransform(
+  raw: unknown, x: number, y: number, width: number, height: number
+): string | null {
+  const angle = previewImageRotation(raw);
+  if (angle === null || ![x, y, width, height].every(Number.isFinite)) return null;
+  return angle === 0 ? "" : `rotate(${angle} ${x + width / 2} ${y + height / 2})`;
+}

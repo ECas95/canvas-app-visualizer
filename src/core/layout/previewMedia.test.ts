@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PreviewMediaAsset } from "../../types/canvas";
-import { previewImageFit, previewImageFlipTransform, previewImagePosition, previewRasterCssImage, resolvePreviewImage } from "./previewMedia";
+import { previewImageFit, previewImageFlipTransform, previewImagePosition, previewImageRotation, previewImageRotationTransform, previewRasterCssImage, resolvePreviewImage } from "./previewMedia";
 
 const media: PreviewMediaAsset[] = [{
   name: "companylogo",
@@ -67,5 +67,31 @@ describe("local-only image preview", () => {
       10, 20, 140, 64, { "App.Width": 390 }))
       .toBe("translate(160 0) scale(-1 1)");
     expect(previewImageFlipTransform("=true", "=false", 10, 20, Infinity, 64)).toBeNull();
+  });
+});
+
+
+describe("source-only Canvas ImageRotation", () => {
+  it("accepts only the four documented ImageRotation enum members", () => {
+    expect(previewImageRotation(undefined)).toBe(0);
+    expect(previewImageRotation("=ImageRotation.None")).toBe(0);
+    expect(previewImageRotation("=ImageRotation.Rotate90")).toBe(90);
+    expect(previewImageRotation("=ImageRotation.Rotate180")).toBe(180);
+    expect(previewImageRotation("=imagerotation.rotate270")).toBe(270);
+    expect(previewImageRotation("=User.Rotate90")).toBeNull();
+    expect(previewImageRotation('="ImageRotation.Rotate90"')).toBeNull();
+    expect(previewImageRotation("=If(varReady, ImageRotation.Rotate90, ImageRotation.None)")).toBeNull();
+    expect(previewImageRotation("=90")).toBeNull();
+  });
+
+  it("rotates only verified angles around finite control geometry", () => {
+    expect(previewImageRotationTransform("=ImageRotation.Rotate90", 10, 20, 140, 64))
+      .toBe("rotate(90 80 52)");
+    expect(previewImageRotationTransform("=ImageRotation.Rotate270", 10, 20, 140, 64))
+      .toBe("rotate(270 80 52)");
+    expect(previewImageRotationTransform(undefined, 10, 20, 140, 64)).toBe("");
+    expect(previewImageRotationTransform("=varRotation", 10, 20, 140, 64)).toBeNull();
+    expect(previewImageRotationTransform("=ImageRotation.Rotate90", 10, 20, Infinity, 64))
+      .toBeNull();
   });
 });

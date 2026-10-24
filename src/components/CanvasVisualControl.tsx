@@ -3,7 +3,7 @@ import { literalNumber } from "../core/layout/layout";
 import { previewCornerRadii, previewRoundedRectPath } from "../core/layout/previewCorners";
 import { staticBoolean, staticNumber, staticString } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
-import { previewImageFit, previewImageFlipTransform, previewImagePosition, previewRasterCssImage, resolvePreviewImage } from "../core/layout/previewMedia";
+import { previewImageFit, previewImageFlipTransform, previewImagePosition, previewImageRotationTransform, previewRasterCssImage, resolvePreviewImage } from "../core/layout/previewMedia";
 import { PREVIEW_ICON_PATHS, previewIconName, previewIconRotation } from "../core/layout/previewIcon";
 import {
   previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewDropShadowFilter, previewIsOpaqueColor, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
@@ -35,6 +35,9 @@ export function CanvasVisualControl({
   // supplies only bounded local PNG/JPEG/GIF/WebP data URLs, never remote URLs.
   const imageFlip = kind === "image" ? previewImageFlipTransform(
     props.FlipHorizontal, props.FlipVertical, x, y, width, height, simulationSymbols
+  ) : null;
+  const imageRotation = kind === "image" && media ? previewImageRotationTransform(
+    props.ImageRotation, x, y, width, height
   ) : null;
   const rasterCssImage = media && (imagePosition === "center" || imagePosition === "tile")
     ? previewRasterCssImage(media.dataUrl) : null;
@@ -277,6 +280,7 @@ export function CanvasVisualControl({
           );
         })()}
         {kind === "image" && (
+          <g transform={imageRotation || undefined}>
           <g transform={imageFlip || undefined}>
           {media ? (
             imagePosition === "center" || imagePosition === "tile" ? (
@@ -306,6 +310,7 @@ export function CanvasVisualControl({
             <circle cx={x + Math.min(width - 12, 24)} cy={y + 22} r={4} fill="#9ab0c5"/>
             </>
           )}
+          </g>
           </g>
         )}
         {kind === "unknown" && (

@@ -477,3 +477,39 @@ describe("native-size Canvas ImagePosition rendering", () => {
     expect(html).not.toContain("background-image:");
   });
 });
+
+
+describe("Canvas ImageRotation SVG content geometry", () => {
+  const asset = { name: "companylogo", path: "Resources/CompanyLogo.png",
+    dataUrl: "data:image/png;base64,AA==" };
+  const renderRotated = (rotation: string, position = "=ImagePosition.Fit",
+    flip = "=false") => renderToStaticMarkup(<svg><CanvasVisualControl
+      control={{ ...label({ Image: "=Media.CompanyLogo", ImagePosition: position,
+        ImageRotation: rotation, FlipHorizontal: flip }), controlType: "Classic/Image@2.1.0" }}
+      mediaAssets={[asset]} x={10} y={20} width={140} height={64}
+      clipId="rotation-image-clip" /></svg>);
+
+  it("rotates only bitmap content around the control center, inside its fixed clip", () => {
+    const html = renderRotated("=ImageRotation.Rotate90");
+    expect(html).toContain('transform="rotate(90 80 52)"');
+    expect(html).toContain('clip-path="url(#rotation-image-clip)"');
+    expect(html).toContain('<path d="M 10 20');
+    expect(html.indexOf('clip-path="url(#rotation-image-clip)"'))
+      .toBeLessThan(html.indexOf('transform="rotate(90 80 52)"'));
+  });
+
+  it("composes clockwise rotation and horizontal flip without changing the host outline", () => {
+    const html = renderRotated("=ImageRotation.Rotate270", "=ImagePosition.Center", "=true");
+    expect(html).toContain('transform="rotate(270 80 52)"');
+    expect(html).toContain('transform="translate(160 0) scale(-1 1)"');
+    expect(html.indexOf('transform="rotate(270 80 52)"'))
+      .toBeLessThan(html.indexOf('transform="translate(160 0) scale(-1 1)"'));
+    expect(html).toContain("background-position:center");
+  });
+
+  it("never guesses runtime-dependent rotation", () => {
+    const html = renderRotated("=varSqlRotation");
+    expect(html).not.toContain('transform="rotate(');
+    expect(html).toContain('preserveAspectRatio="xMidYMid meet"');
+  });
+});
