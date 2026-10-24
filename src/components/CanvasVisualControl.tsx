@@ -4,7 +4,7 @@ import { previewCornerRadii, previewRoundedRectPath } from "../core/layout/previ
 import { staticBoolean, staticNumber, staticString } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, resolvePreviewImage } from "../core/layout/previewMedia";
-import { PREVIEW_ICON_PATHS, previewIconName } from "../core/layout/previewIcon";
+import { PREVIEW_ICON_PATHS, previewIconName, previewIconRotation } from "../core/layout/previewIcon";
 import {
   previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewDropShadowFilter, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
   previewIsChecked, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration,
@@ -238,13 +238,16 @@ export function CanvasVisualControl({
           // silently represented as a different Power Apps icon.
           if (icon === null) return svgText("?", x + width / 2, "middle", "#7c8794");
           const size = Math.max(0, Math.min(width, height) - 8);
+          const rotation = previewIconRotation(props.Rotation, simulationSymbols);
           return (
             <svg x={x + (width - size) / 2} y={y + (height - size) / 2}
               width={size} height={size} viewBox="0 0 24 24"
               fill="none" stroke={foreground} strokeWidth={2}
               strokeLinecap="round" strokeLinejoin="round"
               aria-label={icon}>
-              <path d={PREVIEW_ICON_PATHS[icon]} />
+              <path d={PREVIEW_ICON_PATHS[icon]}
+                transform={rotation !== null && rotation !== 0
+                  ? `rotate(${rotation} 12 12)` : undefined} />
             </svg>
           );
         })()}

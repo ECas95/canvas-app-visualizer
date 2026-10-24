@@ -2,19 +2,25 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CanvasControl } from "../../types/canvas";
 import { CanvasVisualControl } from "../../components/CanvasVisualControl";
-import { PREVIEW_ICON_PATHS, previewIconName } from "./previewIcon";
+import { PREVIEW_ICON_PATHS, previewIconName, previewIconRotation } from "./previewIcon";
+import { buildCanvasModel } from "../model/normalize";
 
-function renderIcon(icon: unknown, type = "Classic/Icon@2.5.0", color = "=Color.Red") {
+function renderIcon(
+  icon: unknown, type = "Classic/Icon@2.5.0", color = "=Color.Red",
+  extraProperties: Record<string, unknown> = {},
+  symbols?: Record<string, string | number | boolean>
+) {
   const control: CanvasControl = {
     id: "synthetic-icon", name: "SyntheticIcon",
-    controlType: type, properties: { Icon: icon, Color: color }, children: [],
+    controlType: type, properties: { Icon: icon, Color: color, ...extraProperties }, children: [],
     sourceFile: "Src/Synthetic.pa.yaml",
     sourcePath: "Screens/Synthetic/SyntheticIcon",
     sourceFormat: "pa-yaml-v3", zIndex: 1
   };
   return renderToStaticMarkup(
     <svg><CanvasVisualControl control={control} x={10} y={20}
-      width={64} height={40} clipId="synthetic-icon-clip" /></svg>
+      width={64} height={40} clipId="synthetic-icon-clip"
+      simulationSymbols={symbols} /></svg>
   );
 }
 
@@ -64,5 +70,76 @@ describe("Canvas source-only Icon enums", () => {
       .toContain('d="' + PREVIEW_ICON_PATHS.check + '"');
     expect(renderIcon('=If(varAllowed, "Check", "Cancel")', "Modern/Icon@1.0.0"))
       .toContain(">?</tspan>");
+  });
+});
+
+
+describe("Canvas Icon.Rotation source fidelity", () => {
+  it("normalizes literal and arithmetic degree formulas without executing behavior", () => {
+    expect(previewIconRotation("=90")).toBe(90);
+    expect(previewIconRotation("=-45")).toBe(-45);
+    expect(previewIconRotation("=360 + 90")).toBe(90);
+    expect(previewIconRotation("=360")).toBe(0);
+  });
+
+  it("resolves only supplied viewport symbols", () => {
+    const formula = "=If(App.Width < 600, 90, 0)";
+    expect(previewIconRotation(formula, { "App.Width": 390 })).toBe(90);
+    expect(previewIconRotation(formula, { "App.Width": 1366 })).toBe(0);
+    expect(previewIconRotation(formula)).toBeNull();
+  });
+
+  it("keeps unknown, nonnumeric and malformed rotation formulas unresolved", () => {
+    expect(previewIconRotation("=varRotation")).toBeNull();
+    expect(previewIconRotation("=User().Email")).toBeNull();
+    expect(previewIconRotation("=\"90deg\"")).toBeNull();
+    expect(previewIconRotation("=1/0")).toBeNull();
+    expect(previewIconRotation(undefined)).toBeNull();
+  });
+
+  it("rotates only the icon glyph around its own 24x24 viewBox center", () => {
+    const html = renderIcon("=Icon.ArrowRight", "Classic/Icon@2.5.0",
+      "=Color.Red", { Rotation: "=90", Fill: "=Color.White" });
+    expect(html).toContain('d="' + PREVIEW_ICON_PATHS.arrowright + '" transform="rotate(90 12 12)"');
+    expect(html).toContain('stroke="#ff0000"');
+    expect(html).not.toContain('transform="rotate(90 42 40)"');
+    expect((html.match(/transform="rotate\(/g) ?? [])).toHaveLength(1);
+  });
+
+  it("does not rotate when the formula is runtime-dependent or resolves to zero", () => {
+    expect(renderIcon("=Icon.Add", "Classic/Icon@2.5.0", "=Color.Red",
+      { Rotation: "=varRotation" })).not.toContain('transform="rotate(');
+    expect(renderIcon("=Icon.Add", "Classic/Icon@2.5.0", "=Color.Red",
+      { Rotation: "=If(App.Width < 600, 90, 0)" },
+      { "App.Width": 1366 })).not.toContain('transform="rotate(');
+    expect(renderIcon("=Icon.Add", "Classic/Icon@2.5.0", "=Color.Red",
+      { Rotation: "=If(App.Width < 600, 90, 0)" },
+      { "App.Width": 390 })).toContain('transform="rotate(90 12 12)"');
+  });
+
+  it("preserves Rotation from a generic, versioned Canvas .pa.yaml fixture", () => {
+    const yaml = [
+      "Screens:",
+      "  RotationScreen:",
+      "    Children:",
+      "      - TurnIcon:",
+      "          Control: Classic/Icon@2.5.0",
+      "          Properties:",
+      "            Icon: =Icon.ArrowRight",
+      "            Rotation: =90",
+      "            Width: =64",
+      "            Height: =40"
+    ].join("\n");
+    const model = buildCanvasModel([{
+      path: "Src/SyntheticRotation.pa.yaml", name: "SyntheticRotation.pa.yaml",
+      content: yaml, origin: "yaml", format: "pa-yaml-v3"
+    }], "yaml");
+    expect(model.screens).toHaveLength(1);
+    const control = model.screens[0].children[0];
+    expect(control.properties.Rotation).toBe("=90");
+    const html = renderToStaticMarkup(<svg><CanvasVisualControl
+      control={control} x={10} y={20} width={64} height={40}
+      clipId="fixture-icon-clip" /></svg>);
+    expect(html).toContain('transform="rotate(90 12 12)"');
   });
 });

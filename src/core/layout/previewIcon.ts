@@ -8,6 +8,8 @@
  * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-shapes-icons
  * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-icon
  */
+import { staticNumber, type StaticPowerFxValue } from "../powerfx/staticEval";
+
 export const PREVIEW_ICON_PATHS = {
   add: "M12 4V20 M4 12H20",
   search: "M10.5 4A6.5 6.5 0 1 0 10.5 17A6.5 6.5 0 1 0 10.5 4 M15.5 15.5L21 21",
@@ -44,4 +46,21 @@ export function previewIconName(raw: unknown, modern = false): PreviewIconResult
   }
   if (name === "none") return "none";
   return name && iconNames.has(name) ? name as PreviewIconName : null;
+}
+
+/**
+ * Classic Canvas Icon.Rotation is measured in degrees. Only a statically
+ * provable number may rotate the local preview glyph; unresolved Power Fx
+ * leaves the icon unrotated rather than guessing a runtime value.
+ * Normalization avoids unbounded SVG transform strings for large angles.
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-shapes-icons
+ */
+export function previewIconRotation(
+  raw: unknown,
+  symbols?: Record<string, StaticPowerFxValue>
+): number | null {
+  const degrees = staticNumber(raw, symbols);
+  if (degrees === null) return null;
+  const angle = degrees % 360;
+  return Object.is(angle, -0) ? 0 : angle;
 }
