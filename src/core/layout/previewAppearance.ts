@@ -299,3 +299,27 @@ export function previewCanRunOnSelect(
 ): boolean {
   return previewDisplayMode(control.properties.DisplayMode, symbols) === "edit";
 }
+
+/**
+ * Source-only preview must not execute local OnSelect behavior from controls
+ * that might be hidden, including descendants of unresolved Visible hosts.
+ * Inspecting a node remains allowed; only behavior simulation is gated.
+ * Gallery templates with Items are not evidence of actual loaded records.
+ */
+export function previewSelectionBehaviorGate(
+  control: CanvasControl,
+  symbols: Record<string, StaticPowerFxValue>,
+  options: {
+    ancestorVisibilityUnknown?: boolean;
+    runtimeGalleryStateUnknown?: boolean;
+    galleryRecordsUnknown?: boolean;
+  } = {}
+): "allowed" | "visibility-unverified" | "gallery-unverified" | "display-mode-unverified" {
+  if (options.ancestorVisibilityUnknown || previewVisibility(control, symbols) !== "visible") {
+    return "visibility-unverified";
+  }
+  if (options.runtimeGalleryStateUnknown || options.galleryRecordsUnknown) {
+    return "gallery-unverified";
+  }
+  return previewCanRunOnSelect(control, symbols) ? "allowed" : "display-mode-unverified";
+}
