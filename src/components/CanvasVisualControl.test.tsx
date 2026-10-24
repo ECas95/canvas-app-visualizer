@@ -223,7 +223,7 @@ describe("source-faithful Canvas label wrapping", () => {
 
   it("renders source BorderStyle responsively for phone, tablet and desktop", () => {
     const props = {
-      Text: '="Responsive outline"', BorderColor: "=Color.Red",
+      Text: '="Responsive outline"', Fill: "=Color.White", BorderColor: "=Color.Red",
       BorderThickness: "=2",
       BorderStyle: "=If(App.Width < 600, BorderStyle.None, App.Width < 1000, BorderStyle.Dotted, BorderStyle.Dashed)"
     };
@@ -239,7 +239,7 @@ describe("source-faithful Canvas label wrapping", () => {
 
   it("does not suppress or dash borders based on unknown permission variables", () => {
     const html = render({
-      Text: '="Unverified"', BorderColor: "=Color.Red", BorderThickness: "=2",
+      Text: '="Unverified"', Fill: "=Color.White", BorderColor: "=Color.Red", BorderThickness: "=2",
       BorderStyle: "=If(varSqlPermission, BorderStyle.None, BorderStyle.Dotted)"
     }, { "App.Width": 1366 });
     expect(html).toContain('stroke-width="2"');
