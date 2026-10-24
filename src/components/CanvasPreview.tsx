@@ -15,6 +15,8 @@ import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/lay
 import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScopedState, type PreviewVariables } from "../core/powerfx/previewBehavior";
 import { CanvasVisualControl } from "./CanvasVisualControl";
 import { previewChildClipPath } from "../core/layout/previewCorners";
+import { previewClampScroll, previewScrollRanges, previewScrolledPosition, previewWheelScroll,
+  type PreviewScrollOffset, type PreviewScrollRange } from "../core/layout/previewOverflow";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -142,6 +144,40 @@ function flatten(
   return output;
 }
 
+function PreviewScrollIndicators({ x, y, width, height, range, offset }: {
+  x: number; y: number; width: number; height: number;
+  range: PreviewScrollRange; offset: PreviewScrollOffset;
+}) {
+  const verticalTrack = Math.max(0, height - 8);
+  const horizontalTrack = Math.max(0, width - 8);
+  const verticalThumb = Math.min(verticalTrack,
+    Math.max(14, verticalTrack * height / (height + range.y)));
+  const horizontalThumb = Math.min(horizontalTrack,
+    Math.max(14, horizontalTrack * width / (width + range.x)));
+  return (
+    <g pointerEvents="none" aria-hidden="true">
+      {range.y > 0 && width >= 16 && height >= 20 && (
+        <g data-preview-scrollbar="vertical">
+          <rect x={x + width - 7} y={y + 4} width={4} height={verticalTrack}
+            rx={2} fill="#d4dce6" opacity={0.8} />
+          <rect x={x + width - 7}
+            y={y + 4 + (verticalTrack - verticalThumb) * offset.y / range.y}
+            width={4} height={verticalThumb} rx={2} fill="#627d9c" />
+        </g>
+      )}
+      {range.x > 0 && height >= 16 && width >= 20 && (
+        <g data-preview-scrollbar="horizontal">
+          <rect x={x + 4} y={y + height - 7} width={horizontalTrack} height={4}
+            rx={2} fill="#d4dce6" opacity={0.8} />
+          <rect x={x + 4 + (horizontalTrack - horizontalThumb) * offset.x / range.x}
+            y={y + height - 7} width={horizontalThumb} height={4}
+            rx={2} fill="#627d9c" />
+        </g>
+      )}
+    </g>
+  );
+}
+
 function wireframeColor(type: string): string {
   const lower = type.toLowerCase();
   if (lower.includes("button")) return "#0f6cbd";
@@ -158,6 +194,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
   const [focusSelection, setFocusSelection] = useState(false);
   const [interactive, setInteractive] = useState(false);
   const [scopedState, setScopedState] = useState<PreviewScopedState>({ globals: {}, context: {} });
+  const [scrollOffsets, setScrollOffsets] = useState<Record<string, PreviewScrollOffset>>({});
   const variables = useMemo(() => previewScopedSymbols(scopedState), [scopedState]);
   const [simulationMessage, setSimulationMessage] = useState("Simulation off. No behavior formulas are executed.");
   const instanceId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
@@ -165,6 +202,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
   useEffect(() => {
     setInteractive(false);
     setScopedState({ globals: {}, context: {} });
+    setScrollOffsets({});
     setSimulationMessage("Simulation off. No behavior formulas are executed.");
   }, [screen]);
 
@@ -172,6 +210,23 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
     const result = simulateScopedPreviewBehavior(formula, scopedState);
     if (result.ok) setScopedState(result.state);
     setSimulationMessage(result.message);
+  }
+
+  function scrollItem(item: DrawItem, deltaX: number, deltaY: number): boolean {
+    // Prefer the innermost host; at its boundary, allow an outer scroll host.
+    for (const id of [item.control.id, ...[...item.ancestors].reverse()]) {
+      const range = scrollRanges[id];
+      if (!range) continue;
+      const current = effectiveOffsets[id] ?? { x: 0, y: 0 };
+      const next = previewWheelScroll(current, range, deltaX, deltaY);
+      if (next.x === current.x && next.y === current.y) continue;
+      setScrollOffsets(previous => ({
+        ...previous,
+        [id]: previewWheelScroll(previous[id], range, deltaX, deltaY)
+      }));
+      return true;
+    }
+    return false;
   }
 
   function selectControl(item: DrawItem) {
@@ -196,11 +251,27 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
   }
   const { width, height } = PROFILES[profile];
 
-  const items = useMemo(
+  const rawItems = useMemo(
     () => screen ? flatten(screen.children, 0, 0, width, height, width, height,
       0, [], undefined, undefined, undefined, variables) : [],
     [screen, width, height, variables]
   );
+  const scrollRanges = useMemo(() => previewScrollRanges(rawItems.map(item => ({
+    id: item.control.id, ancestors: item.ancestors, x: item.x, y: item.y,
+    width: item.width, height: item.height, dynamic: item.dynamic,
+    visibilityUnknown: item.visibilityUnknown,
+    overflowX: item.control.properties.LayoutOverflowX,
+    overflowY: item.control.properties.LayoutOverflowY
+  }))), [rawItems]);
+  // Clamp previous offsets when the viewport changes; unknown geometry
+  // cannot establish a scrollable content extent.
+  const effectiveOffsets = useMemo(() => Object.fromEntries(
+    Object.entries(scrollRanges).map(([id, range]) =>
+      [id, previewClampScroll(scrollOffsets[id], range)])
+  ) as Record<string, PreviewScrollOffset>, [scrollRanges, scrollOffsets]);
+  const items = useMemo(() => rawItems.map(item => ({
+    ...item, ...previewScrolledPosition(item, effectiveOffsets)
+  })), [rawItems, effectiveOffsets]);
   const itemById = useMemo(
     () => new Map(items.map(item => [item.control.id, item])),
     [items]
@@ -318,6 +389,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                   role="button" tabIndex={0}
                   aria-label={`Inspect ${item.control.name} (${item.control.controlType})`}
                   onClick={event => { event.stopPropagation(); selectControl(item); }}
+                  onWheel={event => {
+                    if (scrollItem(item, event.deltaX, event.deltaY)) event.stopPropagation();
+                  }}
                   onKeyDown={event => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
@@ -419,6 +493,22 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                 </g>
               );
             })}
+            {mode === "visual" && visibleItems.filter(item =>
+              scrollRanges[item.control.id] !== undefined
+            ).map(item => {
+              const range = scrollRanges[item.control.id];
+              const offset = effectiveOffsets[item.control.id] ?? { x: 0, y: 0 };
+              const bar = <PreviewScrollIndicators x={item.x} y={item.y}
+                width={item.width} height={item.height} range={range} offset={offset} />;
+              const clipped = item.ancestors.reduceRight<ReactNode>((child, ancestor) => {
+                const parent = itemById.get(ancestor);
+                if (!parent || !/(gallery|container|form|datacard)/i.test(parent.control.controlType))
+                  return child;
+                const parentIndex = indexById.get(parent.control.id) ?? 0;
+                return <g clipPath={`url(#${instanceId}-bounds-${parentIndex})`}>{child}</g>;
+              }, bar);
+              return <g key={item.control.id + "-scrollbar"}>{clipped}</g>;
+            })}
           </svg>
         </div>
       </div>
@@ -459,6 +549,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
               <small>Context variables take precedence when names overlap. No data source is queried.</small>
             </div>
           </details>
+        )}
+        {Object.keys(scrollRanges).length > 0 && (
+          <span>Wheel scrolling is local to this preview; no runtime data is loaded.</span>
         )}
         <span>Gallery templates are illustrative; runtime records are not evaluated.</span>
         <span>Viewport profiles simulate dimensions; no formulas or connectors are executed.</span>
