@@ -107,4 +107,44 @@ describe("Canvas overflow semantics", () => {
       Outer: { x: 0, y: 60 }, Inner: { x: 0, y: 80 }
     });
   });
+
+  it("includes verified trailing auto-layout padding in both scroll axes", () => {
+    const host = item("Host", [], 10, 20, 100, 100, {
+      overflowX: "=LayoutOverflow.Scroll", overflowY: "=LayoutOverflow.Scroll",
+      paddingRight: "=16", paddingBottom: "=24"
+    });
+    const child = item("Child", ["Host"], 10, 20, 100, 90);
+    expect(previewScrollRanges([host, child])).toEqual({
+      Host: { x: 16, y: 14 }
+    });
+    expect(previewScrollRanges([{ ...host, paddingRight: "=0", paddingBottom: "=0" }, child]))
+      .not.toHaveProperty("Host");
+  });
+
+  it("evaluates viewport-dependent trailing padding without runtime assumptions", () => {
+    const host = item("Host", [], 0, 0, 100, 100, {
+      overflowY: "=LayoutOverflow.Scroll",
+      paddingBottom: "=If(App.Width < 720, 25, 0)"
+    });
+    const child = item("Child", ["Host"], 0, 0, 100, 90);
+    expect(previewScrollRanges([{ ...host, symbols: { "App.Width": 390 } }, child]))
+      .toEqual({ Host: { x: 0, y: 15 } });
+    expect(previewScrollRanges([{ ...host, symbols: { "App.Width": 1366 } }, child]))
+      .not.toHaveProperty("Host");
+    expect(previewScrollRanges([host, child])).not.toHaveProperty("Host");
+  });
+
+  it("rejects unknown trailing padding only on the scrollable axis", () => {
+    const child = item("Child", ["Host"], 0, 0, 100, 180);
+    const host = item("Host", [], 0, 0, 100, 100, {
+      overflowY: "=LayoutOverflow.Scroll",
+      paddingRight: "=unknownHorizontalPadding",
+      paddingBottom: "=unknownVerticalPadding"
+    });
+    expect(previewScrollRanges([host, child])).not.toHaveProperty("Host");
+    expect(previewScrollRanges([{ ...host, paddingBottom: "=0" }, child]))
+      .toEqual({ Host: { x: 0, y: 80 } });
+    expect(previewScrollRanges([{ ...host, paddingBottom: "=-10" }, child]))
+      .not.toHaveProperty("Host");
+  });
 });
