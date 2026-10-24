@@ -590,3 +590,47 @@ describe("Canvas viewport-responsive text rendering", () => {
     expect(desktop).toContain("font-weight:400");
   });
 });
+
+describe("unknown runtime checked state in Canvas visual controls", () => {
+  function renderBoolean(type: string, properties: Record<string, unknown>,
+    symbols?: Record<string, string | number | boolean>) {
+    return renderToStaticMarkup(<svg><CanvasVisualControl
+      control={{ ...label(properties), controlType: type }}
+      x={10} y={20} width={140} height={64}
+      clipId="synthetic-checked-clip" simulationSymbols={symbols} /></svg>);
+  }
+
+  it("marks an unresolved classic checkbox without painting a false checkmark", () => {
+    const html = renderBoolean("Classic/CheckBox@2.1.0", {
+      Text: '="Feature enabled"', Default: "=varSqlFlag"
+    });
+    expect(html).toContain('data-preview-checked="unknown"');
+    expect(html).toContain("Checked state unknown");
+    expect(html).toContain("Feature enabled");
+    expect(html).not.toContain('fill="#0f6cbd"');
+  });
+
+  it("distinguishes unknown modern toggle from verified true and false", () => {
+    const type = "Modern/Toggle@1.0.0";
+    const props = { Checked: "=varEnabled" };
+    const unknown = renderBoolean(type, props);
+    const off = renderBoolean(type, props, { varEnabled: false });
+    const on = renderBoolean(type, props, { varEnabled: true });
+    expect(unknown).toContain('data-preview-checked="unknown"');
+    expect(unknown).toContain('cx="33"');
+    expect(off).toContain('data-preview-checked="unchecked"');
+    expect(off).toContain('cx="25"');
+    expect(on).toContain('data-preview-checked="checked"');
+    expect(on).toContain('cx="40"');
+    expect(on).toContain('fill="#0f6cbd"');
+    expect(off).not.toContain("Checked state unknown");
+  });
+
+  it("keeps source Checked authoritative over contradictory fallback properties", () => {
+    const html = renderBoolean("Modern/Checkbox@1.0.0", {
+      Checked: "=false", Default: "=true", Value: "=true"
+    });
+    expect(html).toContain('data-preview-checked="unchecked"');
+    expect(html).not.toContain('fill="#0f6cbd"');
+  });
+});
