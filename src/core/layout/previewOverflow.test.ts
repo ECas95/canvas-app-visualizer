@@ -147,4 +147,47 @@ describe("Canvas overflow semantics", () => {
     expect(previewScrollRanges([{ ...host, paddingBottom: "=-10" }, child]))
       .not.toHaveProperty("Host");
   });
+  it("does not invent overflow from an editor Group's serialized bounding box", () => {
+    const nodes = [
+      item("Host", [], 0, 0, 200, 100, { overflowY: "=LayoutOverflow.Scroll" }),
+      item("EditorGroup", ["Host"], 0, 0, 600, 400, { editorGroup: true }),
+      item("VisibleChild", ["Host", "EditorGroup"], 0, 0, 100, 90)
+    ];
+    expect(previewScrollRanges(nodes)).not.toHaveProperty("Host");
+  });
+
+  it("counts children through editor Groups using their real coordinates", () => {
+    const nodes = [
+      item("Host", [], 10, 20, 200, 100, { overflowY: "=LayoutOverflow.Scroll" }),
+      item("EditorGroup", ["Host"], 0, 0, 600, 400, {
+        editorGroup: true, dynamic: true, overflowY: "=LayoutOverflow.Scroll"
+      }),
+      item("VisibleChild", ["Host", "EditorGroup"], 10, 20, 100, 180)
+    ];
+    expect(previewScrollRanges(nodes)).toEqual({ Host: { x: 0, y: 80 } });
+    expect(previewScrollRanges(nodes)).not.toHaveProperty("EditorGroup");
+  });
+
+  it("does not flatten a real nested container when an editor Group surrounds it", () => {
+    const nodes = [
+      item("Host", [], 0, 0, 200, 100, { overflowY: "=LayoutOverflow.Scroll" }),
+      item("EditorGroup", ["Host"], 0, 0, 600, 400, { editorGroup: true }),
+      item("Inner", ["Host", "EditorGroup"], 0, 0, 150, 80, {
+        overflowY: "=LayoutOverflow.Scroll"
+      }),
+      item("Leaf", ["Host", "EditorGroup", "Inner"], 0, 0, 100, 200)
+    ];
+    expect(previewScrollRanges(nodes)).toEqual({ Inner: { x: 0, y: 120 } });
+  });
+
+  it("never treats descendants behind a non-Group ancestor as direct scroll content", () => {
+    const nodes = [
+      item("Host", [], 0, 0, 200, 100, { overflowY: "=LayoutOverflow.Scroll" }),
+      item("Inner", ["Host"], 0, 0, 150, 80),
+      item("EditorGroup", ["Host", "Inner"], 0, 0, 600, 400, { editorGroup: true }),
+      item("Leaf", ["Host", "Inner", "EditorGroup"], 0, 0, 100, 240)
+    ];
+    expect(previewScrollRanges(nodes)).not.toHaveProperty("Host");
+  });
+
 });
