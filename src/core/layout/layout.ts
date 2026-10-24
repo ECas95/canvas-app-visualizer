@@ -281,10 +281,10 @@ export function autoLayoutChildren(
   if (children.length === 0) return [];
 
   const symbols = layoutSymbols(context) ?? {};
-  const direction =
-    enumTail(staticString(parent.properties.LayoutDirection, symbols)) ??
-    parent.layout?.toLowerCase() ??
-    "vertical";
+  const resolvedDirection = enumTail(staticString(parent.properties.LayoutDirection, symbols));
+  const direction = resolvedDirection ?? parent.layout?.toLowerCase() ?? "vertical";
+  const directionUnknown = parent.properties.LayoutDirection !== undefined &&
+    !["horizontal", "vertical"].includes(resolvedDirection ?? "");
   const horizontal = direction.includes("horizontal");
 
   const gap = staticNumber(parent.properties.LayoutGap, symbols) ?? 0;
@@ -292,6 +292,13 @@ export function autoLayoutChildren(
   const paddingRight = staticNumber(parent.properties.PaddingRight, symbols) ?? 0;
   const paddingTop = staticNumber(parent.properties.PaddingTop, symbols) ?? 0;
   const paddingBottom = staticNumber(parent.properties.PaddingBottom, symbols) ?? 0;
+  // An unresolved layout formula is not equivalent to its fallback value.
+  // Keep approximate positions inspectable without claiming exact geometry.
+  const spacingUnknown = [
+    parent.properties.LayoutGap,
+    parent.properties.PaddingLeft, parent.properties.PaddingRight,
+    parent.properties.PaddingTop, parent.properties.PaddingBottom
+  ].some(value => value !== undefined && staticNumber(value, symbols) === null);
 
   const innerWidth = Math.max(
     0,
@@ -428,12 +435,16 @@ export function autoLayoutChildren(
       fallback = true;
     }
 
-    const parentAlign =
-      enumTail(staticString(parent.properties.LayoutAlignItems, symbols)) ??
-      "start";
-    const childAlign =
-      enumTail(staticString(item.control.properties.AlignInContainer, symbols)) ??
-      parentAlign;
+    const parentAlignValue = enumTail(staticString(parent.properties.LayoutAlignItems, symbols));
+    const childAlignValue = enumTail(staticString(item.control.properties.AlignInContainer, symbols));
+    // SetByContainer inherits the container's cross-axis alignment.
+    const inheritsAlign = childAlignValue === null || childAlignValue === "setbycontainer";
+    const childAlign = inheritsAlign ? parentAlignValue ?? "start" : childAlignValue;
+    const alignUnknown =
+      (item.control.properties.AlignInContainer !== undefined && childAlignValue === null) ||
+      (inheritsAlign && parent.properties.LayoutAlignItems !== undefined && parentAlignValue === null) ||
+      !["start", "center", "end", "stretch"].includes(childAlign);
+    if (alignUnknown) fallback = true;
 
     if (childAlign === "stretch") {
       if (horizontal) {
@@ -469,9 +480,10 @@ export function autoLayoutChildren(
     0
   );
   const extra = Math.max(0, mainAvailable - usedMain);
-  const justify =
-    enumTail(staticString(parent.properties.LayoutJustifyContent, symbols)) ??
-    "start";
+  const resolvedJustify = enumTail(staticString(parent.properties.LayoutJustifyContent, symbols));
+  const justify = resolvedJustify ?? "start";
+  const justifyUnknown = parent.properties.LayoutJustifyContent !== undefined &&
+    !["start", "center", "end", "spacebetween"].includes(resolvedJustify ?? "");
 
   let leading = 0;
   let effectiveGap = gap;
@@ -503,7 +515,8 @@ export function autoLayoutChildren(
       y,
       width: item.width,
       height: item.height,
-      dynamic: item.fallback || wrapUncertain
+      dynamic: item.fallback || wrapUncertain || directionUnknown ||
+        spacingUnknown || justifyUnknown
     };
 
     cursor +=
