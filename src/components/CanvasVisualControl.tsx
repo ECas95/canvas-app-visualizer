@@ -153,7 +153,7 @@ export function CanvasVisualControl({
           // HTML layout measures glyphs in the browser: SVG <text> does not wrap.
           // Only serialized Wrap=true (or a provably true local expression) opts in.
           <foreignObject x={x} y={y} width={width} height={height} pointerEvents="none">
-            <div xmlns="http://www.w3.org/1999/xhtml" style={{
+            <div style={{
               boxSizing: "border-box", display: "flex", width: "100%", height: "100%",
               overflow: "hidden",
               alignItems: verticalAlign === "top" ? "flex-start" :
