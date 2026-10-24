@@ -335,6 +335,71 @@ export function autoLayoutChildren(
     };
   });
 
+  // Microsoft Canvas Wrap moves fixed-size children to the next row/column
+  // when they no longer fit on the main axis. Child AlignInContainer is
+  // ignored with Wrap (Microsoft responsive-layout documented limitation).
+  // Only claim exact geometry for a fully static, Start-justified case.
+  const wrap = staticBoolean(parent.properties.LayoutWrap, symbols);
+  const numericKnown = (value: unknown): boolean =>
+    value === undefined || staticNumber(value, symbols) !== null;
+  const justifyRaw = parent.properties.LayoutJustifyContent;
+  const justifyStart = justifyRaw === undefined ||
+    enumTail(staticString(justifyRaw, symbols)) === "start";
+  const knownSpacing = [
+    parent.properties.LayoutGap,
+    parent.properties.PaddingLeft, parent.properties.PaddingRight,
+    parent.properties.PaddingTop, parent.properties.PaddingBottom
+  ].every(numericKnown) &&
+    gap >= 0 && paddingLeft >= 0 && paddingRight >= 0 &&
+    paddingTop >= 0 && paddingBottom >= 0;
+  const fixedChildren = sizing.every(item =>
+    item.fill === 0 && item.width !== null && item.height !== null &&
+    [
+      item.control.properties.FillPortions,
+      item.control.properties.LayoutMinWidth,
+      item.control.properties.LayoutMinHeight,
+      item.control.properties.LayoutMaxWidth,
+      item.control.properties.LayoutMaxHeight
+    ].every(numericKnown)
+  );
+  const knownDirection = parent.properties.LayoutDirection === undefined ||
+    ["horizontal", "vertical"].includes(
+      enumTail(staticString(parent.properties.LayoutDirection, symbols)) ?? ""
+    );
+
+  if (wrap === true && justifyStart && knownSpacing && fixedChildren && knownDirection) {
+    const startMain = horizontal ? paddingLeft : paddingTop;
+    const maxMain = startMain + (horizontal ? innerWidth : innerHeight);
+    let cursorMain = startMain;
+    let cursorCross = horizontal ? paddingTop : paddingLeft;
+    let lineCrossSize = 0;
+
+    return sizing.map(item => {
+      const mainSize = horizontal ? item.baseWidth : item.baseHeight;
+      const crossSize = horizontal ? item.baseHeight : item.baseWidth;
+      if (cursorMain > startMain && cursorMain + mainSize > maxMain) {
+        cursorMain = startMain;
+        cursorCross += lineCrossSize + gap;
+        lineCrossSize = 0;
+      }
+      const rect: VisualRect = {
+        x: horizontal ? cursorMain : cursorCross,
+        y: horizontal ? cursorCross : cursorMain,
+        width: Math.max(8, item.baseWidth),
+        height: Math.max(8, item.baseHeight),
+        dynamic: false
+      };
+      cursorMain += mainSize + gap;
+      lineCrossSize = Math.max(lineCrossSize, crossSize);
+      return { control: item.control, rect };
+    });
+  }
+
+  // A dynamic Wrap condition, or a combination whose wrap behavior cannot
+  // be established from source alone, must not appear as verified geometry.
+  const wrapUncertain = wrap === true ||
+    (parent.properties.LayoutWrap !== undefined && wrap === null);
+
   const fixedMain = sizing.reduce((sum, item) => {
     if (item.fill > 0) return sum;
     return sum + (horizontal ? item.baseWidth : item.baseHeight);
@@ -436,7 +501,7 @@ export function autoLayoutChildren(
       y,
       width: item.width,
       height: item.height,
-      dynamic: item.fallback
+      dynamic: item.fallback || wrapUncertain
     };
 
     cursor +=
