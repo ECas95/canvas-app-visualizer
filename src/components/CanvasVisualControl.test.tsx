@@ -158,7 +158,7 @@ describe("Canvas container DropShadow rendering", () => {
     });
     expect(html).toContain("filter:drop-shadow(");
     expect(html).toContain("M 22 20");
-    expect(html.match(/filter:drop-shadow\\(/g)).toHaveLength(1);
+    expect(html.match(/filter:drop-shadow\(/g)).toHaveLength(1);
   });
 
   it("does not add shadows for None, unknown runtime formulas or absent Fill", () => {
