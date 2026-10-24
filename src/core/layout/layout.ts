@@ -80,28 +80,26 @@ export function literalText(value: unknown): string | null {
   return staticString(value);
 }
 
+/**
+ * Resolve only literal Power Fx RGBA colors. Microsoft accepts numeric alpha
+ * from 0 to 1 or percentage alpha from 0% to 100%; channels are 0..255.
+ * Invalid inputs remain unknown instead of relying on browser CSS clamping.
+ * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-colors
+ */
 export function rgba(value: unknown): string | null {
   if (typeof value !== "string") return null;
-
-  const match = value
-    .trim()
-    .match(
-      /^=\s*RGBA\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)\s*$/i
-    );
-
-  if (!match) return null;
-
-  return (
-    "rgba(" +
-    match[1] +
-    "," +
-    match[2] +
-    "," +
-    match[3] +
-    "," +
-    match[4] +
-    ")"
+  const number = String.raw`(?:\d+(?:\.\d*)?|\.\d+)`;
+  const pattern = new RegExp(
+    String.raw`^=?\s*RGBA\(\s*(${number})\s*,\s*(${number})\s*,\s*(${number})\s*,\s*(${number})(%)?\s*\)\s*$`,
+    "i"
   );
+  const match = pattern.exec(value.trim());
+  if (!match) return null;
+  const channels = match.slice(1, 4).map(Number);
+  const alpha = Number(match[4]) / (match[5] ? 100 : 1);
+  if (channels.some(channel => !Number.isFinite(channel) || channel < 0 || channel > 255) ||
+      !Number.isFinite(alpha) || alpha < 0 || alpha > 1) return null;
+  return `rgba(${channels.join(',')},${alpha})`;
 }
 
 export function defaultControlSize(
