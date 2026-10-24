@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CanvasControl } from "../types/canvas";
 import { CanvasVisualControl } from "./CanvasVisualControl";
+import { buildCanvasModel } from "../core/model/normalize";
 
 function label(properties: Record<string, unknown>): CanvasControl {
   return {
@@ -18,6 +19,54 @@ function render(properties: Record<string, unknown>, symbols?: Record<string, st
       width={140} height={64} clipId="test-label-clip" simulationSymbols={symbols} />
   );
 }
+
+describe("Microsoft ModernText .pa.yaml rendering", () => {
+  it("renders the documented ModernText family as text with wrapped content", () => {
+    const yaml = [
+      "Screens:",
+      "  Synthetic:",
+      "    Children:",
+      "      - ModernHeading:",
+      "          Control: ModernText@1.0.0",
+      "          Properties:",
+      '            Text: ="Modern heading with wrapping"',
+      "            Wrap: =true",
+      "            Width: =140",
+      "            Height: =64"
+    ].join("\n");
+    const model = buildCanvasModel([{
+      path: "Src/SyntheticModernText.pa.yaml", name: "SyntheticModernText.pa.yaml",
+      content: yaml, origin: "yaml", format: "pa-yaml-v3"
+    }], "yaml");
+    const control = model.screens[0].children[0];
+    expect(control.controlType).toBe("ModernText@1.0.0");
+    const html = renderToStaticMarkup(<svg><CanvasVisualControl
+      control={control} x={10} y={20} width={140} height={64}
+      clipId="modern-text-clip" /></svg>);
+    expect(html).toContain("<foreignObject");
+    expect(html).toContain("Modern heading with wrapping");
+    expect(html).toContain("font-size:15px");
+    expect(html).not.toContain("ModernHeading</tspan>");
+  });
+
+  it("keeps explicit modern text sizing and does not invent unresolved text", () => {
+    const control: CanvasControl = {
+      ...label({ Text: "=varSqlTitle", Size: "=22", Wrap: "=false" }),
+      controlType: "ModernText@1.0.0"
+    };
+    const unknown = renderToStaticMarkup(<svg><CanvasVisualControl
+      control={control} x={10} y={20} width={140} height={64}
+      clipId="modern-text-unknown" /></svg>);
+    expect(unknown).not.toContain("varSqlTitle");
+    expect(unknown).not.toContain("SyntheticLabel</tspan>");
+    const known = renderToStaticMarkup(<svg><CanvasVisualControl
+      control={{ ...control, properties: { Text: '="Verified title"', Size: "=22", Wrap: "=false" } }}
+      x={10} y={20} width={140} height={64}
+      clipId="modern-text-known" /></svg>);
+    expect(known).toContain("Verified title");
+    expect(known).toContain('font-size="22"');
+  });
+});
 
 describe("source-faithful Canvas label wrapping", () => {
   it("uses the same source Font family in SVG and wrapped HTML labels", () => {
