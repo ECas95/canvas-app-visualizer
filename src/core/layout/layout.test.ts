@@ -4,6 +4,7 @@ import {
   buildSiblingGeometrySymbols,
   controlRect,
   galleryTemplateLayout,
+  galleryTemplateGuideRect,
   literalNumber,
   literalText,
   rgba
@@ -492,4 +493,50 @@ describe("layout literal helpers", () => {
   });
 
 
+});
+
+
+describe("source-only gallery guide geometry", () => {
+  const gallery = (variant: string, properties: Record<string, unknown>): CanvasControl => ({
+    id: "fixture", name: "Fixture", controlType: "Gallery", variant,
+    properties, children: [], sourceFile: "Src/Fixture.pa.yaml",
+    sourcePath: "Screens/Fixture/Gallery", sourceFormat: "pa-yaml-v3", zIndex: 1
+  });
+
+  it("places responsive vertical WrapCount slots in columns", () => {
+    const control = gallery("Vertical", {
+      WrapCount: "=If(App.Width < 720, 1, If(App.Width < 1180, 2, 3))",
+      TemplateSize: "=292", TemplatePadding: "=8"
+    });
+    for (const [appWidth, expectedColumns] of [[390, 1], [900, 2], [1366, 3]]) {
+      const template = galleryTemplateLayout(control,
+        { x: 0, y: 0, width: 600, height: 320, dynamic: false },
+        { appWidth, appHeight: 768, parentWidth: 600, parentHeight: 320 });
+      expect(template?.wrapCount).toBe(expectedColumns);
+      const guide = galleryTemplateGuideRect(template!, 1, 20, 30);
+      expect(guide.x).toBeCloseTo(20 + 600 / expectedColumns + 8);
+      expect(guide.y).toBe(38);
+      expect(guide.width).toBeCloseTo(600 / expectedColumns - 16);
+      expect(guide.height).toBe(276);
+    }
+  });
+
+  it("places horizontal WrapCount slots in rows rather than columns", () => {
+    const template = galleryTemplateLayout(gallery("Horizontal", {
+      WrapCount: "=3", TemplateSize: "=292", TemplatePadding: "=8"
+    }), { x: 0, y: 0, width: 620, height: 300, dynamic: false });
+    expect(template?.orientation).toBe("horizontal");
+    expect(galleryTemplateGuideRect(template!, 1, 20, 30))
+      .toEqual({ x: 28, y: 138, width: 276, height: 84 });
+    expect(galleryTemplateGuideRect(template!, 2, 20, 30))
+      .toEqual({ x: 28, y: 238, width: 276, height: 84 });
+  });
+
+  it("does not generate negative guide dimensions for excessive padding", () => {
+    const template = galleryTemplateLayout(gallery("Vertical", {
+      WrapCount: "=2", TemplateSize: "=24", TemplatePadding: "=50"
+    }), { x: 0, y: 0, width: 100, height: 80, dynamic: false });
+    expect(galleryTemplateGuideRect(template!, 1, 0, 0))
+      .toEqual({ x: 100, y: 50, width: 0, height: 0 });
+  });
 });
