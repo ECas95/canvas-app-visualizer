@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { previewCornerRadii, previewRoundedRectPath } from "./previewCorners";
+import { previewChildClipPath, previewCornerRadii, previewRoundedRectPath } from "./previewCorners";
 
 describe("Canvas corner radius preview", () => {
   it("preserves independent serialized corners instead of copying top-left to all corners", () => {
@@ -53,5 +53,33 @@ describe("Canvas corner radius preview", () => {
     const zero = previewRoundedRectPath(0, 0, 0, 0, radii);
     expect(zero).not.toContain("NaN");
     expect(zero).not.toContain("Infinity");
+  });
+  it("clips children to explicitly serialized independent corners", () => {
+    const path = previewChildClipPath({
+      RadiusTopLeft: "=12", RadiusTopRight: "=0",
+      RadiusBottomRight: "=6", RadiusBottomLeft: "=2"
+    }, 10, 20, 100, 40);
+    expect(path).toContain("M 22 20");
+    expect(path).toContain("H 110 Q 110 20 110 20");
+    expect(path).toContain("Q 110 60 104 60");
+    expect(path).toContain("H 12 Q 10 60 10 58");
+  });
+
+  it("never invents rounded clipping for absent or runtime-dependent corners", () => {
+    const unknown = previewChildClipPath({
+      RadiusTopLeft: "=If(varAccess, 30, 0)",
+      RadiusBottomRight: "=Parent.Width / 10"
+    }, 0, 0, 80, 40);
+    expect(unknown).toBe(previewChildClipPath({}, 0, 0, 80, 40));
+    expect(unknown).toContain("M 0 0 H 80");
+  });
+
+  it("bounds pathological radii and zero-size clip regions", () => {
+    const path = previewChildClipPath({
+      RadiusTopLeft: "=10000", RadiusBottomRight: "=-5"
+    }, 0, 0, 100, 20);
+    expect(path).toContain("M 10 0");
+    expect(path).not.toContain("NaN");
+    expect(previewChildClipPath({}, 0, 0, 0, 0)).not.toContain("Infinity");
   });
 });
