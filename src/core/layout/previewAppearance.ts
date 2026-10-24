@@ -210,8 +210,18 @@ export function previewText(control: CanvasControl): string | null {
   const props = control.properties;
   const kind = previewKind(control.controlType);
   if (kind === "input") {
-    return literalText(props.Default) ?? literalText(props.Value) ??
-      literalText(props.HintText);
+    // HintText is visible only when the input is blank. An unresolved Default
+    // or Value is not proof of an empty input, so never paint the hint as a
+    // confirmed runtime state. This is source-only; no data is evaluated.
+    // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-text-input
+    const source = props.Default !== undefined ? props.Default : props.Value;
+    if (source !== undefined && source !== null) {
+      const initial = literalText(source);
+      if (initial === null) return null;
+      if (initial !== "") return initial;
+      return literalText(props.HintText) ?? "";
+    }
+    return literalText(props.HintText);
   }
   if (kind === "select") {
     return literalText(props.DefaultSelectedItems) ??
