@@ -246,6 +246,65 @@ describe("source-faithful Canvas label wrapping", () => {
     expect(html).not.toContain("stroke-dasharray=");
   });
 
+  it("evaluates responsive BorderThickness from verified viewport symbols", () => {
+    const props = {
+      Text: '="Responsive thickness"', Fill: "=Color.White", BorderColor: "=Color.Red",
+      BorderThickness: "=If(App.Width < 600, 0, App.Width < 1000, 2, 4)",
+      BorderStyle: "=BorderStyle.Dashed"
+    };
+    const phone = render(props, { "App.Width": 390 });
+    const tablet = render(props, { "App.Width": 820 });
+    const desktop = render(props, { "App.Width": 1366 });
+    expect(phone).toContain('stroke-width="0"');
+    expect(tablet).toContain('stroke-width="2"');
+    expect(tablet).toContain('stroke-dasharray="6 4"');
+    expect(desktop).toContain('stroke-width="4"');
+    expect(desktop).toContain('stroke-dasharray="12 8"');
+  });
+
+  it("resolves nested numeric formulas only with known parent and local symbols", () => {
+    const props = {
+      Text: '="Nested"', Fill: "=Color.White", BorderColor: "=Color.Red",
+      BorderThickness: "=If(App.Width < 600, Parent.Width / 50, If(varLocal, 3, 1))"
+    };
+    expect(render(props, { "App.Width": 390, "Parent.Width": 150 }))
+      .toContain('stroke-width="3"');
+    expect(render(props, { "App.Width": 1366, varLocal: true }))
+      .toContain('stroke-width="3"');
+    expect(render(props, { "App.Width": 1366 }))
+      .toContain('stroke-width="1"');
+  });
+
+  it("does not infer unknown or invalid BorderThickness as a zero-width border", () => {
+    const base = {
+      Text: '="Unverified"', Fill: "=Color.White", BorderColor: "=Color.Red"
+    };
+    for (const thickness of [
+      "=If(varSqlPermission, 0, 5)", "=SQL.BorderThickness", "=-5"
+    ]) {
+      const html = render({ ...base, BorderThickness: thickness });
+      // The renderer retains its generic outline fallback, not a verified 0 or 5.
+      expect(html).toContain('stroke-width="1"');
+      expect(html).not.toContain('stroke-width="5"');
+    }
+  });
+
+  it("applies verified thickness to circle outlines without guessing runtime state", () => {
+    const control = {
+      ...label({
+        Fill: "=Color.White", BorderColor: "=Color.Red",
+        BorderThickness: "=If(App.Width < 720, 3, 1)"
+      }),
+      controlType: "Classic/Circle@2.3.0"
+    };
+    const draw = (symbols: Record<string, number>) => renderToStaticMarkup(
+      <CanvasVisualControl control={control} x={10} y={20} width={80}
+        height={80} clipId="circle-thickness" simulationSymbols={symbols} />
+    );
+    expect(draw({ "App.Width": 390 })).toContain('stroke-width="3"');
+    expect(draw({ "App.Width": 1366 })).toContain('stroke-width="1"');
+  });
+
   it("does not guess a runtime-dependent BorderStyle", () => {
     const html = render({
       Text: '="Unknown style"', Fill: "=Color.White", BorderColor: "=Color.Red",
