@@ -175,6 +175,17 @@ export function previewVisibility(
   return visible === true ? "visible" : visible === false ? "hidden" : "unknown";
 }
 
+/** Only a provably true Canvas Wrap formula enables browser-measured label wrapping.
+ * Unknown runtime values keep the existing conservative SVG text fallback.
+ */
+export function previewLabelWrap(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): boolean {
+  return previewKind(control.controlType) === "label" &&
+    staticBoolean(control.properties.Wrap, symbols) === true;
+}
+
 export function isDefinitelyHidden(
   control: CanvasControl,
   symbols?: Record<string, StaticPowerFxValue>
