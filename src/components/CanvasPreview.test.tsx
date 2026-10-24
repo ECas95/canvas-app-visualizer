@@ -220,3 +220,46 @@ describe("CanvasPreview unresolved ancestor visibility", () => {
     expect(html).not.toContain("Inspect TemplateChild");
   });
 });
+
+
+function renderOverflowHost(axis: "horizontal" | "vertical", overflow: string) {
+  const children = ["First", "Second"].map(name => control(name, "Classic/Label@2.5.1", {
+    Width: axis === "horizontal" ? "=80" : "=100",
+    Height: axis === "vertical" ? "=80" : "=60",
+    Text: '="Synthetic content"'
+  }));
+  const host = control("OverflowHost", "GroupContainer@1.3.0", {
+    X: "=20", Y: "=30", Width: "=100", Height: "=100",
+    LayoutDirection: axis === "horizontal" ? "=LayoutDirection.Horizontal" : "=LayoutDirection.Vertical",
+    [axis === "horizontal" ? "LayoutOverflowX" : "LayoutOverflowY"]: overflow
+  }, children);
+  host.variant = "AutoLayout";
+  const screen: CanvasScreen = {
+    id: "OverflowFixture", name: "OverflowFixture", properties: {}, children: [host],
+    sourceFile: "Src/OverflowFixture.pa.yaml", sourceFormat: "pa-yaml-v3"
+  };
+  return renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+}
+
+describe("CanvasPreview local-only container scrolling", () => {
+  it("shows a vertical scroll affordance only for proven overflow", () => {
+    const html = renderOverflowHost("vertical", "=LayoutOverflow.Scroll");
+    expect(html).toContain('data-preview-scrollbar="vertical"');
+    expect(html).toContain("Wheel scrolling is local to this preview");
+    expect(html).toContain("Inspect First");
+    expect(html).toContain("Inspect Second");
+  });
+
+  it("shows horizontal scroll affordance for a horizontal layout", () => {
+    const html = renderOverflowHost("horizontal", "=LayoutOverflow.Scroll");
+    expect(html).toContain('data-preview-scrollbar="horizontal"');
+    expect(html).not.toContain('data-preview-scrollbar="vertical"');
+  });
+
+  it("does not fabricate scrollability for Hide or dynamic Power Fx", () => {
+    expect(renderOverflowHost("vertical", "=LayoutOverflow.Hide"))
+      .not.toContain('data-preview-scrollbar="vertical"');
+    expect(renderOverflowHost("vertical", "=If(flag, LayoutOverflow.Scroll, LayoutOverflow.Hide)"))
+      .not.toContain('data-preview-scrollbar="vertical"');
+  });
+});
