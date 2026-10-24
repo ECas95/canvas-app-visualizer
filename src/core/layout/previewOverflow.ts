@@ -1,4 +1,4 @@
-import { staticString, type StaticPowerFxValue } from "../powerfx/staticEval";
+import { staticNumber, staticString, type StaticPowerFxValue } from "../powerfx/staticEval";
 
 /**
  * Source-only scroll geometry for Canvas auto-layout containers.
@@ -25,6 +25,9 @@ export interface PreviewScrollItem {
   visibilityUnknown: boolean;
   overflowX?: unknown;
   overflowY?: unknown;
+  /** Trailing auto-layout padding can extend the scrollable content bounds. */
+  paddingRight?: unknown;
+  paddingBottom?: unknown;
   /** Known App/Parent/Self/local-only symbols; no SQL or inferred permissions. */
   symbols?: Record<string, StaticPowerFxValue>;
 }
@@ -69,10 +72,22 @@ export function previewScrollRanges(
       item.dynamic || item.visibilityUnknown ||
       ![item.x, item.y, item.width, item.height].every(Number.isFinite)
     )) continue;
+    // Canvas auto-layout includes trailing padding in the content extent.
+    // A runtime-dependent padding value cannot establish a safe scroll range.
+    // Only evaluate the padding for axes that are explicitly scrollable.
+    const rightPadding = horizontal
+      ? host.paddingRight === undefined ? 0 : staticNumber(host.paddingRight, host.symbols)
+      : 0;
+    const bottomPadding = vertical
+      ? host.paddingBottom === undefined ? 0 : staticNumber(host.paddingBottom, host.symbols)
+      : 0;
+    if (rightPadding === null || bottomPadding === null ||
+        !Number.isFinite(rightPadding) || !Number.isFinite(bottomPadding) ||
+        rightPadding < 0 || bottomPadding < 0) continue;
     const right = Math.max(host.x + host.width,
-      ...children.map(item => item.x + item.width));
+      ...children.map(item => item.x + item.width + rightPadding));
     const bottom = Math.max(host.y + host.height,
-      ...children.map(item => item.y + item.height));
+      ...children.map(item => item.y + item.height + bottomPadding));
     const x = horizontal ? Math.max(0, right - host.x - host.width) : 0;
     const y = vertical ? Math.max(0, bottom - host.y - host.height) : 0;
     if (x > 0 || y > 0) ranges[host.id] = { x, y };
