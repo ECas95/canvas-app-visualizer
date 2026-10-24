@@ -3,7 +3,7 @@ import type { CanvasControl } from "../../types/canvas";
 import {
   isDefinitelyHidden, previewVisibility, previewCanRunOnSelect, previewBorderStyle, previewColor, previewColorWithSymbols, previewDisplayMode, previewFontFamily, PREVIEW_DEFAULT_FONT, previewFontSize, previewFontWeight,
   previewHorizontalAlign, previewIsChecked, previewItalic, previewKind,
-  previewText, previewTextDecoration, previewVerticalAlign
+  previewText, previewTextDecoration, previewVerticalAlign, previewSelectionBehaviorGate
 } from "./previewAppearance";
 
 function control(type: string, properties: Record<string, unknown> = {}): CanvasControl {
@@ -215,4 +215,42 @@ describe("semantic preview classification", () => {
     expect(previewBorderStyle("=BorderStyle.Unknown")).toBeNull();
   });
 
+});
+
+
+describe("local OnSelect preview safety gate", () => {
+  const action = (properties: Record<string, unknown> = {}) =>
+    control("Classic/Button@2.2.0", { OnSelect: "=Set(clicked, true)", ...properties });
+
+  it("permits explicit local behavior only with confirmed visibility and edit mode", () => {
+    expect(previewSelectionBehaviorGate(action(), {})).toBe("allowed");
+    expect(previewSelectionBehaviorGate(action({ Visible: "=varReady" }), { varReady: true }))
+      .toBe("allowed");
+    expect(previewSelectionBehaviorGate(action({ DisplayMode: "=DisplayMode.Disabled" }), {}))
+      .toBe("display-mode-unverified");
+  });
+
+  it("blocks unknown or hidden Visible, including unverified ancestors", () => {
+    expect(previewSelectionBehaviorGate(action({ Visible: "=varAuthorized" }), {}))
+      .toBe("visibility-unverified");
+    expect(previewSelectionBehaviorGate(action({ Visible: "=false" }), {}))
+      .toBe("visibility-unverified");
+    expect(previewSelectionBehaviorGate(action(), {}, { ancestorVisibilityUnknown: true }))
+      .toBe("visibility-unverified");
+    expect(previewSelectionBehaviorGate(action({ Visible: "=varAuthorized" }), { varAuthorized: true },
+      { ancestorVisibilityUnknown: true })).toBe("visibility-unverified");
+  });
+
+  it("never treats unknown gallery records as permission to simulate actions", () => {
+    expect(previewSelectionBehaviorGate(action(), {}, { runtimeGalleryStateUnknown: true }))
+      .toBe("gallery-unverified");
+    expect(previewSelectionBehaviorGate(action(), {}, { galleryRecordsUnknown: true }))
+      .toBe("gallery-unverified");
+  });
+
+  it("keeps a simulated local variable from overriding unknown ancestor visibility", () => {
+    expect(previewSelectionBehaviorGate(action({ Visible: "=varLocalReady" }),
+      { varLocalReady: true }, { ancestorVisibilityUnknown: true }))
+      .toBe("visibility-unverified");
+  });
 });
