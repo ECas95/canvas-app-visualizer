@@ -279,6 +279,32 @@ describe("Canvas container DropShadow rendering", () => {
   });
 });
 
+describe("responsive Canvas DropShadow integration", () => {
+  const responsive = {
+    Fill: "=Color.White",
+    DropShadow: "=If(App.Width < 720, DropShadow.None, DropShadow.Light)"
+  };
+
+  it("renders a shadow only on a verified desktop branch", () => {
+    const phone = renderContainer(responsive, "GroupContainer@1.3.0", { "App.Width": 390 });
+    const desktop = renderContainer(responsive, "GroupContainer@1.3.0", { "App.Width": 1366 });
+    expect(phone).not.toContain("filter:drop-shadow(");
+    expect(desktop).toContain("filter:drop-shadow(0px 1px 2px");
+    expect(desktop.match(/filter:drop-shadow\(/g)).toHaveLength(1);
+  });
+
+  it("does not infer shadow from unavailable runtime state or translucent fill", () => {
+    expect(renderContainer(responsive)).not.toContain("filter:drop-shadow(");
+    const runtime = { Fill: "=Color.White",
+      DropShadow: "=If(varHasAccess, DropShadow.Bold, DropShadow.None)" };
+    expect(renderContainer(runtime, "GroupContainer@1.3.0", { "App.Width": 1366 }))
+      .not.toContain("filter:drop-shadow(");
+    expect(renderContainer({ ...responsive, Fill: "=RGBA(255,255,255,0.5)" },
+      "GroupContainer@1.3.0", { "App.Width": 1366 }))
+      .not.toContain("filter:drop-shadow(");
+  });
+});
+
 describe("responsive Canvas outline radii", () => {
   it("uses the same known viewport radius for the SVG outline and text clip", () => {
     const props = {
