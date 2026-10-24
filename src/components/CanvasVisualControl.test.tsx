@@ -149,6 +149,25 @@ describe("source-faithful Canvas label wrapping", () => {
     expect(html).not.toContain("<foreignObject");
   });
 
+  it("applies verified multi-branch typography to both SVG and wrapped HTML", () => {
+    const properties = {
+      Text: '="Responsive typography"',
+      Align: "=If(App.Width < 600, Align.Left, App.Width < 1000, Align.Center, Align.Right)",
+      VerticalAlign: "=If(App.Width < 600, VerticalAlign.Top, App.Width < 1000, VerticalAlign.Middle, VerticalAlign.Bottom)",
+      FontWeight: "=If(App.Width < 600, FontWeight.Normal, App.Width < 1000, FontWeight.Semibold, FontWeight.Bold)"
+    };
+    const phone = render({ ...properties, Wrap: "=false" }, { "App.Width": 390 });
+    const desktop = render({ ...properties, Wrap: "=false" }, { "App.Width": 1366 });
+    const tabletWrapped = render({ ...properties, Wrap: "=true" }, { "App.Width": 768 });
+    expect(phone).toContain('text-anchor="start"');
+    expect(phone).toContain('font-weight="400"');
+    expect(desktop).toContain('text-anchor="end"');
+    expect(desktop).toContain('font-weight="700"');
+    expect(tabletWrapped).toContain("<foreignObject");
+    expect(tabletWrapped).toContain("text-align:center");
+    expect(tabletWrapped).toContain("font-weight:600");
+  });
+
   it("does not render unrelated Power Fx members as verified text alignment", () => {
     const html = render({ Text: '="Unverified"', Align: "=User.Right" });
     expect(html).toMatch(/<text[^>]* x="15\.6/);
