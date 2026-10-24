@@ -288,26 +288,30 @@ export function previewIsChecked(control: CanvasControl): boolean {
  * Only serialized styling may override approximate defaults. Unknown or
  * runtime-dependent values stay undefined rather than being guessed.
  */
-function enumValue(raw: unknown): string | null {
+function enumValue(raw: unknown, namespace: "Align" | "VerticalAlign" | "FontWeight"): string | null {
   if (typeof raw !== "string") return null;
-  const value = raw.trim().replace(/^=\s*/, "");
-  const match = value.match(/^(?:[A-Za-z]+\.)?([A-Za-z]+)$/);
-  return match ? match[1].toLowerCase() : null;
+  // Power Fx enum members must belong to their documented namespace.
+  // Bare identifiers and unrelated records (e.g. User.Right) are runtime
+  // expressions, not evidence of a static alignment or font weight.
+  const match = /^=?\s*([A-Za-z]+)\.([A-Za-z]+)\s*$/i.exec(raw.trim());
+  return match && match[1].toLowerCase() === namespace.toLowerCase()
+    ? match[2].toLowerCase() : null;
 }
 
-export type PreviewHorizontalAlign = "start" | "middle" | "end";
+export type PreviewHorizontalAlign = "start" | "middle" | "end" | "justify";
 export type PreviewVerticalAlign = "top" | "middle" | "bottom";
 
 export function previewHorizontalAlign(control: CanvasControl): PreviewHorizontalAlign | null {
-  const value = enumValue(control.properties.Align ?? control.properties.TextAlign);
+  const value = enumValue(control.properties.Align ?? control.properties.TextAlign, "Align");
   if (value === "center" || value === "middle") return "middle";
+  if (value === "justify") return "justify";
   if (value === "right" || value === "end") return "end";
   if (value === "left" || value === "start") return "start";
   return null;
 }
 
 export function previewVerticalAlign(control: CanvasControl): PreviewVerticalAlign | null {
-  const value = enumValue(control.properties.VerticalAlign ?? control.properties.TextVerticalAlignment);
+  const value = enumValue(control.properties.VerticalAlign ?? control.properties.TextVerticalAlignment, "VerticalAlign");
   if (value === "top") return "top";
   if (value === "bottom") return "bottom";
   if (value === "middle" || value === "center") return "middle";
@@ -315,11 +319,11 @@ export function previewVerticalAlign(control: CanvasControl): PreviewVerticalAli
 }
 
 export function previewFontWeight(control: CanvasControl): number | undefined {
-  const value = enumValue(control.properties.FontWeight);
+  const value = enumValue(control.properties.FontWeight, "FontWeight");
   if (value === "bold") return 700;
   if (value === "semibold") return 600;
   if (value === "normal" || value === "regular") return 400;
-  if (value === "light") return 300;
+  if (value === "light" || value === "lighter") return 300;
   return undefined;
 }
 
