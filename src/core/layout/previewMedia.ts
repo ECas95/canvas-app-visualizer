@@ -1,5 +1,6 @@
 import type { PreviewMediaAsset } from "../../types/canvas";
 import { literalText } from "./layout";
+import { staticBoolean, type StaticPowerFxValue } from "../powerfx/staticEval";
 
 /** Resolve only exact, locally imported raster media names. Never fetch remote URLs. */
 export function resolvePreviewImage(
@@ -41,4 +42,26 @@ export function previewImageFit(raw: unknown): string {
 export function previewRasterCssImage(dataUrl: string): string | null {
   return /^data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(dataUrl)
     ? `url("${dataUrl}")` : null;
+}
+
+/**
+ * Flip only a locally verified image, never the host outline or its clip.
+ * An omitted flag has the Canvas default false; an unresolved flag makes the
+ * entire transform unknown. SVG coordinates are in the screen's coordinate
+ * space, so the reflection must be centered on the image control bounds.
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-image
+ */
+export function previewImageFlipTransform(
+  horizontal: unknown, vertical: unknown,
+  x: number, y: number, width: number, height: number,
+  symbols?: Record<string, StaticPowerFxValue>
+): string | null {
+  const resolve = (value: unknown) => value === undefined || value === null
+    ? false : staticBoolean(value, symbols);
+  const flipX = resolve(horizontal);
+  const flipY = resolve(vertical);
+  if (flipX === null || flipY === null ||
+      ![x, y, width, height].every(Number.isFinite)) return null;
+  if (!flipX && !flipY) return "";
+  return `translate(${flipX ? 2 * x + width : 0} ${flipY ? 2 * y + height}) scale(${flipX ? -1 : 1} ${flipY ? -1 : 1})`;
 }
