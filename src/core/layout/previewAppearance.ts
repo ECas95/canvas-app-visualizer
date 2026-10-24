@@ -41,6 +41,12 @@ const NAMED_COLORS: Record<string, string> = {
   darkgray: "#a9a9a9"
 };
 
+// Browser CSS and the Canvas ColorValue documentation do not define five- or
+// seven-digit hex colors. Keep supported shorthand CSS forms for existing
+// source previews, but never emit malformed lengths as verified colors.
+// https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-colors
+const HEX_COLOR_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+
 export function previewColor(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const value = raw.trim();
@@ -48,10 +54,10 @@ export function previewColor(raw: unknown): string | null {
   if (rgb) return rgb;
   const named = value.match(/^=?\s*Color\.([A-Za-z]+)\s*$/i);
   if (named) return NAMED_COLORS[named[1].toLowerCase()] ?? null;
-  const hex = value.match(/^=?\s*ColorValue\(\s*["'](#[a-fA-F0-9]{3,8})["']\s*\)\s*$/i);
-  if (hex) return hex[1];
+  const hex = value.match(/^=?\s*ColorValue\(\s*"(#[a-fA-F0-9]+)"\s*\)\s*$/i);
+  if (hex && HEX_COLOR_RE.test(hex[1])) return hex[1];
   const literal = literalText(value);
-  if (literal && /^#[a-fA-F0-9]{3,8}$/.test(literal)) return literal;
+  if (literal && HEX_COLOR_RE.test(literal)) return literal;
   return null;
 }
 
@@ -98,10 +104,10 @@ export function previewColorWithSymbols(
   const colorValue = /^=?\s*ColorValue\(\s*([A-Za-z_][\w]*)\s*\)\s*$/i.exec(value);
   if (colorValue) {
     const resolved = staticString("=" + colorValue[1], symbols);
-    return resolved && /^#[a-fA-F0-9]{3,8}$/.test(resolved) ? resolved : null;
+    return resolved && HEX_COLOR_RE.test(resolved) ? resolved : null;
   }
   const scalar = staticString(value, symbols);
-  if (scalar && /^#[a-fA-F0-9]{3,8}$/.test(scalar)) return scalar;
+  if (scalar && HEX_COLOR_RE.test(scalar)) return scalar;
 
   const lexed = lexPowerFx(value);
   if (lexed.diagnostics.length) return null;
