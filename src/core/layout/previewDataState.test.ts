@@ -46,12 +46,16 @@ describe("source-only gallery state", () => {
     }
   });
 
-  it("distinguishes galleries with an Items formula from static containers", () => {
-    expect(galleryRecordsUnknown(control("Gallery", {
-      Items: "=Filter(colApps, IsEnabled)"
-    }))).toBe(true);
-    expect(galleryRecordsUnknown(control("GroupContainer", {
-      Items: "=Filter(colApps, IsEnabled)"
-    }))).toBe(false);
+  it("withholds gallery template rows even when Items is omitted or appears local", () => {
+    for (const properties of [
+      {},
+      { Items: "=Filter(colApps, IsEnabled)" },
+      { Items: '=Table({Title: "Example"})' },
+      { Items: "=Table()" }
+    ]) {
+      expect(galleryRecordsUnknown(control("Classic/VerticalGallery@2.3.0", properties)))
+        .toBe(true);
+      expect(galleryRecordsUnknown(control("GroupContainer", properties))).toBe(false);
+    }
   });
 });

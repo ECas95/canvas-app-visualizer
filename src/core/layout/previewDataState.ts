@@ -32,10 +32,16 @@ export function dependsOnRuntimeGalleryItems(control: CanvasControl): boolean {
 }
 
 /**
- * Gallery.Items may depend on external data or runtime collections. Until
- * evaluated against a verified local table, only the template is known.
+ * Gallery children are template definitions, not evidence of a rendered row.
+ * Even if Items is omitted from .pa.yaml (which serializes only non-default
+ * properties), the source does not prove that a runtime record exists.
+ * A literal Table(...) formula is also not a verified loaded-row snapshot.
+ * Until explicit local snapshot support exists, keep all gallery descendants
+ * out of the source-only preview. This never queries data or infers access.
+ *
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-gallery
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/power-apps-yaml
  */
 export function galleryRecordsUnknown(control: CanvasControl): boolean {
-  return control.controlType.toLowerCase().includes("gallery") &&
-    control.properties.Items !== undefined;
+  return control.controlType.toLowerCase().includes("gallery");
 }

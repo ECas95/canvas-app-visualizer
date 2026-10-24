@@ -503,6 +503,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                     fontSize={11} fill="#42536b">
                     Template only — runtime records unavailable
                   </text>
+                  <title>Cannot determine loading, emptiness or access from source</title>
                 </g>
               );
               return (

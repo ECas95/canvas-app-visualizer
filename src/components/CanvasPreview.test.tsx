@@ -120,11 +120,13 @@ describe("CanvasPreview gallery source vs runtime rows", () => {
     expect(html).not.toContain("Inspect TemplateLabel");
   });
 
-  it("keeps structural template inspection when no Items source was serialized", () => {
+  it("does not invent a row when Items was omitted from the serialized source", () => {
     const html = renderGalleryItems();
-    expect(html).toContain("Inspect TemplateLabel");
-    expect(html).toContain("Example template, not a verified row");
-    expect(html).not.toContain("Template only — runtime records unavailable");
+    expect(html).toContain("Inspect DataGallery");
+    expect(html).toContain("Template only — runtime records unavailable");
+    expect(html).not.toContain("Inspect TemplateLabel");
+    expect(html).not.toContain("Example template, not a verified row");
+    expect(html).toContain("Cannot determine loading, emptiness or access from source");
   });
 });
 
