@@ -292,10 +292,32 @@ export function isDefinitelyHidden(
   return previewVisibility(control, symbols) === "hidden";
 }
 
+/**
+ * Source-only initial checked state, not the live user-edited Value.
+ * Modern checkbox/toggle controls serialize Checked; classic controls
+ * serialize Default. A runtime formula must not be painted as false.
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-check-box
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-checkbox
+ */
+export type PreviewCheckedState = "checked" | "unchecked" | "unknown";
+
+export function previewCheckedState(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): PreviewCheckedState {
+  const props = control.properties;
+  // Prefer the source-controlled property over Value, which may be a runtime
+  // output. Never OR contradictory properties into an invented true state.
+  const raw = props.Checked !== undefined ? props.Checked :
+    props.Default !== undefined ? props.Default : props.Value;
+  if (raw === undefined || raw === null) return "unchecked";
+  const resolved = staticBoolean(raw, symbols);
+  return resolved === null ? "unknown" : resolved ? "checked" : "unchecked";
+}
+
+/** Legacy boolean convenience; visual callers should use the tri-state API. */
 export function previewIsChecked(control: CanvasControl): boolean {
-  return staticBoolean(control.properties.Default) === true ||
-    staticBoolean(control.properties.Checked) === true ||
-    staticBoolean(control.properties.Value) === true;
+  return previewCheckedState(control) === "checked";
 }
 
 /**
