@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PreviewMediaAsset } from "../../types/canvas";
-import { previewImageFit, previewImagePosition, previewRasterCssImage, resolvePreviewImage } from "./previewMedia";
+import { previewImageFit, previewImageFlipTransform, previewImagePosition, previewRasterCssImage, resolvePreviewImage } from "./previewMedia";
 
 const media: PreviewMediaAsset[] = [{
   name: "companylogo",
@@ -46,4 +46,26 @@ describe("local-only image preview", () => {
       .toBeNull();
   });
 
+
+  it("reflects only verified Canvas image flip flags around the control bounds", () => {
+    expect(previewImageFlipTransform("=true", "=false", 10, 20, 140, 64))
+      .toBe("translate(160 0) scale(-1 1)");
+    expect(previewImageFlipTransform("=false", "=true", 10, 20, 140, 64))
+      .toBe("translate(0 104) scale(1 -1)");
+    expect(previewImageFlipTransform("=true", "=true", 10, 20, 140, 64))
+      .toBe("translate(160 104) scale(-1 -1)");
+    expect(previewImageFlipTransform(undefined, undefined, 10, 20, 140, 64)).toBe("");
+    expect(previewImageFlipTransform("=false", "=false", 10, 20, 140, 64)).toBe("");
+  });
+
+  it("never treats unknown Power Fx or string booleans as verified flips", () => {
+    expect(previewImageFlipTransform("=varRuntimeFlag", "=false", 10, 20, 140, 64)).toBeNull();
+    expect(previewImageFlipTransform('="true"', "=false", 10, 20, 140, 64)).toBeNull();
+    expect(previewImageFlipTransform("=If(varReady, true, false)", "=false", 10, 20, 140, 64))
+      .toBeNull();
+    expect(previewImageFlipTransform("=If(App.Width < 720, true, false)", undefined,
+      10, 20, 140, 64, { "App.Width": 390 }))
+      .toBe("translate(160 0) scale(-1 1)");
+    expect(previewImageFlipTransform("=true", "=false", 10, 20, Infinity, 64)).toBeNull();
+  });
 });
