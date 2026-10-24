@@ -554,3 +554,39 @@ describe("Canvas responsive ImagePosition and ImageRotation integration", () => 
     expect(html).not.toContain("background-repeat:repeat");
   });
 });
+
+describe("Canvas viewport-responsive text rendering", () => {
+  const props = {
+    Text: '="Responsive label"',
+    Align: "=If(App.Width < 720, Align.Center, Align.Right)",
+    VerticalAlign: "=If(App.Width < 720, VerticalAlign.Top, VerticalAlign.Bottom)",
+    FontWeight: "=If(App.Width < 720, FontWeight.Bold, FontWeight.Normal)",
+    Italic: "=App.Width < 720",
+    Underline: "=App.Width < 720"
+  };
+
+  it("positions SVG text and resolves verified font styles per viewport", () => {
+    const phone = render({ ...props, Wrap: "=false" }, { "App.Width": 390 });
+    const desktop = render({ ...props, Wrap: "=false" }, { "App.Width": 1366 });
+    expect(phone).toContain('text-anchor="middle"');
+    expect(phone).toContain('font-weight="700"');
+    expect(phone).toContain('font-style="italic"');
+    expect(phone).toContain('text-decoration="underline"');
+    expect(desktop).toContain('text-anchor="end"');
+    expect(desktop).toContain('font-weight="400"');
+    expect(desktop).not.toContain('font-style="italic"');
+    expect(desktop).not.toContain('text-decoration="underline"');
+  });
+
+  it("propagates the same verified styles to wrapped HTML text", () => {
+    const phone = render({ ...props, Wrap: "=true" }, { "App.Width": 390 });
+    const desktop = render({ ...props, Wrap: "=true" }, { "App.Width": 1366 });
+    expect(phone).toContain("text-align:center");
+    expect(phone).toContain("align-items:flex-start");
+    expect(phone).toContain("font-weight:700");
+    expect(phone).toContain("font-style:italic");
+    expect(desktop).toContain("text-align:right");
+    expect(desktop).toContain("align-items:flex-end");
+    expect(desktop).toContain("font-weight:400");
+  });
+});
