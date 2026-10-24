@@ -407,3 +407,36 @@ describe("CanvasPreview trailing padding scroll integration", () => {
       .not.toContain('data-preview-scrollbar="vertical"');
   });
 });
+
+function renderEditorGroupOverflow(childHeight: number) {
+  const child = control("ActualChild", "Classic/Label@2.5.1", {
+    X: "=0", Y: "=0", Width: "=100", Height: "=" + childHeight,
+    Text: '="Synthetic group child"'
+  });
+  const editorGroup = control("EditorGroup", "Group", {
+    X: "=0", Y: "=0", Width: "=600", Height: "=400"
+  }, [child]);
+  const host = control("ScrollHost", "GroupContainer@1.3.0", {
+    X: "=0", Y: "=0", Width: "=200", Height: "=100",
+    LayoutOverflowY: "=LayoutOverflow.Scroll"
+  }, [editorGroup]);
+  const screen: CanvasScreen = {
+    id: "GroupFixture", name: "GroupFixture", properties: {}, children: [host],
+    sourceFile: "Src/GroupFixture.pa.yaml", sourceFormat: "pa-yaml-v3"
+  };
+  return renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+}
+
+describe("CanvasPreview editor Group scroll geometry", () => {
+  it("ignores the editor Group box when real content fits the host", () => {
+    const html = renderEditorGroupOverflow(90);
+    expect(html).toContain("Synthetic group child");
+    expect(html).not.toContain('data-preview-scrollbar="vertical"');
+  });
+
+  it("scrolls the host when a grouped child genuinely exceeds its bounds", () => {
+    const html = renderEditorGroupOverflow(180);
+    expect(html).toContain("Synthetic group child");
+    expect(html).toContain('data-preview-scrollbar="vertical"');
+  });
+});
