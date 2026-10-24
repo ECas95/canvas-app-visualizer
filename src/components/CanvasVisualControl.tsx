@@ -3,7 +3,7 @@ import { literalNumber } from "../core/layout/layout";
 import { previewCornerRadii, previewRoundedRectPath } from "../core/layout/previewCorners";
 import { staticBoolean, staticNumber, staticString } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
-import { previewImageFit, resolvePreviewImage } from "../core/layout/previewMedia";
+import { previewImageFit, previewImagePosition, previewRasterCssImage, resolvePreviewImage } from "../core/layout/previewMedia";
 import { PREVIEW_ICON_PATHS, previewIconName, previewIconRotation } from "../core/layout/previewIcon";
 import {
   previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewDropShadowFilter, previewIsOpaqueColor, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
@@ -30,6 +30,11 @@ export function CanvasVisualControl({
   const props = control.properties;
   const kind = previewKind(control.controlType);
   const media = kind === "image" ? resolvePreviewImage(props.Image, mediaAssets) : undefined;
+  const imagePosition = kind === "image" ? previewImagePosition(props.ImagePosition) : null;
+  // Native-size Center/Tile use a browser raster background. The importer
+  // supplies only bounded local PNG/JPEG/GIF/WebP data URLs, never remote URLs.
+  const rasterCssImage = media && (imagePosition === "center" || imagePosition === "tile")
+    ? previewRasterCssImage(media.dataUrl) : null;
   const displayMode = previewDisplayMode(props.DisplayMode, simulationSymbols);
   const disabled = displayMode === "disabled";
   const explicitFill = previewColorWithSymbols(
@@ -270,9 +275,24 @@ export function CanvasVisualControl({
         })()}
         {kind === "image" && (
           media ? (
-            <image x={x} y={y} width={width} height={height}
-              href={media.dataUrl}
-              preserveAspectRatio={previewImageFit(props.ImagePosition)} />
+            imagePosition === "center" || imagePosition === "tile" ? (
+              rasterCssImage ? (
+                <foreignObject x={x} y={y} width={width} height={height}
+                  pointerEvents="none">
+                  <div style={{
+                    width: "100%", height: "100%",
+                    backgroundImage: rasterCssImage,
+                    backgroundSize: "auto",
+                    backgroundRepeat: imagePosition === "tile" ? "repeat" : "no-repeat",
+                    backgroundPosition: imagePosition === "center" ? "center" : "left top"
+                  }} />
+                </foreignObject>
+              ) : null
+            ) : (
+              <image x={x} y={y} width={width} height={height}
+                href={media.dataUrl}
+                preserveAspectRatio={previewImageFit(props.ImagePosition)} />
+            )
           ) : (
             <>
             <rect x={x + 6} y={y + 6} width={Math.max(4, width - 12)}
