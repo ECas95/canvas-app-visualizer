@@ -268,6 +268,8 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
     visibilityUnknown: item.visibilityUnknown,
     overflowX: item.control.properties.LayoutOverflowX,
     overflowY: item.control.properties.LayoutOverflowY,
+    paddingRight: item.control.properties.PaddingRight,
+    paddingBottom: item.control.properties.PaddingBottom,
     symbols: item.renderSymbols
   }))), [rawItems]);
   // Clamp previous offsets when the viewport changes; unknown geometry
