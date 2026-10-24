@@ -180,3 +180,44 @@ describe("Canvas container DropShadow rendering", () => {
       .not.toContain("filter:drop-shadow(");
   });
 });
+
+describe("Canvas multiline SVG text vertical alignment", () => {
+  const multiline = { Text: "=LocalText", Size: "=20", Wrap: "=false" };
+  const symbols = { LocalText: "First line\nSecond line" };
+
+  it("anchors the first line at Top padding instead of centering the whole block above it", () => {
+    const html = render({
+      ...multiline, VerticalAlign: "=VerticalAlign.Top", PaddingTop: "=4"
+    }, symbols);
+    expect(html).toContain("First line");
+    expect(html).toContain("Second line");
+    expect(html).toMatch(/<text[^>]* y="34"/);
+    expect(html).toContain('dy="24"');
+  });
+
+  it("anchors the final line above Bottom padding", () => {
+    const html = render({
+      ...multiline, VerticalAlign: "=VerticalAlign.Bottom", PaddingBottom: "=6"
+    }, symbols);
+    expect(html).toMatch(/<text[^>]* y="44"/);
+    expect(html).toContain('dy="24"');
+  });
+
+  it("preserves centered multiline positioning", () => {
+    const html = render({
+      ...multiline, VerticalAlign: "=VerticalAlign.Middle"
+    }, symbols);
+    expect(html).toMatch(/<text[^>]* y="40"/);
+  });
+
+  it("uses only resolvable viewport padding and never executes runtime-dependent padding", () => {
+    const props = {
+      ...multiline, VerticalAlign: "=VerticalAlign.Top",
+      PaddingTop: "=If(App.Width < 720, 6, 12)"
+    };
+    expect(render(props, { ...symbols, "App.Width": 390 })).toMatch(/<text[^>]* y="36"/);
+    expect(render(props, { ...symbols, "App.Width": 1366 })).toMatch(/<text[^>]* y="42"/);
+    expect(render({ ...props, PaddingTop: "=varRuntimePadding" }, symbols))
+      .toMatch(/<text[^>]* y="30"/);
+  });
+});
