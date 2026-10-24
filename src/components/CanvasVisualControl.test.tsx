@@ -173,6 +173,29 @@ describe("Canvas container DropShadow rendering", () => {
       .not.toContain("filter:drop-shadow(");
   });
 
+  it("does not render an opaque shadow for translucent RGBA or ColorValue fills", () => {
+    const shadow = { DropShadow: "=DropShadow.Bold" };
+    for (const fill of [
+      "=RGBA(255,255,255,0)", "=RGBA(255,255,255,0.5)",
+      '=ColorValue("#ffffff00")', '=ColorValue("#ffffff80")',
+      '=ColorValue("#fff0")'
+    ]) {
+      expect(renderContainer({ ...shadow, Fill: fill }))
+        .not.toContain("filter:drop-shadow(");
+    }
+  });
+
+  it("retains shadows for verified fully opaque RGBA and alpha-hex fills", () => {
+    const shadow = { DropShadow: "=DropShadow.Light" };
+    for (const fill of [
+      "=RGBA(255,255,255,1)", '=ColorValue("#ffffffff")',
+      '=ColorValue("#ffff")', "=Color.White"
+    ]) {
+      expect(renderContainer({ ...shadow, Fill: fill }))
+        .toContain("filter:drop-shadow(");
+    }
+  });
+
   it("does not apply container-only DropShadow to labels or galleries", () => {
     const props = { Fill: "=Color.White", DropShadow: "=DropShadow.Bold" };
     expect(render(props)).not.toContain("filter:drop-shadow(");
