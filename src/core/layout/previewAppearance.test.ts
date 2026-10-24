@@ -100,6 +100,28 @@ describe("semantic preview classification", () => {
     expect(previewFontSize(control("Label", { Size: "=72" }))).toBe(72);
   });
 
+  it("shows HintText only when a text input is provably blank", () => {
+    const type = "Classic/TextInput@2.3.2";
+    const hint = { HintText: '="Search records"' };
+    expect(previewText(control(type, hint))).toBe("Search records");
+    expect(previewText(control(type, { ...hint, Default: '=""' }))).toBe("Search records");
+    expect(previewText(control(type, { ...hint, Default: '="Known value"' }))).toBe("Known value");
+    expect(previewText(control(type, { ...hint, Default: '=""', Value: '=varLiveValue' })))
+      .toBe("Search records");
+    expect(previewText(control(type, { Default: '=""' }))).toBe("");
+  });
+
+  it("never paints an input hint as an observed runtime value", () => {
+    for (const type of ["Classic/TextInput@2.3.2", "ModernTextInput@1.0.0"]) {
+      const hint = { HintText: '="Search records"' };
+      expect(previewText(control(type, { ...hint, Default: "=varRuntimeText" }))).toBeNull();
+      expect(previewText(control(type, { ...hint, Value: "=RemoteRecord.Title" }))).toBeNull();
+      expect(previewText(control(type, {
+        ...hint, Default: "=varRuntimeText", Value: '="Fallback should not override Default"'
+      }))).toBeNull();
+    }
+  });
+
   it("honors only resolved false visibility", () => {
     expect(isDefinitelyHidden(control("Label", { Visible: "=false" }))).toBe(true);
     expect(isDefinitelyHidden(control("Label", { Visible: "=true" }))).toBe(false);
