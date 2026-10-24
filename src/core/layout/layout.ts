@@ -555,15 +555,16 @@ export function galleryTemplateLayout(
     staticNumber(control.properties.TemplateSize, symbols) ??
     staticNumber(control.properties.TemplateHeight, symbols) ??
     null;
-  const padding = Math.max(
-    0,
-    staticNumber(control.properties.TemplatePadding, symbols) ?? 0
-  );
+  const resolvedPadding = staticNumber(control.properties.TemplatePadding, symbols);
+  // An unresolved Power Fx padding formula is an approximation, not verified
+  // template geometry. Never infer its value from SQL or runtime state.
+  const padding = Math.max(0, resolvedPadding ?? 0);
 
   const fallbackSize = horizontal
     ? Math.min(160, rect.width)
     : Math.min(72, rect.height);
-  const size = Math.max(8, templateSize ?? fallbackSize);
+  // Microsoft Gallery.TemplateSize has a minimum of 1, not 8.
+  const size = Math.max(1, templateSize ?? fallbackSize);
 
   return {
     x: rect.x,
@@ -574,7 +575,9 @@ export function galleryTemplateLayout(
     variableHeight,
     padding,
     wrapCount,
-    dynamic: templateSize === null || variableHeight || (control.properties.WrapCount !== undefined && resolvedWrap === null)
+    dynamic: rect.dynamic || templateSize === null || variableHeight ||
+      (control.properties.WrapCount !== undefined && resolvedWrap === null) ||
+      (control.properties.TemplatePadding !== undefined && resolvedPadding === null)
   };
 }
 
