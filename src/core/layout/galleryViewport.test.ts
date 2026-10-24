@@ -47,6 +47,37 @@ describe("synthetic Canvas gallery viewport geometry", () => {
     expect(galleryRecordsUnknown(gallery)).toBe(true);
   });
 
+  it.each([
+    { variant: "Vertical", width: 320, height: 120,
+      expectedWidth: 320, expectedHeight: 292, guideWidth: 304, guideHeight: 276 },
+    { variant: "Horizontal", width: 120, height: 320,
+      expectedWidth: 292, expectedHeight: 320, guideWidth: 276, guideHeight: 304 }
+  ])("keeps $variant TemplateSize when the gallery viewport is smaller", ({
+    variant, width, height, expectedWidth, expectedHeight, guideWidth, guideHeight
+  }) => {
+    const source: CanvasControl = {
+      ...gallery,
+      variant,
+      properties: {
+        ...gallery.properties, WrapCount: "=1", TemplateSize: "=292",
+        TemplatePadding: "=8"
+      }
+    };
+    const template = galleryTemplateLayout(source,
+      { x: 0, y: 0, width, height, dynamic: false },
+      { parentWidth: width, parentHeight: height, appWidth: 390, appHeight: 844 });
+    expect(template).toMatchObject({
+      width: expectedWidth, height: expectedHeight, padding: 8, dynamic: false
+    });
+    // Guide geometry may extend beyond the viewport. SVG clips it to the
+    // gallery bounds; never shrink the underlying Canvas template.
+    expect(galleryTemplateGuideRect(template!, 0, 10, 20)).toEqual({
+      x: 18, y: 28, width: guideWidth, height: guideHeight
+    });
+    // This is template geometry only, not proof of any loaded record.
+    expect(galleryRecordsUnknown(source)).toBe(true);
+  });
+
   it("marks runtime-dependent WrapCount as unknown at every viewport", () => {
     const unresolved = {
       ...gallery,
