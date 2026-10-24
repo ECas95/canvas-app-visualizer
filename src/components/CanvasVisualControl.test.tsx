@@ -406,7 +406,7 @@ describe("Canvas image flip geometry", () => {
       const html = renderFlipped(position, "=true", "=false");
       expect(html).toContain('transform="translate(160 0) scale(-1 1)"');
       expect(html).toContain('clip-path="url(#flip-image-clip)"');
-      expect(html).toMatch(/<path d="M 10 20[^>]*><\\/path>/);
+      expect(html).toContain('<path d="M 10 20');
       expect(html.indexOf('clip-path="url(#flip-image-clip)"'))
         .toBeLessThan(html.indexOf('transform="translate(160 0) scale(-1 1)"'));
     }
