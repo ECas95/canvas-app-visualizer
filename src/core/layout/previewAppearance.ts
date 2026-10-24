@@ -154,6 +154,35 @@ export function previewText(control: CanvasControl): string | null {
   return literalText(props.Text) ?? literalText(props.Label);
 }
 
+
+// Explicit Canvas Font enums are stable source values; runtime formulas are not.
+// Limit the CSS output to known font families to avoid treating imported
+// Power Fx expressions as arbitrary CSS or inventing an unavailable font.
+const PREVIEW_FONT_FAMILIES: Record<string, string> = {
+  "segoe ui": '"Segoe UI",system-ui,sans-serif',
+  "arial": 'Arial,sans-serif',
+  "verdana": 'Verdana,sans-serif',
+  "tahoma": 'Tahoma,sans-serif',
+  "calibri": 'Calibri,"Segoe UI",sans-serif',
+  "open sans": '"Open Sans","Segoe UI",sans-serif',
+  "georgia": 'Georgia,serif',
+  "times new roman": '"Times New Roman",serif',
+  "courier new": '"Courier New",monospace'
+};
+
+export const PREVIEW_DEFAULT_FONT = '"Segoe UI",system-ui,sans-serif';
+
+/** Resolve a source-literal Font enum without running Power Fx or loading fonts. */
+export function previewFontFamily(control: CanvasControl): string {
+  const raw = control.properties.Font;
+  if (typeof raw !== "string") return PREVIEW_DEFAULT_FONT;
+  const source = raw.trim();
+  const enumMatch = /^=?\s*Font\.(?:'([^']+)'|([A-Za-z][A-Za-z ]*))\s*$/i.exec(source);
+  const family = enumMatch ? (enumMatch[1] ?? enumMatch[2]) : staticString(raw);
+  return (family && PREVIEW_FONT_FAMILIES[family.trim().toLowerCase()]) ||
+    PREVIEW_DEFAULT_FONT;
+}
+
 export function previewFontSize(
   control: CanvasControl,
   symbols?: Record<string, StaticPowerFxValue>
