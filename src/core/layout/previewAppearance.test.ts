@@ -230,6 +230,57 @@ describe("semantic preview classification", () => {
       .toBeUndefined();
   });
 
+  it("resolves multi-condition typography enums at verified phone, tablet and desktop widths", () => {
+    const responsive = control("ModernText@1.0.0", {
+      Align: "=If(App.Width < 600, Align.Left, App.Width < 1000, Align.Center, Align.Right)",
+      VerticalAlign: "=If(App.Width < 600, VerticalAlign.Top, App.Width < 1000, VerticalAlign.Middle, VerticalAlign.Bottom)",
+      FontWeight: "=If(App.Width < 600, FontWeight.Normal, App.Width < 1000, FontWeight.Semibold, FontWeight.Bold)"
+    });
+    const phone = { "App.Width": 390 };
+    const tablet = { "App.Width": 768 };
+    const desktop = { "App.Width": 1366 };
+    expect(previewHorizontalAlign(responsive, phone)).toBe("start");
+    expect(previewHorizontalAlign(responsive, tablet)).toBe("middle");
+    expect(previewHorizontalAlign(responsive, desktop)).toBe("end");
+    expect(previewVerticalAlign(responsive, phone)).toBe("top");
+    expect(previewVerticalAlign(responsive, tablet)).toBe("middle");
+    expect(previewVerticalAlign(responsive, desktop)).toBe("bottom");
+    expect(previewFontWeight(responsive, phone)).toBe(400);
+    expect(previewFontWeight(responsive, tablet)).toBe(600);
+    expect(previewFontWeight(responsive, desktop)).toBe(700);
+    expect(previewHorizontalAlign(responsive)).toBeNull();
+  });
+
+  it("resolves only the selected nested If branch, without assuming unknown runtime state", () => {
+    const nested = control("Label", {
+      Align: "=If(App.Width < 720, If(varCentered, Align.Center, Align.Left), Align.Right)",
+      FontWeight: "=If(App.Width < 720, FontWeight.Bold, If(App.Width < 1000, FontWeight.Semibold, FontWeight.Normal))"
+    });
+    expect(previewHorizontalAlign(nested, { "App.Width": 390, varCentered: true })).toBe("middle");
+    expect(previewHorizontalAlign(nested, { "App.Width": 390, varCentered: false })).toBe("start");
+    expect(previewHorizontalAlign(nested, { "App.Width": 390 })).toBeNull();
+    expect(previewHorizontalAlign(nested, { "App.Width": 1366 })).toBe("end");
+    expect(previewFontWeight(nested, { "App.Width": 390 })).toBe(700);
+    expect(previewFontWeight(nested, { "App.Width": 800 })).toBe(600);
+    expect(previewFontWeight(nested, { "App.Width": 1366 })).toBe(400);
+  });
+
+  it("rejects lookalike strings, wrong namespaces and unverified multi-branch conditions", () => {
+    const symbols = { "App.Width": 390 };
+    expect(previewHorizontalAlign(control("Label", {
+      Align: '=If(App.Width < 720, "Align.Right", Align.Left)'
+    }), symbols)).toBeNull();
+    expect(previewVerticalAlign(control("Label", {
+      VerticalAlign: "=If(App.Width < 720, Other.Top, VerticalAlign.Bottom)"
+    }), symbols)).toBeNull();
+    expect(previewFontWeight(control("Label", {
+      FontWeight: "=If(varPermission, FontWeight.Bold, App.Width < 720, FontWeight.Semibold, FontWeight.Normal)"
+    }), symbols)).toBeUndefined();
+    expect(previewHorizontalAlign(control("Label", {
+      Align: "=If(App.Width < 720, Align.Left)"
+    }), { "App.Width": 1366 })).toBeNull();
+  });
+
   it("does not guess unsupported dynamic style formulas", () => {
     const label = control("Label", {
       Align: "=If(varCentered, Align.Center, Align.Left)",
