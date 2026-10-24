@@ -634,3 +634,27 @@ describe("unknown runtime checked state in Canvas visual controls", () => {
     expect(html).not.toContain('fill="#0f6cbd"');
   });
 });
+
+
+describe("Canvas responsive Font family rendering", () => {
+  const fontProps = {
+    Text: '="Viewport font"',
+    Font: "=If(App.Width < 720, Font.'Courier New', Font.Georgia)"
+  };
+
+  it("uses verified font families in SVG text", () => {
+    const phone = render({ ...fontProps, Wrap: "=false" }, { "App.Width": 390 });
+    const desktop = render({ ...fontProps, Wrap: "=false" }, { "App.Width": 1366 });
+    expect(phone).toContain('font-family="&quot;Courier New&quot;,monospace"');
+    expect(desktop).toContain('font-family="Georgia,serif"');
+  });
+
+  it("uses the same families for wrapped HTML text and falls back for unknown state", () => {
+    const phone = render({ ...fontProps, Wrap: "=true" }, { "App.Width": 390 });
+    const desktop = render({ ...fontProps, Wrap: "=true" }, { "App.Width": 1366 });
+    const unknown = render({ ...fontProps, Wrap: "=true" });
+    expect(phone).toContain('font-family:&quot;Courier New&quot;,monospace');
+    expect(desktop).toContain("font-family:Georgia,serif");
+    expect(unknown).toContain('font-family:&quot;Segoe UI&quot;,system-ui,sans-serif');
+  });
+});

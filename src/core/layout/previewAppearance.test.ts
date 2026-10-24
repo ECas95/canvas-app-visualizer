@@ -464,3 +464,42 @@ describe("source-only checkbox and toggle state", () => {
     expect(previewCheckedState(control("Classic/Toggle@2.1.0"))).toBe("unchecked");
   });
 });
+
+
+describe("verified viewport-dependent Canvas Font families", () => {
+  const font = control("Classic/Label@2.5.1", {
+    Font: "=If(App.Width < 720, Font.'Courier New', Font.Georgia)"
+  });
+
+  it("selects a supported family for each known viewport", () => {
+    expect(previewFontFamily(font, { "App.Width": 390 })).toBe('"Courier New",monospace');
+    expect(previewFontFamily(font, { "App.Width": 1366 })).toBe("Georgia,serif");
+    expect(previewFontFamily(font)).toBe(PREVIEW_DEFAULT_FONT);
+  });
+
+  it("supports a nested pure If and refuses unknown runtime conditions", () => {
+    const nested = control("Label", {
+      Font: "=If(App.Width < 720, If(Parent.Width < 400, Font.Arial, Font.Verdana), Font.Georgia)"
+    });
+    expect(previewFontFamily(nested, { "App.Width": 390, "Parent.Width": 300 }))
+      .toBe("Arial,sans-serif");
+    expect(previewFontFamily(nested, { "App.Width": 390, "Parent.Width": 600 }))
+      .toBe("Verdana,sans-serif");
+    expect(previewFontFamily(nested, { "App.Width": 390 })).toBe(PREVIEW_DEFAULT_FONT);
+    expect(previewFontFamily(control("Label", {
+      Font: "=If(varHasAccess, Font.Arial, Font.Georgia)"
+    }), { "App.Width": 390 })).toBe(PREVIEW_DEFAULT_FONT);
+  });
+
+  it("rejects lookalike strings and unrecognized selected branches", () => {
+    expect(previewFontFamily(control("Label", {
+      Font: '=If(App.Width < 720, "Font.Arial", Font.Georgia)'
+    }), { "App.Width": 390 })).toBe(PREVIEW_DEFAULT_FONT);
+    expect(previewFontFamily(control("Label", {
+      Font: "=If(App.Width < 720, Font.NotInstalled, Font.Georgia)"
+    }), { "App.Width": 390 })).toBe(PREVIEW_DEFAULT_FONT);
+    expect(previewFontFamily(control("Label", {
+      Font: "=If(App.Width < 720, Font.Arial, Font.Georgia)"
+    }), { "App.Width": 1366 })).toBe("Georgia,serif");
+  });
+});

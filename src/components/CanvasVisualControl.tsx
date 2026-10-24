@@ -59,7 +59,7 @@ export function CanvasVisualControl({
       : props.Text ?? props.Label;
   const label = (simulationSymbols && staticString(rawText, simulationSymbols)) ?? previewText(control);
   const fontSize = previewFontSize(control, simulationSymbols);
-  const fontFamily = previewFontFamily(control);
+  const fontFamily = previewFontFamily(control, simulationSymbols);
   // Bound pathological imported strings while retaining normal multiline labels.
   const text = label?.slice(0, 4096);
   const inset = Math.min(12, Math.max(3, width * 0.04));

@@ -249,15 +249,50 @@ const PREVIEW_FONT_FAMILIES: Record<string, string> = {
 
 export const PREVIEW_DEFAULT_FONT = '"Segoe UI",system-ui,sans-serif';
 
-/** Resolve a source-literal Font enum without running Power Fx or loading fonts. */
-export function previewFontFamily(control: CanvasControl): string {
-  const raw = control.properties.Font;
-  if (typeof raw !== "string") return PREVIEW_DEFAULT_FONT;
+/**
+ * Select a Font family only from a known literal or a verified Power Fx If
+ * branch. Unresolved runtime conditions, unknown fonts and CSS-like strings
+ * retain the local fallback; no arbitrary source expression reaches CSS.
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-text-box
+ * https://github.com/microsoft/PowerApps-Tooling/tree/master/schemas/pa-yaml/v3.0
+ */
+function sourceFontFamily(
+  raw: unknown,
+  symbols?: Record<string, StaticPowerFxValue>,
+  depth = 0
+): string | null {
+  if (typeof raw !== "string" || depth > 6) return null;
   const source = raw.trim();
   const enumMatch = /^=?\s*Font\.(?:'([^']+)'|([A-Za-z][A-Za-z ]*))\s*$/i.exec(source);
   const family = enumMatch ? (enumMatch[1] ?? enumMatch[2]) : staticString(raw);
-  return (family && PREVIEW_FONT_FAMILIES[family.trim().toLowerCase()]) ||
-    PREVIEW_DEFAULT_FONT;
+  if (family) return PREVIEW_FONT_FAMILIES[family.trim().toLowerCase()] ?? null;
+  if (!symbols) return null;
+
+  const lexed = lexPowerFx(source);
+  if (lexed.diagnostics.length) return null;
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+  if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
+      tokens[tokens.length - 1]?.value !== ")") return null;
+  const branches = splitIfArguments(tokens.slice(2, -1));
+  if (!branches || branches.length < 2) return null;
+
+  for (let i = 0; i + 1 < branches.length; i += 2) {
+    const condition = staticBoolean("=" + expressionText(source, branches[i]), symbols);
+    if (condition === null) return null;
+    if (condition) {
+      return sourceFontFamily("=" + expressionText(source, branches[i + 1]), symbols, depth + 1);
+    }
+  }
+  const fallback = branches.length % 2 === 1 ? branches[branches.length - 1] : undefined;
+  return fallback ? sourceFontFamily("=" + expressionText(source, fallback), symbols, depth + 1) : null;
+}
+
+export function previewFontFamily(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): string {
+  return sourceFontFamily(control.properties.Font, symbols) ?? PREVIEW_DEFAULT_FONT;
 }
 
 export function previewFontSize(
