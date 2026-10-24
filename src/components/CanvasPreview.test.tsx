@@ -41,3 +41,42 @@ describe("CanvasPreview nested host clipping", () => {
     expect(html).toMatch(/<clipPath[^>]*><path d="M 10 20 H 110/);
   });
 });
+
+function renderGalleryCondition(visible: string) {
+  const nested = control("NestedSensitiveLabel", "Classic/Label@2.5.1", {
+    Text: '="Synthetic child text"', Width: "=100", Height: "=24"
+  });
+  const condition = control("GalleryStatus", "GroupContainer@1.3.0", {
+    X: "=16", Y: "=24", Width: "=300", Height: "=64",
+    Visible: visible, OnSelect: "=Set(localFlag, true)"
+  }, [nested]);
+  const screen: CanvasScreen = {
+    id: "Fixture", name: "Fixture", properties: {}, children: [condition],
+    sourceFile: "Src/Fixture.pa.yaml", sourceFormat: "pa-yaml-v3"
+  };
+  return renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+}
+
+describe("CanvasPreview runtime gallery state", () => {
+  it("keeps IsEmpty(AllItems) controls inspectable but does not claim an empty result", () => {
+    const html = renderGalleryCondition("=IsEmpty(galCatalog.AllItems)");
+    expect(html).toContain("Inspect GalleryStatus");
+    expect(html).toContain("Gallery state unknown");
+    expect(html).toContain("not an empty result");
+    expect(html).toContain("nodes with unknown runtime visibility");
+    expect(html).not.toContain("Synthetic child text");
+    expect(html).not.toContain("Inspect NestedSensitiveLabel");
+  });
+
+  it("handles CountRows(AllItems) as unknown without exposing conditional descendants", () => {
+    const html = renderGalleryCondition("=CountRows(galCatalog.AllItems) = 0");
+    expect(html).toContain("Gallery state unknown");
+    expect(html).not.toContain("Synthetic child text");
+  });
+
+  it("omits provably false controls even if the expression references AllItems", () => {
+    const html = renderGalleryCondition("=false && IsEmpty(galCatalog.AllItems)");
+    expect(html).not.toContain("Inspect GalleryStatus");
+    expect(html).not.toContain("Gallery state unknown");
+  });
+});
