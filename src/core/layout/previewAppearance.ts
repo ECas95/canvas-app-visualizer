@@ -124,6 +124,24 @@ export function previewColorWithSymbols(
 }
 
 /**
+ * A container shadow must not imply an opaque surface when the source fill
+ * resolves to an alpha color. Power Fx ColorValue uses #RRGGBBAA and RGBA
+ * uses a 0..1 alpha channel; only a proven fully opaque color qualifies.
+ * Unrecognized or runtime-dependent colors fail closed.
+ *
+ * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-colors
+ */
+export function previewIsOpaqueColor(color: string | null): boolean {
+  if (!color) return false;
+  if (/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(color)) return true;
+  const alphaHex = /^#(?:[0-9a-f]{3}([0-9a-f])|[0-9a-f]{6}([0-9a-f]{2}))$/i.exec(color);
+  if (alphaHex) return (alphaHex[1] ?? alphaHex[2]).toLowerCase() ===
+    (alphaHex[1] ? "f" : "ff");
+  const rgbaColor = /^rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*(\d+(?:\.\d*)?|\.\d+)\s*\)$/i.exec(color);
+  return rgbaColor !== null && Number(rgbaColor[1]) === 1;
+}
+
+/**
  * Canvas container DropShadow is a Power Fx enum. Accept only explicit enum
  * literals from source; unknown runtime formulas must not be interpreted as
  * a confirmed shadow level. CSS values below are visual approximations.
