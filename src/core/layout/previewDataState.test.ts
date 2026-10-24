@@ -21,6 +21,31 @@ describe("source-only gallery state", () => {
     }))).toBe(false);
   });
 
+  it("recognizes direct AllItems access, nested functions and loaded-row counts", () => {
+    for (const visible of [
+      "=galCatalog.AllItemsCount = 0",
+      "=If(galCatalog.AllItemsCount > 0, true, false)",
+      "=IsBlank(First(galCatalog.AllItems))",
+      "=IsEmpty('gal Catalog'.AllItems)",
+      "=CountRows(galCatalog.'AllItems') = 0"
+    ]) {
+      expect(dependsOnRuntimeGalleryItems(control("Label", { Visible: visible }))).toBe(true);
+    }
+  });
+
+  it("ignores names in strings, comments and unrelated identifiers", () => {
+    for (const visible of [
+      '="galCatalog.AllItems"',
+      '=If(true, "galCatalog.AllItemsCount", "text")',
+      "=true /* galCatalog.AllItems */",
+      "=true // galCatalog.AllItemsCount",
+      "=varAllItems",
+      "=CountRows(OtherTable) = 0"
+    ]) {
+      expect(dependsOnRuntimeGalleryItems(control("Label", { Visible: visible }))).toBe(false);
+    }
+  });
+
   it("distinguishes galleries with an Items formula from static containers", () => {
     expect(galleryRecordsUnknown(control("Gallery", {
       Items: "=Filter(colApps, IsEnabled)"
