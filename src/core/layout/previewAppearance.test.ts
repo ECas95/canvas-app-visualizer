@@ -36,6 +36,30 @@ describe("semantic preview classification", () => {
     expect(previewColor('=ColorValue("url(https://test.example)")')).toBeNull();
   });
 
+  it("accepts only complete hexadecimal CSS colors in source formulas", () => {
+    for (const hex of ["#abc", "#abcd", "#abcdef", "#abcdef80"]) {
+      expect(previewColor('=ColorValue("' + hex + '")')).toBe(hex);
+      expect(previewColor('="' + hex + '"')).toBe(hex);
+    }
+    for (const hex of ["#ab", "#abcde", "#abcdef0", "#abcdef012", "#zzzzzz"]) {
+      expect(previewColor('=ColorValue("' + hex + '")')).toBeNull();
+      expect(previewColor('="' + hex + '"')).toBeNull();
+    }
+    // Single quotes denote quoted identifiers in Power Fx, not text literals.
+    expect(previewColor("=ColorValue('#abcdef')")).toBeNull();
+  });
+
+  it("rejects malformed local-only color values without executing formulas", () => {
+    for (const hex of ["#12345", "#1234567", "#123456789"]) {
+      expect(previewColorWithSymbols("=ColorValue(localColor)", { localColor: hex }))
+        .toBeNull();
+      expect(previewColorWithSymbols("=localColor", { localColor: hex }))
+        .toBeNull();
+    }
+    expect(previewColorWithSymbols("=ColorValue(localColor)", { localColor: "#abcdef80" }))
+      .toBe("#abcdef80");
+  });
+
   it("does not make up dynamic labels", () => {
     expect(previewText(control("Label", { Text: '="Welcome"' }))).toBe("Welcome");
     expect(previewText(control("Label", { Text: "=varTitle" }))).toBeNull();
