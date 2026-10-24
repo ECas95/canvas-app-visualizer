@@ -318,14 +318,14 @@ function enumValue(
   // verified App/Parent/Self/local symbols. Never promote a string variable
   // or a quoted enum lookalike into an enum value.
   if (!symbols) return null;
-  const conditional = /^=?\s*If\(\s*[\s\S]+?,\s*([A-Za-z]+)\.([A-Za-z]+)\s*,\s*([A-Za-z]+)\.([A-Za-z]+)\s*\)$/i.exec(raw.trim());
-  if (!conditional || conditional[1].toLowerCase() !== namespace.toLowerCase() ||
-      conditional[3].toLowerCase() !== namespace.toLowerCase()) return null;
-  const resolved = staticString(raw, symbols);
-  const selected = typeof resolved === "string"
-    ? /^([A-Za-z]+)\.([A-Za-z]+)$/i.exec(resolved) : null;
-  return selected && selected[1].toLowerCase() === namespace.toLowerCase()
-    ? selected[2].toLowerCase() : null;
+  const conditional = /^=?\s*If\(\s*([\s\S]+?),\s*([A-Za-z]+)\.([A-Za-z]+)\s*,\s*([A-Za-z]+)\.([A-Za-z]+)\s*\)$/i.exec(raw.trim());
+  if (!conditional || conditional[2].toLowerCase() !== namespace.toLowerCase() ||
+      conditional[4].toLowerCase() !== namespace.toLowerCase()) return null;
+  // The generic scalar evaluator intentionally does not treat Align,
+  // VerticalAlign or FontWeight as string-valued enums. Resolve only the
+  // verified boolean condition, then select a literal enum arm ourselves.
+  const condition = staticBoolean("=" + conditional[1], symbols);
+  return condition === null ? null : (condition ? conditional[3] : conditional[5]).toLowerCase();
 }
 
 export type PreviewHorizontalAlign = "start" | "middle" | "end" | "justify";
