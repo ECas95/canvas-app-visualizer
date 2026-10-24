@@ -510,3 +510,26 @@ export function galleryTemplateLayout(
     dynamic: templateSize === null || variableHeight || (control.properties.WrapCount !== undefined && resolvedWrap === null)
   };
 }
+
+
+/**
+ * Geometry for a source-only gallery template guide, never a runtime record.
+ * WrapCount creates columns in a vertical gallery and rows in a horizontal
+ * gallery. Keep the guides within their template cells; clipping to the
+ * gallery viewport is handled by the SVG renderer.
+ */
+export function galleryTemplateGuideRect(
+  template: GalleryTemplateLayout,
+  slotIndex: number,
+  originX: number,
+  originY: number
+): { x: number; y: number; width: number; height: number } {
+  const slot = Math.max(0, Math.floor(Number.isFinite(slotIndex) ? slotIndex : 0));
+  const padding = Math.max(0, template.padding);
+  return {
+    x: originX + (template.orientation === "vertical" ? slot * template.width : 0) + padding,
+    y: originY + (template.orientation === "horizontal" ? slot * template.height : 0) + padding,
+    width: Math.max(0, template.width - padding * 2),
+    height: Math.max(0, template.height - padding * 2)
+  };
+}
