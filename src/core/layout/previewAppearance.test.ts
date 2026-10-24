@@ -27,6 +27,22 @@ describe("semantic preview classification", () => {
     expect(previewKind("Camera")).toBe("unknown");
   });
 
+  it("classifies the documented ModernText control as display text, not an input", () => {
+    expect(previewKind("ModernText@1.0.0")).toBe("label");
+    expect(previewKind("ModernText")).toBe("label");
+    expect(previewKind("ModernTextInput@1.0.0")).toBe("input");
+    expect(previewKind("Classic/TextInput@2.3.2")).toBe("input");
+    expect(previewKind("SomeOtherText@1.0.0")).toBe("unknown");
+  });
+
+  it("preserves explicit font size and uses the documented ModernText default", () => {
+    expect(previewFontSize(control("ModernText@1.0.0"))).toBe(15);
+    expect(previewFontSize(control("ModernText@1.0.0", { Size: "=22" }))).toBe(22);
+    expect(previewFontSize(control("ModernText@1.0.0", { FontSize: "=18" }))).toBe(18);
+    expect(previewFontSize(control("Classic/Label@2.5.1"))).toBe(14);
+    expect(previewFontSize(control("ModernText@1.0.0", { Size: "=varRuntimeSize" }))).toBe(15);
+  });
+
   it("only paints statically known colors", () => {
     expect(previewColor("=Color.White")).toBe("#ffffff");
     expect(previewColor("=Color.Transparent")).toBe("transparent");
