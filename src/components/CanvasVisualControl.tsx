@@ -65,12 +65,21 @@ export function CanvasVisualControl({
   const wraps = previewLabelWrap(control, simulationSymbols);
   const padding = (raw: unknown) => Math.max(0, staticNumber(raw, simulationSymbols) ?? 0);
 
+  // Power Apps aligns text inside the content box after source padding.
+  // Preserve the old approximate inset only when no static padding is known.
+  // Checkbox/toggle labels use their own icon offset, not the host's text inset.
   function alignedTextPoint(defaultX: number, defaultAnchor: "start" | "middle" | "end") {
     const anchor = horizontalAlign ?? defaultAnchor;
-    if (!horizontalAlign) return { x: defaultX, anchor };
-    if (anchor === "middle") return { x: x + width / 2, anchor };
-    if (anchor === "end") return { x: x + width - inset, anchor };
-    return { x: x + inset, anchor };
+    const sourceInset = (raw: unknown) => {
+      const resolved = staticNumber(raw, simulationSymbols);
+      return resolved !== null && Number.isFinite(resolved) ? Math.max(0, resolved) : inset;
+    };
+    const left = sourceInset(props.PaddingLeft);
+    const right = sourceInset(props.PaddingRight);
+    if (anchor === "middle") return { x: x + (width + left - right) / 2, anchor };
+    if (anchor === "end") return { x: x + width - right, anchor };
+    if (horizontalAlign || defaultX === x + inset) return { x: x + left, anchor };
+    return { x: defaultX, anchor };
   }
 
   // Anchor the complete multiline block, not its center, to Top/Bottom.
@@ -83,7 +92,8 @@ export function CanvasVisualControl({
     if (verticalAlign === "bottom") {
       return y + height - bottomPadding - fontSize / 2 - (lineCount - 1) * lineHeight;
     }
-    const centerY = verticalAlign === "middle" ? y + height / 2 : defaultY;
+    const centerY = verticalAlign === "middle"
+      ? y + (height + topPadding - bottomPadding) / 2 : defaultY;
     return centerY - ((lineCount - 1) * lineHeight) / 2;
   }
 
