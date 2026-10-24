@@ -252,7 +252,7 @@ describe("Canvas SVG text content-box padding", () => {
       Text: "=LocalText", Size: "=20", Wrap: "=false",
       VerticalAlign: "=VerticalAlign.Middle",
       PaddingTop: "=10", PaddingBottom: "=2"
-    }, { LocalText: "First\\nSecond" });
+    }, { LocalText: "First\nSecond" });
     expect(html).toMatch(/<text[^>]* y="44"/);
     expect(html).toContain('dy="24"');
   });
@@ -265,7 +265,7 @@ describe("Canvas SVG text content-box padding", () => {
     expect(render(props, { "App.Width": 390 })).toMatch(/<text[^>]* x="18"/);
     expect(render(props, { "App.Width": 1366 })).toMatch(/<text[^>]* x="34"/);
     expect(render({ ...props, PaddingLeft: "=varRuntimePadding" }))
-      .toMatch(/<text[^>]* x="15\\.6/);
+      .toMatch(/<text[^>]* x="15\.6/);
   });
 
   it("preserves the independent checkbox label offset", () => {
