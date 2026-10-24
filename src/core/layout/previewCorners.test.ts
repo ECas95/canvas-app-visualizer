@@ -19,14 +19,14 @@ describe("Canvas corner radius preview", () => {
     expect(path).toContain("H 22 Q 10 95 10 83");
   });
 
-  it("clamps negative and oversized radii to finite geometry", () => {
+  it("preserves large source radii for proportional edge normalization", () => {
     expect(previewCornerRadii({
       RadiusTopLeft: "=-10",
       RadiusTopRight: "=900",
       RadiusBottomRight: "=900",
       RadiusBottomLeft: "=0"
     }, 120, 40)).toEqual({
-      topLeft: 0, topRight: 20, bottomRight: 20, bottomLeft: 0
+      topLeft: 0, topRight: 900, bottomRight: 900, bottomLeft: 0
     });
   });
 
@@ -46,10 +46,13 @@ describe("Canvas corner radius preview", () => {
   });
 
   it("bounds clipping paths to the inset box and handles degenerate dimensions", () => {
-    const radii = previewCornerRadii({ RadiusTopLeft: "=50" }, 30, 20);
+    const radii = previewCornerRadii({
+      RadiusTopLeft: "=50", RadiusTopRight: "=0",
+      RadiusBottomRight: "=0", RadiusBottomLeft: "=0"
+    }, 30, 20);
     const clip = previewRoundedRectPath(1, 1, 28, 18, radii);
-    expect(clip).toContain("M 10 1");
-    expect(clip).toContain("Q 29 1 29 5");
+    expect(clip).toContain("M 19 1");
+    expect(clip).toContain("Q 1 1 19 1");
     const zero = previewRoundedRectPath(0, 0, 0, 0, radii);
     expect(zero).not.toContain("NaN");
     expect(zero).not.toContain("Infinity");
@@ -116,8 +119,50 @@ describe("Canvas corner radius preview", () => {
     const path = previewChildClipPath({
       RadiusTopLeft: "=10000", RadiusBottomRight: "=-5"
     }, 0, 0, 100, 20);
-    expect(path).toContain("M 10 0");
+    expect(path).toContain("M 20 0");
     expect(path).not.toContain("NaN");
     expect(previewChildClipPath({}, 0, 0, 0, 0)).not.toContain("Infinity");
+  });
+
+  it("preserves Microsoft's 300px opposite-corner leaf on a 300px button", () => {
+    const props = {
+      RadiusTopLeft: "=300", RadiusTopRight: "=0",
+      RadiusBottomRight: "=300", RadiusBottomLeft: "=0"
+    };
+    const radii = previewCornerRadii(props, 300, 300);
+    expect(radii).toEqual({
+      topLeft: 300, topRight: 0, bottomRight: 300, bottomLeft: 0
+    });
+    const outline = previewRoundedRectPath(0, 0, 300, 300, radii);
+    expect(outline).toContain("M 300 0 H 300");
+    expect(outline).toContain("Q 300 300 0 300");
+    expect(previewChildClipPath(props, 0, 0, 300, 300)).toBe(outline);
+  });
+
+  it("proportionally scales overlapping adjacent corners, not each to half the height", () => {
+    const props = {
+      RadiusTopLeft: "=80", RadiusTopRight: "=80",
+      RadiusBottomRight: "=0", RadiusBottomLeft: "=0"
+    };
+    const radii = previewCornerRadii(props, 100, 60);
+    const outline = previewRoundedRectPath(0, 0, 100, 60, radii);
+    expect(outline).toContain("M 50 0 H 50");
+    expect(outline).toContain("Q 100 0 100 50");
+    expect(previewChildClipPath(props, 0, 0, 100, 60)).toBe(outline);
+  });
+
+  it("uses viewport-specific known radii consistently for outline and clipping", () => {
+    const props = {
+      RadiusTopLeft: "=If(App.Width < 720, 80, 12)",
+      RadiusTopRight: "=If(App.Width < 720, 80, 12)",
+      RadiusBottomRight: "=0", RadiusBottomLeft: "=0"
+    };
+    for (const viewport of [390, 1366]) {
+      const symbols = { "App.Width": viewport };
+      const outline = previewRoundedRectPath(0, 0, 100, 60,
+        previewCornerRadii(props, 100, 60, symbols));
+      expect(previewChildClipPath(props, 0, 0, 100, 60, symbols)).toBe(outline);
+      expect(outline).toContain(viewport === 390 ? "M 50 0" : "M 12 0");
+    }
   });
 });
