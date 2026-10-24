@@ -100,4 +100,42 @@ describe("source-faithful Canvas label wrapping", () => {
     const html = render({ Text: '="' + text + '"', Wrap: "=true" });
     expect(html).toContain(text);
   });
+  it("renders source-declared dashed borders without affecting text", () => {
+    const html = render({
+      Text: '="Outline"', Fill: "=Color.White", BorderColor: "=Color.Red",
+      BorderThickness: "=2", BorderStyle: "=BorderStyle.Dashed"
+    });
+    expect(html).toContain('stroke-dasharray="6 4"');
+    expect(html).toContain('stroke-width="2"');
+    expect(html).toContain("Outline");
+  });
+
+  it("renders dotted borders with round caps", () => {
+    const html = render({
+      Text: '="Dotted"', Fill: "=Color.White", BorderColor: "=Color.Red",
+      BorderThickness: "=2", BorderStyle: "=BorderStyle.Dotted"
+    });
+    expect(html).toContain('stroke-dasharray="0 4"');
+    expect(html).toContain('stroke-linecap="round"');
+  });
+
+  it("suppresses explicit borders when BorderStyle.None is serialized", () => {
+    const html = render({
+      Text: '="No border"', Fill: "=Color.White", BorderColor: "=Color.Red",
+      BorderThickness: "=4", BorderStyle: "=BorderStyle.None"
+    });
+    expect(html).toContain('stroke-width="0"');
+    expect(html).not.toContain("stroke-dasharray=");
+    expect(html).toContain("No border");
+  });
+
+  it("does not guess a runtime-dependent BorderStyle", () => {
+    const html = render({
+      Text: '="Unknown style"', Fill: "=Color.White", BorderColor: "=Color.Red",
+      BorderThickness: "=2", BorderStyle: "=If(varReady, BorderStyle.Dotted, BorderStyle.None)"
+    });
+    expect(html).toContain('stroke-width="2"');
+    expect(html).not.toContain("stroke-dasharray=");
+  });
+
 });
