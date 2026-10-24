@@ -221,3 +221,59 @@ describe("Canvas multiline SVG text vertical alignment", () => {
       .toMatch(/<text[^>]* y="30"/);
   });
 });
+
+describe("Canvas SVG text content-box padding", () => {
+  it("positions left-aligned text at source PaddingLeft", () => {
+    const html = render({
+      Text: '="Left"', Align: "=Align.Left", PaddingLeft: "=12"
+    });
+    expect(html).toMatch(/<text[^>]* x="22"/);
+  });
+
+  it("positions right-aligned text inside source PaddingRight", () => {
+    const html = render({
+      Text: '="Right"', Align: "=Align.Right", PaddingRight: "=18"
+    });
+    expect(html).toMatch(/<text[^>]* x="132"/);
+    expect(html).toContain('text-anchor="end"');
+  });
+
+  it("centers text within asymmetric left/right padding", () => {
+    const html = render({
+      Text: '="Center"', Align: "=Align.Center",
+      PaddingLeft: "=10", PaddingRight: "=30"
+    });
+    expect(html).toMatch(/<text[^>]* x="70"/);
+    expect(html).toContain('text-anchor="middle"');
+  });
+
+  it("centers the multiline block within asymmetric vertical padding", () => {
+    const html = render({
+      Text: "=LocalText", Size: "=20", Wrap: "=false",
+      VerticalAlign: "=VerticalAlign.Middle",
+      PaddingTop: "=10", PaddingBottom: "=2"
+    }, { LocalText: "First\\nSecond" });
+    expect(html).toMatch(/<text[^>]* y="44"/);
+    expect(html).toContain('dy="24"');
+  });
+
+  it("resolves viewport padding without guessing runtime-dependent values", () => {
+    const props = {
+      Text: '="Responsive"', Align: "=Align.Left",
+      PaddingLeft: "=If(App.Width < 720, 8, 24)"
+    };
+    expect(render(props, { "App.Width": 390 })).toMatch(/<text[^>]* x="18"/);
+    expect(render(props, { "App.Width": 1366 })).toMatch(/<text[^>]* x="34"/);
+    expect(render({ ...props, PaddingLeft: "=varRuntimePadding" }))
+      .toMatch(/<text[^>]* x="15\\.6/);
+  });
+
+  it("preserves the independent checkbox label offset", () => {
+    const html = renderToStaticMarkup(
+      <CanvasVisualControl control={{ ...label({ Text: '="Check"' }),
+        controlType: "Classic/CheckBox@2.1.0" }}
+        x={10} y={20} width={140} height={64} clipId="checkbox-clip" />
+    );
+    expect(html).toMatch(/<text[^>]* x="39"/);
+  });
+});
