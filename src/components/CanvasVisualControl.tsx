@@ -146,7 +146,7 @@ export function CanvasVisualControl({
     kind === "container" &&
     control.controlType.toLowerCase().includes("groupcontainer") &&
     previewIsOpaqueColor(explicitFill)
-      ? previewDropShadowFilter(props.DropShadow)
+      ? previewDropShadowFilter(props.DropShadow, simulationSymbols)
       : undefined;
 
   const basicRect = (
