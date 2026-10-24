@@ -80,3 +80,23 @@ describe("Canvas auto-layout source-only Wrap geometry", () => {
       .toEqual([[0, 0, false], [100, 0, false], [200, 0, false]]);
   });
 });
+
+describe("Canvas zero-size AutoLayout children", () => {
+  it("does not fabricate 8px width in a wrapped row", () => {
+    const parent = host("Horizontal", "=true");
+    parent.children = [child("Zero", 0, 30), child("Second", 90, 30), child("Third", 90, 30)];
+    expect(layout(parent, 100, 120).map(r => [r.x, r.y, r.width, r.height, r.dynamic]))
+      .toEqual([
+        [0, 0, 0, 30, false],
+        [10, 0, 90, 30, false],
+        [0, 40, 90, 30, false]
+      ]);
+  });
+
+  it("does not fabricate 8px height in a vertical stack", () => {
+    const parent = host("Vertical", "=false");
+    parent.children = [child("Zero", 40, 0), child("Next", 40, 50)];
+    expect(layout(parent, 120, 100).map(r => [r.y, r.height, r.dynamic]))
+      .toEqual([[0, 0, false], [10, 50, false]]);
+  });
+});

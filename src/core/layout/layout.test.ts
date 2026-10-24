@@ -540,3 +540,37 @@ describe("source-only gallery guide geometry", () => {
       .toEqual({ x: 100, y: 50, width: 0, height: 0 });
   });
 });
+
+describe("Canvas zero-size dimensions and responsive viewports", () => {
+  const control: CanvasControl = {
+    id: "ZeroSized", name: "ZeroSized", controlType: "Classic/Label@2.5.1",
+    properties: {
+      Width: "=If(App.Width < 720, 0, 180)", Height: "=0",
+      X: "=Parent.Width - Self.Width", Y: "=20"
+    },
+    children: [], sourceFile: "Src/SyntheticZero.pa.yaml",
+    sourcePath: "Screens/SyntheticZero/ZeroSized",
+    sourceFormat: "pa-yaml-v3", zIndex: 1
+  };
+
+  it("preserves a known zero width and height without marking the layout unknown", () => {
+    const phone = controlRect(control, 0, {
+      appWidth: 390, appHeight: 844, parentWidth: 390, parentHeight: 844
+    });
+    expect(phone).toEqual({ x: 390, y: 20, width: 0, height: 0, dynamic: false });
+
+    const desktop = controlRect(control, 0, {
+      appWidth: 1366, appHeight: 768, parentWidth: 1366, parentHeight: 768
+    });
+    expect(desktop).toEqual({ x: 1186, y: 20, width: 180, height: 0, dynamic: false });
+  });
+
+  it("does not mistake unresolved dimensions for known zero", () => {
+    const unresolved = { ...control, properties: { ...control.properties, Width: "=varRuntimeWidth" } };
+    const rect = controlRect(unresolved, 0, {
+      appWidth: 390, appHeight: 844, parentWidth: 390, parentHeight: 844
+    });
+    expect(rect.width).toBe(220);
+    expect(rect.dynamic).toBe(true);
+  });
+});

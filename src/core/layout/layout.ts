@@ -214,8 +214,10 @@ export function controlRect(
   const width = resolvedNumber(control.properties.Width, baseSymbols);
   const height = resolvedNumber(control.properties.Height, baseSymbols);
 
-  const finalWidth = Math.max(8, width ?? defaults.width);
-  const finalHeight = Math.max(8, height ?? defaults.height);
+  // Zero is a valid resolved Canvas dimension; do not invent an 8px control.
+  // Keep fallback defaults only for dimensions that are genuinely unresolved.
+  const finalWidth = Math.max(0, width ?? defaults.width);
+  const finalHeight = Math.max(0, height ?? defaults.height);
 
   const selfSymbols = layoutSymbols(
     context,
@@ -235,8 +237,8 @@ export function controlRect(
   };
   const resolvedWidth = resolvedNumber(control.properties.Width, positionedSymbols) ?? width;
   const resolvedHeight = resolvedNumber(control.properties.Height, positionedSymbols) ?? height;
-  const effectiveWidth = Math.max(8, resolvedWidth ?? defaults.width);
-  const effectiveHeight = Math.max(8, resolvedHeight ?? defaults.height);
+  const effectiveWidth = Math.max(0, resolvedWidth ?? defaults.width);
+  const effectiveHeight = Math.max(0, resolvedHeight ?? defaults.height);
   const finalSymbols = {
     ...(layoutSymbols(context, effectiveWidth, effectiveHeight) ?? {}),
     ...positionedSymbols,
@@ -385,8 +387,8 @@ export function autoLayoutChildren(
       const rect: VisualRect = {
         x: horizontal ? cursorMain : cursorCross,
         y: horizontal ? cursorCross : cursorMain,
-        width: Math.max(8, item.baseWidth),
-        height: Math.max(8, item.baseHeight),
+        width: Math.max(0, item.baseWidth),
+        height: Math.max(0, item.baseHeight),
         dynamic: false
       };
       cursorMain += mainSize + gap;
@@ -455,8 +457,8 @@ export function autoLayoutChildren(
 
     return {
       ...item,
-      width: Math.max(8, width),
-      height: Math.max(8, height),
+      width: Math.max(0, width),
+      height: Math.max(0, height),
       fallback,
       childAlign
     };
