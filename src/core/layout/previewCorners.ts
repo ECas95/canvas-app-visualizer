@@ -1,4 +1,5 @@
 import { literalNumber } from "./layout";
+import { staticNumber, type StaticPowerFxValue } from "../powerfx/staticEval";
 
 /**
  * Canvas controls expose four independent radius properties. SVG rect.rx
@@ -16,11 +17,12 @@ export interface PreviewCornerRadii {
 export function previewCornerRadii(
   properties: Record<string, unknown>,
   width: number,
-  height: number
+  height: number,
+  symbols?: Record<string, StaticPowerFxValue>
 ): PreviewCornerRadii {
   const maximum = Math.max(0, Math.min(width, height) / 2);
   const radius = (raw: unknown): number => {
-    const source = literalNumber(raw);
+    const source = literalNumber(raw) ?? (symbols ? staticNumber(raw, symbols) : null);
     const approximate = source !== null && Number.isFinite(source) ? source : 4;
     return Math.min(maximum, Math.max(0, approximate));
   };
@@ -65,8 +67,9 @@ export function previewRoundedRectPath(
 
 
 /**
- * Child clipping uses only provable source radii. Unknown runtime formulas do
- * not authorize rounded clipping: a square fallback avoids hiding content
+ * Child clipping uses only provable radii, including formulas resolved from
+ * known App/Parent/Self symbols. Unknown runtime formulas do not authorize
+ * rounded clipping: a square fallback avoids hiding content
  * based on an invented corner value. This differs intentionally from the
  * approximate 4px outline used for visual control placeholders.
  */
@@ -75,10 +78,12 @@ export function previewChildClipPath(
   x: number,
   y: number,
   width: number,
-  height: number
+  height: number,
+  symbols?: Record<string, StaticPowerFxValue>
 ): string {
   const radius = (key: string): number => {
-    const value = literalNumber(properties[key]);
+    const value = literalNumber(properties[key]) ??
+      (symbols ? staticNumber(properties[key], symbols) : null);
     return value !== null && Number.isFinite(value) ? Math.max(0, value) : 0;
   };
   return previewRoundedRectPath(x, y, width, height, {

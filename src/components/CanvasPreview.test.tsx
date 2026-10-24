@@ -36,6 +36,12 @@ describe("CanvasPreview nested host clipping", () => {
     expect(html).toContain("Local fixture");
   });
 
+  it("uses known App and Self symbols when clipping a nested host", () => {
+    const responsive = renderHost("=If(App.Width > 720, Self.Width / 10, 2)");
+    expect(responsive).toMatch(/<clipPath[^>]*><path d="M 20 20 H 110/);
+    expect(responsive).toContain("Local fixture");
+  });
+
   it("does not hide child pixels using guessed runtime corner radii", () => {
     const html = renderHost("=If(varAccess, 12, 0)");
     expect(html).toMatch(/<clipPath[^>]*><path d="M 10 20 H 110/);

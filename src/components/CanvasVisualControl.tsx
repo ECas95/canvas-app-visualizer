@@ -52,7 +52,7 @@ export function CanvasVisualControl({
   // Bound pathological imported strings while retaining normal multiline labels.
   const text = label?.slice(0, 4096);
   const inset = Math.min(12, Math.max(3, width * 0.04));
-  const corners = previewCornerRadii(props, width, height);
+  const corners = previewCornerRadii(props, width, height, simulationSymbols);
   const outline = previewRoundedRectPath(x, y, width, height, corners);
   const selected = simulationSymbols
     ? [props.Default, props.Checked, props.Value].some(value => staticBoolean(value, simulationSymbols) === true)

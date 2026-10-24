@@ -376,7 +376,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
               {items.map((item, index) => (
                 <clipPath key={item.control.id} id={`${instanceId}-bounds-${index}`}>
                   <path d={previewChildClipPath(item.control.properties,
-                    item.x, item.y, item.width, item.height)} />
+                    item.x, item.y, item.width, item.height, item.renderSymbols)} />
                 </clipPath>
               ))}
             </defs>

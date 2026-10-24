@@ -74,6 +74,44 @@ describe("Canvas corner radius preview", () => {
     expect(unknown).toContain("M 0 0 H 80");
   });
 
+  it("resolves responsive per-corner radii only from known viewport and parent symbols", () => {
+    const props = {
+      RadiusTopLeft: "=If(App.Width < 720, 12, 4)",
+      RadiusTopRight: "=Parent.Height / 4",
+      RadiusBottomRight: "=varUnknownRadius",
+      RadiusBottomLeft: "=0"
+    };
+    const phone = previewCornerRadii(props, 100, 40, {
+      "App.Width": 390, "Parent.Height": 40
+    });
+    const desktop = previewCornerRadii(props, 100, 40, {
+      "App.Width": 1366, "Parent.Height": 40
+    });
+    expect(phone).toEqual({ topLeft: 12, topRight: 10, bottomRight: 4, bottomLeft: 0 });
+    expect(desktop).toEqual({ topLeft: 4, topRight: 10, bottomRight: 4, bottomLeft: 0 });
+    expect(previewCornerRadii(props, 100, 40).topLeft).toBe(4);
+  });
+
+  it("clips known responsive radii but never rounds for unresolved runtime state", () => {
+    const props = {
+      RadiusTopLeft: "=If(App.Width < 720, 12, 4)",
+      RadiusBottomRight: "=Parent.Width / 20",
+      RadiusTopRight: "=varUnknownRadius"
+    };
+    const phone = previewChildClipPath(props, 10, 20, 100, 40, {
+      "App.Width": 390, "Parent.Width": 100
+    });
+    const desktop = previewChildClipPath(props, 10, 20, 100, 40, {
+      "App.Width": 1366, "Parent.Width": 100
+    });
+    expect(phone).toContain("M 22 20");
+    expect(phone).toContain("Q 110 60 105 60");
+    expect(desktop).toContain("M 14 20");
+    expect(phone).toContain("H 110 Q 110 20 110 20");
+    expect(previewChildClipPath(props, 10, 20, 100, 40))
+      .toContain("M 10 20");
+  });
+
   it("bounds pathological radii and zero-size clip regions", () => {
     const path = previewChildClipPath({
       RadiusTopLeft: "=10000", RadiusBottomRight: "=-5"

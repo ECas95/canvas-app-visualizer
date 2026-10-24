@@ -140,11 +140,13 @@ describe("source-faithful Canvas label wrapping", () => {
 
 });
 
-function renderContainer(properties: Record<string, unknown>, type = "GroupContainer@1.3.0") {
+function renderContainer(properties: Record<string, unknown>, type = "GroupContainer@1.3.0",
+  symbols?: Record<string, string | number | boolean>) {
   return renderToStaticMarkup(
     <CanvasVisualControl
       control={{ ...label(properties), controlType: type, name: "SyntheticContainer" }}
       x={10} y={20} width={140} height={64} clipId="test-container-clip"
+      simulationSymbols={symbols}
     />
   );
 }
@@ -201,6 +203,21 @@ describe("Canvas container DropShadow rendering", () => {
     expect(render(props)).not.toContain("filter:drop-shadow(");
     expect(renderContainer(props, "Gallery@2.15.0"))
       .not.toContain("filter:drop-shadow(");
+  });
+});
+
+describe("responsive Canvas outline radii", () => {
+  it("uses the same known viewport radius for the SVG outline and text clip", () => {
+    const props = {
+      Fill: "=Color.White",
+      RadiusTopLeft: "=If(App.Width < 720, 12, 0)",
+      RadiusTopRight: "=0", RadiusBottomLeft: "=0", RadiusBottomRight: "=0"
+    };
+    const phone = renderContainer(props, "GroupContainer@1.3.0", { "App.Width": 390 });
+    const desktop = renderContainer(props, "GroupContainer@1.3.0", { "App.Width": 1366 });
+    expect(phone).toContain('d="M 22 20');
+    expect(desktop).toContain('d="M 10 20');
+    expect(renderContainer(props)).toContain('d="M 14 20');
   });
 });
 
