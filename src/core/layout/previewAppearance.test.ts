@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CanvasControl } from "../../types/canvas";
 import {
-  isDefinitelyHidden, previewVisibility, previewCanRunOnSelect, previewColor, previewColorWithSymbols, previewDisplayMode, previewFontFamily, PREVIEW_DEFAULT_FONT, previewFontSize, previewFontWeight,
+  isDefinitelyHidden, previewVisibility, previewCanRunOnSelect, previewBorderStyle, previewColor, previewColorWithSymbols, previewDisplayMode, previewFontFamily, PREVIEW_DEFAULT_FONT, previewFontSize, previewFontWeight,
   previewHorizontalAlign, previewIsChecked, previewItalic, previewKind,
   previewText, previewTextDecoration, previewVerticalAlign
 } from "./previewAppearance";
@@ -204,5 +204,15 @@ describe("semantic preview classification", () => {
       .toBe("unresolved");
   });
 
+
+  it("recognizes only explicit Canvas border style enums", () => {
+    expect(previewBorderStyle("=BorderStyle.Dashed")).toBe("dashed");
+    expect(previewBorderStyle("= BorderStyle.Dotted ")).toBe("dotted");
+    expect(previewBorderStyle("=BorderStyle.Solid")).toBe("solid");
+    expect(previewBorderStyle("=BorderStyle.None")).toBe("none");
+    expect(previewBorderStyle("=If(varReady, BorderStyle.Dashed, BorderStyle.None)")).toBeNull();
+    expect(previewBorderStyle("=varBorderStyle")).toBeNull();
+    expect(previewBorderStyle("=BorderStyle.Unknown")).toBeNull();
+  });
 
 });
