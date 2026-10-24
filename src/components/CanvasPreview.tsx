@@ -108,7 +108,12 @@ function flatten(
     });
     // Conditional descendants must not leak source-only content or imply that
     // an unavailable gallery is empty. The parent remains inspectable.
-    if (runtimeGalleryStateUnknown || depth >= 24 || control.children.length === 0) continue;
+    // Gallery children are template definitions, not confirmed rendered rows.
+    // Without a verified local Items snapshot, drawing even static child labels
+    // would imply that at least one runtime record exists. Keep the gallery
+    // bounds and template guide inspectable instead.
+    if (runtimeGalleryStateUnknown || galleryRecordsUnknown(control) ||
+        depth >= 24 || control.children.length === 0) continue;
     const editorGroup = control.controlType.toLowerCase() === "group";
     const template = isGallery(control)
       ? galleryTemplateLayout(control, {
