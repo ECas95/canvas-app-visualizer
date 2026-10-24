@@ -52,6 +52,23 @@ describe("semantic preview classification", () => {
     expect(previewColor('=ColorValue("url(https://test.example)")')).toBeNull();
   });
 
+  it("propagates verified percentage RGBA colors into the visual preview", () => {
+    expect(previewColor("=RGBA(10, 20, 30, 75%)")).toBe("rgba(10,20,30,0.75)");
+    expect(previewColorWithSymbols("=If(varReady, RGBA(10,20,30,100%), Color.Red)",
+      { varReady: true })).toBe("rgba(10,20,30,1)");
+    expect(previewColorWithSymbols("=If(varReady, RGBA(10,20,30,101%), Color.Red)",
+      { varReady: true })).toBeNull();
+  });
+
+  it("does not represent invalid RGBA formulas as known fill colors", () => {
+    for (const source of [
+      "=RGBA(300, 0, 0, 1)", "=RGBA(10, 20, 30, 150%)",
+      "=RGBA(10, 20, 30, 2)", "=RGBA(10, 20, 30, -1)"
+    ]) {
+      expect(previewColor(source)).toBeNull();
+    }
+  });
+
   it("accepts only complete hexadecimal CSS colors in source formulas", () => {
     for (const hex of ["#abc", "#abcd", "#abcdef", "#abcdef80"]) {
       expect(previewColor('=ColorValue("' + hex + '")')).toBe(hex);
