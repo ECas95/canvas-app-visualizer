@@ -1,5 +1,4 @@
 import type { CanvasControl, PreviewMediaAsset } from "../types/canvas";
-import { literalNumber } from "../core/layout/layout";
 import { previewCornerRadii, previewRoundedRectPath } from "../core/layout/previewCorners";
 import { staticNumber, staticString } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
@@ -55,7 +54,12 @@ export function CanvasVisualControl({
     simulationSymbols
   ) ?? "#242424";
   const borderColor = previewColorWithSymbols(props.BorderColor, simulationSymbols);
-  const thickness = literalNumber(props.BorderThickness);
+  // BorderThickness is a Power Fx numeric formula, not necessarily a literal.
+  // Resolve only known viewport/local values; never infer a SQL/runtime result.
+  // Negative or unresolved widths cannot be rendered as verified borders.
+  const resolvedThickness = staticNumber(props.BorderThickness, simulationSymbols);
+  const thickness = resolvedThickness !== null && resolvedThickness >= 0
+    ? resolvedThickness : null;
   const borderStyle = previewBorderStyle(props.BorderStyle, simulationSymbols);
   const rawText = kind === "input"
     ? props.Default ?? props.Value ?? props.HintText
