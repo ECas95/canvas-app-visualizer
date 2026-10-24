@@ -1,11 +1,13 @@
 import type { CanvasControl, PreviewMediaAsset } from "../types/canvas";
 import { literalNumber } from "../core/layout/layout";
-import { staticBoolean, staticString } from "../core/powerfx/staticEval";
+import { previewCornerRadii, previewRoundedRectPath } from "../core/layout/previewCorners";
+import { staticBoolean, staticNumber, staticString } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
-import { previewImageFit, resolvePreviewImage } from "../core/layout/previewMedia";
+import { previewImageFit, previewImageFlipTransform, previewImagePosition, previewRasterCssImage, resolvePreviewImage } from "../core/layout/previewMedia";
+import { PREVIEW_ICON_PATHS, previewIconName, previewIconRotation } from "../core/layout/previewIcon";
 import {
-  previewColorWithSymbols, previewDisplayMode, previewFontSize, previewFontWeight, previewHorizontalAlign,
-  previewIsChecked, previewItalic, previewKind, previewText, previewTextDecoration,
+  previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewDropShadowFilter, previewIsOpaqueColor, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
+  previewIsChecked, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration,
   previewVerticalAlign
 } from "../core/layout/previewAppearance";
 
@@ -20,8 +22,6 @@ interface Props {
   clipId: string;
 }
 
-const FAMILY = '"Segoe UI",system-ui,sans-serif';
-
 export function CanvasVisualControl({
   control, x, y, width, height, clipId, mediaAssets = [], simulationSymbols
 }: Props) {
@@ -30,6 +30,14 @@ export function CanvasVisualControl({
   const props = control.properties;
   const kind = previewKind(control.controlType);
   const media = kind === "image" ? resolvePreviewImage(props.Image, mediaAssets) : undefined;
+  const imagePosition = kind === "image" ? previewImagePosition(props.ImagePosition) : null;
+  // Native-size Center/Tile use a browser raster background. The importer
+  // supplies only bounded local PNG/JPEG/GIF/WebP data URLs, never remote URLs.
+  const imageFlip = kind === "image" ? previewImageFlipTransform(
+    props.FlipHorizontal, props.FlipVertical, x, y, width, height, simulationSymbols
+  ) : null;
+  const rasterCssImage = media && (imagePosition === "center" || imagePosition === "tile")
+    ? previewRasterCssImage(media.dataUrl) : null;
   const displayMode = previewDisplayMode(props.DisplayMode, simulationSymbols);
   const disabled = displayMode === "disabled";
   const explicitFill = previewColorWithSymbols(
@@ -40,17 +48,20 @@ export function CanvasVisualControl({
   ) ?? "#242424";
   const borderColor = previewColorWithSymbols(props.BorderColor, simulationSymbols);
   const thickness = literalNumber(props.BorderThickness);
+  const borderStyle = previewBorderStyle(props.BorderStyle);
   const rawText = kind === "input"
     ? props.Default ?? props.Value ?? props.HintText
     : kind === "select"
       ? props.Default ?? props.InputTextPlaceholder
       : props.Text ?? props.Label;
   const label = (simulationSymbols && staticString(rawText, simulationSymbols)) ?? previewText(control);
-  const fontSize = previewFontSize(control);
-  const text = label?.slice(0, 240);
+  const fontSize = previewFontSize(control, simulationSymbols);
+  const fontFamily = previewFontFamily(control);
+  // Bound pathological imported strings while retaining normal multiline labels.
+  const text = label?.slice(0, 4096);
   const inset = Math.min(12, Math.max(3, width * 0.04));
-  const radius = Math.min(width / 2, height / 2,
-    Math.max(0, literalNumber(props.RadiusTopLeft) ?? 4));
+  const corners = previewCornerRadii(props, width, height, simulationSymbols);
+  const outline = previewRoundedRectPath(x, y, width, height, corners);
   const selected = simulationSymbols
     ? [props.Default, props.Checked, props.Value].some(value => staticBoolean(value, simulationSymbols) === true)
     : previewIsChecked(control);
@@ -59,22 +70,41 @@ export function CanvasVisualControl({
   const fontWeight = previewFontWeight(control);
   const italic = previewItalic(control);
   const textDecoration = previewTextDecoration(control);
+  const wraps = previewLabelWrap(control, simulationSymbols);
+  const padding = (raw: unknown) => Math.max(0, staticNumber(raw, simulationSymbols) ?? 0);
 
+  // Power Apps aligns text inside the content box after source padding.
+  // Preserve the old approximate inset only when no static padding is known.
+  // Checkbox/toggle labels use their own icon offset, not the host's text inset.
   function alignedTextPoint(defaultX: number, defaultAnchor: "start" | "middle" | "end") {
-    const anchor = horizontalAlign ?? defaultAnchor;
-    if (!horizontalAlign) return { x: defaultX, anchor };
-    if (anchor === "middle") return { x: x + width / 2, anchor };
-    if (anchor === "end") return { x: x + width - inset, anchor };
-    return { x: x + inset, anchor };
+    // SVG text cannot justify; retain a deterministic left-aligned fallback.
+    // Wrapped labels use browser text layout below for real justification.
+    const anchor = horizontalAlign === "justify" ? "start" : horizontalAlign ?? defaultAnchor;
+    const sourceInset = (raw: unknown) => {
+      const resolved = staticNumber(raw, simulationSymbols);
+      return resolved !== null && Number.isFinite(resolved) ? Math.max(0, resolved) : inset;
+    };
+    const left = sourceInset(props.PaddingLeft);
+    const right = sourceInset(props.PaddingRight);
+    if (anchor === "middle") return { x: x + (width + left - right) / 2, anchor };
+    if (anchor === "end") return { x: x + width - right, anchor };
+    if (horizontalAlign || defaultX === x + inset) return { x: x + left, anchor };
+    return { x: defaultX, anchor };
   }
 
-  function alignedY(defaultY: number): number {
-    const topPadding = Math.max(0, literalNumber(props.PaddingTop) ?? 0);
-    const bottomPadding = Math.max(0, literalNumber(props.PaddingBottom) ?? 0);
+  // Anchor the complete multiline block, not its center, to Top/Bottom.
+  // The former center-first calculation shifted the first line above Top
+  // padding and the last line below Bottom padding when text had newlines.
+  function firstTextLineY(defaultY: number, lineCount: number, lineHeight: number): number {
+    const topPadding = padding(props.PaddingTop);
+    const bottomPadding = padding(props.PaddingBottom);
     if (verticalAlign === "top") return y + topPadding + fontSize / 2;
-    if (verticalAlign === "bottom") return y + height - bottomPadding - fontSize / 2;
-    if (verticalAlign === "middle") return y + height / 2;
-    return defaultY;
+    if (verticalAlign === "bottom") {
+      return y + height - bottomPadding - fontSize / 2 - (lineCount - 1) * lineHeight;
+    }
+    const centerY = verticalAlign === "middle"
+      ? y + (height + topPadding - bottomPadding) / 2 : defaultY;
+    return centerY - ((lineCount - 1) * lineHeight) / 2;
   }
 
   const isContainer = kind === "container" || kind === "gallery" || kind === "form";
@@ -90,10 +120,32 @@ export function CanvasVisualControl({
     kind === "unknown" ? "#9ca3af" : "transparent"
   );
 
+  // A known BorderStyle.None suppresses even an explicitly colored/thick border.
+  // Unsupported or runtime-dependent styles retain the existing approximation.
+  const borderWidth = borderStyle === "none" ? 0 :
+    thickness ?? (stroke === "transparent" ? 0 : 1);
+  const borderDasharray = borderStyle === "dashed"
+    ? `${Math.max(2, borderWidth * 3)} ${Math.max(2, borderWidth * 2)}`
+    : borderStyle === "dotted"
+      ? `0 ${Math.max(2, borderWidth * 2)}` : undefined;
+
+  // The source DropShadow enum applies to Canvas containers, not to text
+  // or arbitrary controls. Apply the approximate SVG filter to the host
+  // outline only (never its children), and only with a known opaque fill.
+  // Runtime-dependent shadow formulas and transparent backgrounds stay unset.
+  const shadowFilter =
+    kind === "container" &&
+    control.controlType.toLowerCase().includes("groupcontainer") &&
+    previewIsOpaqueColor(explicitFill)
+      ? previewDropShadowFilter(props.DropShadow)
+      : undefined;
+
   const basicRect = (
-    <rect x={x} y={y} width={width} height={height} rx={radius}
+    <path d={outline}
       fill={fill} stroke={stroke}
-      strokeWidth={thickness ?? (stroke === "transparent" ? 0 : 1)}
+      strokeWidth={borderWidth} strokeDasharray={borderDasharray}
+      strokeLinecap={borderStyle === "dotted" ? "round" : undefined}
+      style={shadowFilter ? { filter: shadowFilter } : undefined}
     />
   );
 
@@ -107,11 +159,10 @@ export function CanvasVisualControl({
     const point = alignedTextPoint(atX, anchor);
     const lines = value.split(/\r?\n/).slice(0, 5);
     const lineHeight = fontSize * 1.2;
-    const centralY = alignedY(atY);
-    const firstY = centralY - ((lines.length - 1) * lineHeight) / 2;
+    const firstY = firstTextLineY(atY, lines.length, lineHeight);
     return (
       <text x={point.x} y={firstY} dominantBaseline="middle"
-        textAnchor={point.anchor} fill={color} fontFamily={FAMILY}
+        textAnchor={point.anchor} fill={color} fontFamily={fontFamily}
         fontSize={fontSize} fontWeight={fontWeight}
         fontStyle={italic ? "italic" : undefined}
         textDecoration={textDecoration}>
@@ -128,13 +179,16 @@ export function CanvasVisualControl({
     <g opacity={disabled ? 0.66 : displayMode === "view" ? 0.86 : 1}>
       <defs>
         <clipPath id={clipId}>
-          <rect x={x + 1} y={y + 1} width={Math.max(0, width - 2)}
-            height={Math.max(0, height - 2)} rx={radius}/>
+          <path d={previewRoundedRectPath(
+            x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2), corners
+          )}/>
         </clipPath>
       </defs>
       {kind === "shape" && control.controlType.toLowerCase().includes("circle")
         ? <ellipse cx={x + width / 2} cy={y + height / 2} rx={width / 2} ry={height / 2}
-            fill={fill} stroke={stroke} strokeWidth={thickness ?? 0} />
+            fill={fill} stroke={stroke} strokeWidth={borderStyle === "none" ? 0 : thickness ?? 0}
+            strokeDasharray={borderDasharray}
+            strokeLinecap={borderStyle === "dotted" ? "round" : undefined} />
         : kind === "label" || kind === "icon" ? (
           explicitFill ? basicRect : null
         ) : basicRect}
@@ -144,7 +198,33 @@ export function CanvasVisualControl({
           previewColorWithSymbols(
             disabled ? props.DisabledColor ?? props.Color : props.Color, simulationSymbols
           ) ?? (disabled ? "#555555" : "#ffffff"))}
-        {kind === "label" && text && svgText(text)}
+        {kind === "label" && text && (wraps ? (
+          // HTML layout measures glyphs in the browser: SVG <text> does not wrap.
+          // Only serialized Wrap=true (or a provably true local expression) opts in.
+          <foreignObject x={x} y={y} width={width} height={height} pointerEvents="none">
+            <div style={{
+              boxSizing: "border-box", display: "flex", width: "100%", height: "100%",
+              overflow: "hidden",
+              alignItems: verticalAlign === "top" ? "flex-start" :
+                verticalAlign === "bottom" ? "flex-end" : "center",
+              paddingTop: padding(props.PaddingTop),
+              paddingRight: padding(props.PaddingRight),
+              paddingBottom: padding(props.PaddingBottom),
+              paddingLeft: padding(props.PaddingLeft),
+              color: foreground, fontFamily, fontSize,
+              fontWeight, fontStyle: italic ? "italic" : undefined,
+              textDecoration
+            }}>
+              <span style={{
+                display: "block", width: "100%", whiteSpace: "pre-wrap",
+                overflowWrap: "break-word", wordBreak: "normal",
+                textAlign: horizontalAlign === "justify" ? "justify" :
+                  horizontalAlign === "middle" ? "center" :
+                  horizontalAlign === "end" ? "right" : "left"
+              }}>{text}</span>
+            </div>
+          </foreignObject>
+        ) : svgText(text))}
         {kind === "input" && svgText(text ?? (props.Default || props.Value ? "…" : ""),
           x + inset, "start", previewColorWithSymbols(props.Color, simulationSymbols) ??
           (label ? "#242424" : "#7f8792"))}
@@ -174,16 +254,49 @@ export function CanvasVisualControl({
             {text && svgText(text, x + 50)}
           </>
         )}
-        {kind === "icon" && svgText(
-          String(props.Icon ?? "").toLowerCase().includes("add") ? "+" :
-          String(props.Icon ?? "").toLowerCase().includes("search") ? "⌕" : "◇",
-          x + width / 2, "middle", foreground, y + height / 2
-        )}
+        {kind === "icon" && (() => {
+          const icon = previewIconName(
+            props.Icon, control.controlType.toLowerCase().startsWith("modern/")
+          );
+          if (icon === "none") return null;
+          // Unsupported/runtime-dependent icons are explicitly unknown, not
+          // silently represented as a different Power Apps icon.
+          if (icon === null) return svgText("?", x + width / 2, "middle", "#7c8794");
+          const size = Math.max(0, Math.min(width, height) - 8);
+          const rotation = previewIconRotation(props.Rotation, simulationSymbols);
+          return (
+            <svg x={x + (width - size) / 2} y={y + (height - size) / 2}
+              width={size} height={size} viewBox="0 0 24 24"
+              fill="none" stroke={foreground} strokeWidth={2}
+              strokeLinecap="round" strokeLinejoin="round"
+              aria-label={icon}>
+              <path d={PREVIEW_ICON_PATHS[icon]}
+                transform={rotation !== null && rotation !== 0
+                  ? `rotate(${rotation} 12 12)` : undefined} />
+            </svg>
+          );
+        })()}
         {kind === "image" && (
-          media ? (
-            <image x={x} y={y} width={width} height={height}
-              href={media.dataUrl}
-              preserveAspectRatio={previewImageFit(props.ImagePosition)} />
+          <g transform={imageFlip || undefined}>
+          {media ? (
+            imagePosition === "center" || imagePosition === "tile" ? (
+              rasterCssImage ? (
+                <foreignObject x={x} y={y} width={width} height={height}
+                  pointerEvents="none">
+                  <div style={{
+                    width: "100%", height: "100%",
+                    backgroundImage: rasterCssImage,
+                    backgroundSize: "auto",
+                    backgroundRepeat: imagePosition === "tile" ? "repeat" : "no-repeat",
+                    backgroundPosition: imagePosition === "center" ? "center" : "left top"
+                  }} />
+                </foreignObject>
+              ) : null
+            ) : (
+              <image x={x} y={y} width={width} height={height}
+                href={media.dataUrl}
+                preserveAspectRatio={previewImageFit(props.ImagePosition)} />
+            )
           ) : (
             <>
             <rect x={x + 6} y={y + 6} width={Math.max(4, width - 12)}
@@ -192,14 +305,15 @@ export function CanvasVisualControl({
               fill="none" stroke="#7d90a4" strokeWidth={2}/>
             <circle cx={x + Math.min(width - 12, 24)} cy={y + 22} r={4} fill="#9ab0c5"/>
             </>
-          )
+          )}
+          </g>
         )}
         {kind === "unknown" && (
           <>{svgText(control.name, x + 8, "start", "#606977")}</>
         )}
       </g>
       {isContainer && explicitFill === null && (
-        <rect x={x} y={y} width={width} height={height} rx={radius}
+        <path d={outline}
           fill="none" stroke="#a8b0bd" strokeWidth="0.6" strokeDasharray="3 5"
           opacity={kind === "container" ? .3 : .6} />
       )}

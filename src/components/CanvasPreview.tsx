@@ -5,14 +5,18 @@ import {
   buildSiblingGeometrySymbols,
   controlRect,
   galleryTemplateLayout,
+  galleryTemplateGuideRect,
   isAutoLayout,
   isGallery,
   rgba
 } from "../core/layout/layout";
-import { isDefinitelyHidden, previewCanRunOnSelect, previewColorWithSymbols } from "../core/layout/previewAppearance";
+import { previewVisibility, previewSelectionBehaviorGate, previewColorWithSymbols } from "../core/layout/previewAppearance";
 import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/layout/previewDataState";
 import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScopedState, type PreviewVariables } from "../core/powerfx/previewBehavior";
 import { CanvasVisualControl } from "./CanvasVisualControl";
+import { previewChildClipPath } from "../core/layout/previewCorners";
+import { previewClampScroll, previewScrollRanges, previewScrolledPosition, previewWheelScroll,
+  type PreviewScrollOffset, type PreviewScrollRange } from "../core/layout/previewOverflow";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -29,6 +33,9 @@ interface DrawItem {
   width: number;
   height: number;
   dynamic: boolean;
+  renderSymbols: PreviewVariables;
+  visibilityUnknown: boolean;
+  runtimeGalleryStateUnknown: boolean;
   ancestors: string[];
 }
 
@@ -55,7 +62,8 @@ function flatten(
   templateWidth?: number,
   templateHeight?: number,
   parentControl?: CanvasControl,
-  simulationSymbols: PreviewVariables = {}
+  simulationSymbols: PreviewVariables = {},
+  ancestorVisibilityUnknown = false
 ): DrawItem[] {
   const output: DrawItem[] = [];
   const baseContext = {
@@ -80,15 +88,38 @@ function flatten(
       "Parent.Width": parentWidth, "Parent.Height": parentHeight,
       ...simulationSymbols
     };
-    if (isDefinitelyHidden(control, visibilitySymbols) ||
-        dependsOnRuntimeGalleryItems(control)) continue;
+    const visibility = previewVisibility(control, visibilitySymbols);
+    if (visibility === "hidden") continue;
+    // AllItems is loaded only at runtime. Preserve the control's geometry as
+    // an explicitly unknown placeholder, never as a verified empty/visible UI.
+    const runtimeGalleryStateUnknown = dependsOnRuntimeGalleryItems(control);
+    const visibilityUnknown = ancestorVisibilityUnknown || visibility === "unknown" || runtimeGalleryStateUnknown;
     const x = offsetX + rect.x;
     const y = offsetY + rect.y;
+    const renderSymbols: PreviewVariables = {
+      ...visibilitySymbols,
+      ...(templateWidth !== undefined ? { "Parent.TemplateWidth": templateWidth } : {}),
+      ...(templateHeight !== undefined ? { "Parent.TemplateHeight": templateHeight } : {}),
+      ...(!rect.dynamic ? {
+        "Self.Width": rect.width, "Self.Height": rect.height,
+        "Self.X": rect.x, "Self.Y": rect.y
+      } : {})
+    };
     output.push({
       control, x, y, width: rect.width, height: rect.height,
-      dynamic: rect.dynamic, ancestors
+      dynamic: rect.dynamic, renderSymbols, visibilityUnknown, runtimeGalleryStateUnknown, ancestors
     });
-    if (depth >= 24 || control.children.length === 0) continue;
+    // Conditional descendants must not leak source-only content or imply that
+    // an unavailable gallery is empty. The parent remains inspectable.
+    // Gallery children are template definitions, not confirmed rendered rows.
+    // Without a verified local Items snapshot, drawing even static child labels
+    // would imply that at least one runtime record exists. Keep the gallery
+    // bounds and template guide inspectable instead.
+    // A source-only preview cannot prove an unresolved Visible formula true.
+    // Do not draw descendant text or actions from a potentially hidden subtree.
+    // Its geometry remains inspectable through the parent placeholder and tree.
+    if (visibilityUnknown || runtimeGalleryStateUnknown || galleryRecordsUnknown(control) ||
+        depth >= 24 || control.children.length === 0) continue;
     const editorGroup = control.controlType.toLowerCase() === "group";
     const template = isGallery(control)
       ? galleryTemplateLayout(control, {
@@ -106,10 +137,45 @@ function flatten(
       editorGroup ? templateWidth : template?.width,
       editorGroup ? templateHeight : template?.height,
       editorGroup ? parentControl : control,
-      simulationSymbols
+      simulationSymbols,
+      visibilityUnknown
     ));
   }
   return output;
+}
+
+function PreviewScrollIndicators({ x, y, width, height, range, offset }: {
+  x: number; y: number; width: number; height: number;
+  range: PreviewScrollRange; offset: PreviewScrollOffset;
+}) {
+  const verticalTrack = Math.max(0, height - 8);
+  const horizontalTrack = Math.max(0, width - 8);
+  const verticalThumb = Math.min(verticalTrack,
+    Math.max(14, verticalTrack * height / (height + range.y)));
+  const horizontalThumb = Math.min(horizontalTrack,
+    Math.max(14, horizontalTrack * width / (width + range.x)));
+  return (
+    <g pointerEvents="none" aria-hidden="true">
+      {range.y > 0 && width >= 16 && height >= 20 && (
+        <g data-preview-scrollbar="vertical">
+          <rect x={x + width - 7} y={y + 4} width={4} height={verticalTrack}
+            rx={2} fill="#d4dce6" opacity={0.8} />
+          <rect x={x + width - 7}
+            y={y + 4 + (verticalTrack - verticalThumb) * offset.y / range.y}
+            width={4} height={verticalThumb} rx={2} fill="#627d9c" />
+        </g>
+      )}
+      {range.x > 0 && height >= 16 && width >= 20 && (
+        <g data-preview-scrollbar="horizontal">
+          <rect x={x + 4} y={y + height - 7} width={horizontalTrack} height={4}
+            rx={2} fill="#d4dce6" opacity={0.8} />
+          <rect x={x + 4 + (horizontalTrack - horizontalThumb) * offset.x / range.x}
+            y={y + height - 7} width={horizontalThumb} height={4}
+            rx={2} fill="#627d9c" />
+        </g>
+      )}
+    </g>
+  );
 }
 
 function wireframeColor(type: string): string {
@@ -128,6 +194,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
   const [focusSelection, setFocusSelection] = useState(false);
   const [interactive, setInteractive] = useState(false);
   const [scopedState, setScopedState] = useState<PreviewScopedState>({ globals: {}, context: {} });
+  const [scrollOffsets, setScrollOffsets] = useState<Record<string, PreviewScrollOffset>>({});
   const variables = useMemo(() => previewScopedSymbols(scopedState), [scopedState]);
   const [simulationMessage, setSimulationMessage] = useState("Simulation off. No behavior formulas are executed.");
   const instanceId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
@@ -135,6 +202,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
   useEffect(() => {
     setInteractive(false);
     setScopedState({ globals: {}, context: {} });
+    setScrollOffsets({});
     setSimulationMessage("Simulation off. No behavior formulas are executed.");
   }, [screen]);
 
@@ -144,11 +212,38 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
     setSimulationMessage(result.message);
   }
 
-  function selectControl(control: CanvasControl) {
+  function scrollItem(item: DrawItem, deltaX: number, deltaY: number): boolean {
+    // Prefer the innermost host; at its boundary, allow an outer scroll host.
+    for (const id of [item.control.id, ...[...item.ancestors].reverse()]) {
+      const range = scrollRanges[id];
+      if (!range) continue;
+      const current = effectiveOffsets[id] ?? { x: 0, y: 0 };
+      const next = previewWheelScroll(current, range, deltaX, deltaY);
+      if (next.x === current.x && next.y === current.y) continue;
+      setScrollOffsets(previous => ({
+        ...previous,
+        [id]: previewWheelScroll(previous[id], range, deltaX, deltaY)
+      }));
+      return true;
+    }
+    return false;
+  }
+
+  function selectControl(item: DrawItem) {
+    const control = item.control;
     onSelect(control);
     if (interactive && mode === "visual" && control.properties.OnSelect) {
-      if (previewCanRunOnSelect(control, variables)) {
+      const gate = previewSelectionBehaviorGate(control, item.renderSymbols, {
+        ancestorVisibilityUnknown: item.visibilityUnknown,
+        runtimeGalleryStateUnknown: item.runtimeGalleryStateUnknown,
+        galleryRecordsUnknown: galleryRecordsUnknown(control)
+      });
+      if (gate === "allowed") {
         simulate(control.properties.OnSelect);
+      } else if (gate === "visibility-unverified") {
+        setSimulationMessage("OnSelect skipped: Visible is not confirmed for this control or an ancestor.");
+      } else if (gate === "gallery-unverified") {
+        setSimulationMessage("OnSelect skipped: gallery runtime records are unavailable.");
       } else {
         setSimulationMessage("OnSelect skipped: DisplayMode is not confirmed Edit.");
       }
@@ -156,11 +251,28 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
   }
   const { width, height } = PROFILES[profile];
 
-  const items = useMemo(
+  const rawItems = useMemo(
     () => screen ? flatten(screen.children, 0, 0, width, height, width, height,
       0, [], undefined, undefined, undefined, variables) : [],
     [screen, width, height, variables]
   );
+  const scrollRanges = useMemo(() => previewScrollRanges(rawItems.map(item => ({
+    id: item.control.id, ancestors: item.ancestors, x: item.x, y: item.y,
+    width: item.width, height: item.height, dynamic: item.dynamic,
+    visibilityUnknown: item.visibilityUnknown,
+    overflowX: item.control.properties.LayoutOverflowX,
+    overflowY: item.control.properties.LayoutOverflowY,
+    symbols: item.renderSymbols
+  }))), [rawItems]);
+  // Clamp previous offsets when the viewport changes; unknown geometry
+  // cannot establish a scrollable content extent.
+  const effectiveOffsets = useMemo(() => Object.fromEntries(
+    Object.entries(scrollRanges).map(([id, range]) =>
+      [id, previewClampScroll(scrollOffsets[id], range)])
+  ) as Record<string, PreviewScrollOffset>, [scrollRanges, scrollOffsets]);
+  const items = useMemo(() => rawItems.map(item => ({
+    ...item, ...previewScrolledPosition(item, effectiveOffsets)
+  })), [rawItems, effectiveOffsets]);
   const itemById = useMemo(
     () => new Map(items.map(item => [item.control.id, item])),
     [items]
@@ -177,7 +289,35 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
       : items,
     [items, focusSelection, target]
   );
+  // An overlay belongs to its source control's stacking context, not to a
+  // global SVG layer. Scrollbars must follow the host's last descendant so
+  // they remain above its content but below later sibling controls.
+  const scrollOverlaysAt = new Map<string, DrawItem[]>();
+  for (const host of visibleItems) {
+    if (!scrollRanges[host.control.id]) continue;
+    const last = [...visibleItems].reverse().find(candidate =>
+      candidate.control.id === host.control.id ||
+      candidate.ancestors.includes(host.control.id)
+    );
+    if (!last) continue;
+    const at = scrollOverlaysAt.get(last.control.id) ?? [];
+    at.push(host);
+    scrollOverlaysAt.set(last.control.id, at);
+  }
+
+  function clipToAncestors(child: ReactNode, ancestors: readonly string[]): ReactNode {
+    return ancestors.reduceRight<ReactNode>((node, ancestor) => {
+      const parent = itemById.get(ancestor);
+      // A Power Apps Group is an editor grouping, not a clipping container.
+      if (!parent || !/(gallery|container|form|datacard)/i.test(parent.control.controlType))
+        return node;
+      const parentIndex = indexById.get(parent.control.id) ?? 0;
+      return <g clipPath={`url(#${instanceId}-bounds-${parentIndex})`}>{node}</g>;
+    }, child);
+  }
+
   const unresolved = items.filter(item => item.dynamic).length;
+  const runtimeVisibilityUnknown = items.filter(item => item.visibilityUnknown).length;
 
   if (!screen) {
     return (
@@ -189,8 +329,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
     );
   }
 
-  const fill = previewColorWithSymbols(screen.properties.Fill, interactive ? variables : undefined)
-    ?? rgba(screen.properties.Fill) ?? "#ffffff";
+  const fill = previewColorWithSymbols(screen.properties.Fill, {
+    "App.Width": width, "App.Height": height, ...variables
+  }) ?? rgba(screen.properties.Fill) ?? "#ffffff";
   const zoomWidth = zoom === "fit" ? "min(100%,1120px)"
     : `${Math.round(width * Number(zoom) / 100)}px`;
 
@@ -262,7 +403,8 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
             <defs>
               {items.map((item, index) => (
                 <clipPath key={item.control.id} id={`${instanceId}-bounds-${index}`}>
-                  <rect x={item.x} y={item.y} width={item.width} height={item.height} />
+                  <path d={previewChildClipPath(item.control.properties,
+                    item.x, item.y, item.width, item.height, item.renderSymbols)} />
                 </clipPath>
               ))}
             </defs>
@@ -274,16 +416,39 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                 <g className="visual-control" key={item.control.id}
                   role="button" tabIndex={0}
                   aria-label={`Inspect ${item.control.name} (${item.control.controlType})`}
-                  onClick={event => { event.stopPropagation(); selectControl(item.control); }}
+                  onClick={event => { event.stopPropagation(); selectControl(item); }}
+                  onWheel={event => {
+                    if (scrollItem(item, event.deltaX, event.deltaY)) event.stopPropagation();
+                  }}
                   onKeyDown={event => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      selectControl(item.control);
+                      selectControl(item);
                     }
                   }}>
-                  {mode === "visual" ? (
+                  {mode === "visual" && item.runtimeGalleryStateUnknown ? (
+                    <>
+                      <rect x={item.x} y={item.y} width={item.width} height={item.height}
+                        fill="#f3f6fa" fillOpacity={0.8} stroke="#8194ac"
+                        strokeDasharray="5 4" />
+                      <text x={item.x + 8} y={item.y + Math.min(20, item.height / 2 + 4)}
+                        fontSize={12} fill="#42536b" pointerEvents="none">
+                        Gallery state unknown — not an empty result
+                      </text>
+                    </>
+                  ) : mode === "visual" && item.visibilityUnknown ? (
+                    <>
+                      <rect x={item.x} y={item.y} width={item.width} height={item.height}
+                        fill="#fff9ed" fillOpacity={0.92} stroke="#b68c47"
+                        strokeDasharray="5 4" />
+                      <text x={item.x + 8} y={item.y + Math.min(20, item.height / 2 + 4)}
+                        fontSize={12} fill="#77531b" pointerEvents="none">
+                        Visible unknown — runtime condition unavailable
+                      </text>
+                    </>
+                  ) : mode === "visual" ? (
                     <CanvasVisualControl control={item.control} mediaAssets={mediaAssets}
-                      simulationSymbols={interactive ? variables : undefined}
+                      simulationSymbols={item.renderSymbols}
                       x={item.x} y={item.y} width={item.width} height={item.height}
                       clipId={`${instanceId}-text-${index}`} />
                   ) : (
@@ -303,44 +468,33 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                       fill="none" stroke="#0067c0" strokeWidth={3} pointerEvents="none" />
                   )}
                   <title>{item.control.name} · {item.control.controlType}
-                    {item.dynamic ? " · unresolved layout" : ""}</title>
+                    {item.dynamic ? " · unresolved layout" : ""}
+                    {item.visibilityUnknown ? " · runtime visibility not verified" : ""}
+                    {item.runtimeGalleryStateUnknown ? " · AllItems unavailable; content intentionally withheld" : ""}</title>
                 </g>
               );
-              // Clip children in layout hosts only; plain editor Groups do not clip.
-              const clipped = item.ancestors.reduceRight<ReactNode>((child, ancestor) => {
-                const parent = itemById.get(ancestor);
-                if (!parent) return child;
-                // A Power Apps Group is an editor grouping, not a clipping container.
-                if (!/(gallery|container|form|datacard)/i.test(parent.control.controlType)) return child;
-                const parentIndex = indexById.get(parent.control.id) ?? 0;
-                return (
-                  <g clipPath={`url(#${instanceId}-bounds-${parentIndex})`}>
-                    {child}
-                  </g>
-                );
-              }, draw);
-              return <g key={item.control.id}>{clipped}</g>;
-            })}
-
-            {mode === "visual" && visibleItems.filter(item => galleryRecordsUnknown(item.control)).map(item => {
-              const template = galleryTemplateLayout(item.control, {
-                x: 0, y: 0, width: item.width, height: item.height, dynamic: item.dynamic
-              }, {
-                parentWidth: item.width, parentHeight: item.height,
-                appWidth: width, appHeight: height
-              });
-              if (!template) return null;
-              const slots = Math.min(6, template.wrapCount);
-              return (
-                <g key={item.control.id + "-template-legend"} pointerEvents="none">
-                  {Array.from({ length: Math.max(0, slots - 1) }, (_, index) => (
-                    <rect key={index} x={item.x + template.width * (index + 1) + template.padding}
-                      y={item.y + template.padding}
-                      width={Math.max(0, template.width - 2 * template.padding)}
-                      height={Math.max(0, template.height - 2 * template.padding)}
+              const clipped = clipToAncestors(draw, item.ancestors);
+              const template = mode === "visual" &&
+                galleryRecordsUnknown(item.control) && !item.visibilityUnknown
+                ? galleryTemplateLayout(item.control, {
+                    x: 0, y: 0, width: item.width, height: item.height,
+                    dynamic: item.dynamic
+                  }, {
+                    parentWidth: item.width, parentHeight: item.height,
+                    appWidth: width, appHeight: height
+                  })
+                : null;
+              const slots = template ? Math.min(6, template.wrapCount) : 0;
+              const guide = template && (
+                <g pointerEvents="none"
+                  clipPath={`url(#${instanceId}-bounds-${index})`}>
+                  {Array.from({ length: Math.max(0, slots - 1) }, (_, slotIndex) => {
+                    const rect = galleryTemplateGuideRect(template, slotIndex + 1, item.x, item.y);
+                    return <rect key={slotIndex} x={rect.x} y={rect.y}
+                      width={rect.width} height={rect.height}
                       rx={8} fill="none" stroke="#8194ac" strokeDasharray="6 5"
-                      strokeWidth={1} opacity={0.55} />
-                  ))}
+                      strokeWidth={1} opacity={0.55} />;
+                  })}
                   <rect x={item.x + 7} y={item.y + Math.max(0, Math.min(item.height - 25, template.height - 25))}
                     width={Math.min(276, Math.max(0, item.width - 14))} height={22}
                     rx={4} fill="#edf3fa" stroke="#ccd7e4" />
@@ -349,6 +503,23 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                     fontSize={11} fill="#42536b">
                     Template only — runtime records unavailable
                   </text>
+                  <title>Cannot determine loading, emptiness or access from source</title>
+                </g>
+              );
+              return (
+                <g key={item.control.id}>
+                  {clipped}
+                  {guide && clipToAncestors(guide, item.ancestors)}
+                  {scrollOverlaysAt.get(item.control.id)?.map(host => {
+                    const range = scrollRanges[host.control.id];
+                    const offset = effectiveOffsets[host.control.id] ?? { x: 0, y: 0 };
+                    const bar = <PreviewScrollIndicators x={host.x} y={host.y}
+                      width={host.width} height={host.height}
+                      range={range} offset={offset} />;
+                    return <g key={host.control.id + "-scrollbar"}>
+                      {clipToAncestors(bar, host.ancestors)}
+                    </g>;
+                  })}
                 </g>
               );
             })}
@@ -357,7 +528,13 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
       </div>
       <div className="preview-note">
         <span>{mode === "visual" ? "Static visual approximation" : "Control structure"}</span>
-        <span>{visibleItems.length} visible nodes · {unresolved} unresolved layouts</span>
+        <span>{visibleItems.length} drawn nodes · {unresolved} unresolved layouts</span>
+        {runtimeVisibilityUnknown > 0 && (
+          <span className="preview-unknown-state" role="status"
+            title="Visible depends on runtime values unavailable from the Canvas source. These nodes are illustrative and may be hidden in the actual app.">
+            {runtimeVisibilityUnknown} nodes with unknown runtime visibility — NOT verified as visible
+          </span>
+        )}
         {interactive && <span className="simulation-status" aria-live="polite">
           {simulationMessage} · {Object.keys(variables).length} local variable(s)
         </span>}
@@ -386,6 +563,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
               <small>Context variables take precedence when names overlap. No data source is queried.</small>
             </div>
           </details>
+        )}
+        {Object.keys(scrollRanges).length > 0 && (
+          <span>Wheel scrolling is local to this preview; no runtime data is loaded.</span>
         )}
         <span>Gallery templates are illustrative; runtime records are not evaluated.</span>
         <span>Viewport profiles simulate dimensions; no formulas or connectors are executed.</span>

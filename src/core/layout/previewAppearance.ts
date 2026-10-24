@@ -1,6 +1,6 @@
 import type { CanvasControl } from "../../types/canvas";
-import { literalNumber, literalText, rgba } from "./layout";
-import { staticBoolean, staticString, type StaticPowerFxValue } from "../powerfx/staticEval";
+import { literalText, rgba } from "./layout";
+import { staticBoolean, staticNumber, staticString, type StaticPowerFxValue } from "../powerfx/staticEval";
 import { lexPowerFx, significantTokens, type PowerFxToken } from "../powerfx/lexer";
 
 export type PreviewKind =
@@ -10,6 +10,11 @@ export type PreviewKind =
 
 export function previewKind(controlType: string): PreviewKind {
   const type = controlType.toLowerCase();
+  // Microsoft serializes its modern display-only Text control as
+  // ModernText@1.0.0, not as a Label. Match the exact control family so
+  // ModernTextInput and other text-bearing controls retain their own kind.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-text
+  if (/^moderntext(?:@|$)/.test(type)) return "label";
   if (type.includes("gallery")) return "gallery";
   if (type.includes("datacard") || type.includes("form")) return "form";
   if (type.includes("container") || type.includes("group")) return "container";
@@ -41,6 +46,12 @@ const NAMED_COLORS: Record<string, string> = {
   darkgray: "#a9a9a9"
 };
 
+// Browser CSS and the Canvas ColorValue documentation do not define five- or
+// seven-digit hex colors. Keep supported shorthand CSS forms for existing
+// source previews, but never emit malformed lengths as verified colors.
+// https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-colors
+const HEX_COLOR_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+
 export function previewColor(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const value = raw.trim();
@@ -48,10 +59,10 @@ export function previewColor(raw: unknown): string | null {
   if (rgb) return rgb;
   const named = value.match(/^=?\s*Color\.([A-Za-z]+)\s*$/i);
   if (named) return NAMED_COLORS[named[1].toLowerCase()] ?? null;
-  const hex = value.match(/^=?\s*ColorValue\(\s*["'](#[a-fA-F0-9]{3,8})["']\s*\)\s*$/i);
-  if (hex) return hex[1];
+  const hex = value.match(/^=?\s*ColorValue\(\s*"(#[a-fA-F0-9]+)"\s*\)\s*$/i);
+  if (hex && HEX_COLOR_RE.test(hex[1])) return hex[1];
   const literal = literalText(value);
-  if (literal && /^#[a-fA-F0-9]{3,8}$/.test(literal)) return literal;
+  if (literal && HEX_COLOR_RE.test(literal)) return literal;
   return null;
 }
 
@@ -98,10 +109,10 @@ export function previewColorWithSymbols(
   const colorValue = /^=?\s*ColorValue\(\s*([A-Za-z_][\w]*)\s*\)\s*$/i.exec(value);
   if (colorValue) {
     const resolved = staticString("=" + colorValue[1], symbols);
-    return resolved && /^#[a-fA-F0-9]{3,8}$/.test(resolved) ? resolved : null;
+    return resolved && HEX_COLOR_RE.test(resolved) ? resolved : null;
   }
   const scalar = staticString(value, symbols);
-  if (scalar && /^#[a-fA-F0-9]{3,8}$/.test(scalar)) return scalar;
+  if (scalar && HEX_COLOR_RE.test(scalar)) return scalar;
 
   const lexed = lexPowerFx(value);
   if (lexed.diagnostics.length) return null;
@@ -121,6 +132,62 @@ export function previewColorWithSymbols(
   }
   const fallback = branches.length % 2 === 1 ? branches[branches.length - 1] : undefined;
   return fallback ? previewColorWithSymbols("=" + expressionText(value, fallback), symbols, depth + 1) : null;
+}
+
+/**
+ * A container shadow must not imply an opaque surface when the source fill
+ * resolves to an alpha color. Power Fx ColorValue uses #RRGGBBAA and RGBA
+ * uses a 0..1 alpha channel; only a proven fully opaque color qualifies.
+ * Unrecognized or runtime-dependent colors fail closed.
+ *
+ * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-colors
+ */
+export function previewIsOpaqueColor(color: string | null): boolean {
+  if (!color) return false;
+  if (/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(color)) return true;
+  const alphaHex = /^#(?:[0-9a-f]{3}([0-9a-f])|[0-9a-f]{6}([0-9a-f]{2}))$/i.exec(color);
+  if (alphaHex) return (alphaHex[1] ?? alphaHex[2]).toLowerCase() ===
+    (alphaHex[1] ? "f" : "ff");
+  const rgbaColor = /^rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*(\d+(?:\.\d*)?|\.\d+)\s*\)$/i.exec(color);
+  return rgbaColor !== null && Number(rgbaColor[1]) === 1;
+}
+
+/**
+ * Canvas container DropShadow is a Power Fx enum. Accept only explicit enum
+ * literals from source; unknown runtime formulas must not be interpreted as
+ * a confirmed shadow level. CSS values below are visual approximations.
+ */
+export type PreviewDropShadow =
+  | "none" | "light" | "semilight" | "regular" | "semibold" | "bold" | "extrabold";
+
+export function previewDropShadow(raw: unknown): PreviewDropShadow | null {
+  if (typeof raw !== "string") return null;
+  const match = /^=?\s*DropShadow\.(None|Light|Semilight|Regular|Semibold|Bold|ExtraBold)\s*$/i.exec(raw.trim());
+  return match ? match[1].toLowerCase() as PreviewDropShadow : null;
+}
+
+const PREVIEW_SHADOW_FILTERS: Record<Exclude<PreviewDropShadow, "none">, string> = {
+  light: "drop-shadow(0px 1px 2px rgba(0,0,0,0.12))",
+  semilight: "drop-shadow(0px 2px 3px rgba(0,0,0,0.16))",
+  regular: "drop-shadow(0px 3px 6px rgba(0,0,0,0.18))",
+  semibold: "drop-shadow(0px 4px 8px rgba(0,0,0,0.22))",
+  bold: "drop-shadow(0px 6px 12px rgba(0,0,0,0.26))",
+  extrabold: "drop-shadow(0px 8px 16px rgba(0,0,0,0.30))"
+};
+
+/** Deterministic SVG-compatible CSS; never interpolates imported formulas. */
+export function previewDropShadowFilter(raw: unknown): string | undefined {
+  const level = previewDropShadow(raw);
+  return level && level !== "none" ? PREVIEW_SHADOW_FILTERS[level] : undefined;
+}
+
+export type PreviewBorderStyle = "solid" | "dashed" | "dotted" | "none";
+
+/** Read only explicit Canvas BorderStyle enum literals. Dynamic Power Fx stays unknown. */
+export function previewBorderStyle(raw: unknown): PreviewBorderStyle | null {
+  if (typeof raw !== "string") return null;
+  const match = /^=?\s*BorderStyle\.(Solid|Dashed|Dotted|None)\s*$/i.exec(raw.trim());
+  return match ? match[1].toLowerCase() as PreviewBorderStyle : null;
 }
 
 export type PreviewDisplayMode = "edit" | "disabled" | "view" | "unresolved";
@@ -154,17 +221,75 @@ export function previewText(control: CanvasControl): string | null {
   return literalText(props.Text) ?? literalText(props.Label);
 }
 
-export function previewFontSize(control: CanvasControl): number {
-  const resolved = literalNumber(control.properties.Size) ??
-    literalNumber(control.properties.FontSize);
-  return resolved !== null && resolved > 0 ? Math.min(256, resolved) : 14;
+
+// Explicit Canvas Font enums are stable source values; runtime formulas are not.
+// Limit the CSS output to known font families to avoid treating imported
+// Power Fx expressions as arbitrary CSS or inventing an unavailable font.
+const PREVIEW_FONT_FAMILIES: Record<string, string> = {
+  "segoe ui": '"Segoe UI",system-ui,sans-serif',
+  "arial": 'Arial,sans-serif',
+  "verdana": 'Verdana,sans-serif',
+  "tahoma": 'Tahoma,sans-serif',
+  "calibri": 'Calibri,"Segoe UI",sans-serif',
+  "open sans": '"Open Sans","Segoe UI",sans-serif',
+  "georgia": 'Georgia,serif',
+  "times new roman": '"Times New Roman",serif',
+  "courier new": '"Courier New",monospace'
+};
+
+export const PREVIEW_DEFAULT_FONT = '"Segoe UI",system-ui,sans-serif';
+
+/** Resolve a source-literal Font enum without running Power Fx or loading fonts. */
+export function previewFontFamily(control: CanvasControl): string {
+  const raw = control.properties.Font;
+  if (typeof raw !== "string") return PREVIEW_DEFAULT_FONT;
+  const source = raw.trim();
+  const enumMatch = /^=?\s*Font\.(?:'([^']+)'|([A-Za-z][A-Za-z ]*))\s*$/i.exec(source);
+  const family = enumMatch ? (enumMatch[1] ?? enumMatch[2]) : staticString(raw);
+  return (family && PREVIEW_FONT_FAMILIES[family.trim().toLowerCase()]) ||
+    PREVIEW_DEFAULT_FONT;
+}
+
+export function previewFontSize(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): number {
+  const resolved = staticNumber(control.properties.Size, symbols) ??
+    staticNumber(control.properties.FontSize, symbols);
+  // The documented ModernText default is 15 pt; classic labels keep their
+  // existing approximation. Explicit Size / legacy FontSize always wins.
+  return resolved !== null && resolved > 0 ? Math.min(256, resolved) :
+    /^moderntext(?:@|$)/i.test(control.controlType) ? 15 : 14;
+}
+
+export type PreviewVisibility = "visible" | "hidden" | "unknown";
+
+/** Unknown runtime conditions are not interpreted as true or false. */
+export function previewVisibility(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): PreviewVisibility {
+  if (control.properties.Visible === undefined) return "visible";
+  const visible = staticBoolean(control.properties.Visible, symbols);
+  return visible === true ? "visible" : visible === false ? "hidden" : "unknown";
+}
+
+/** Only a provably true Canvas Wrap formula enables browser-measured label wrapping.
+ * Unknown runtime values keep the existing conservative SVG text fallback.
+ */
+export function previewLabelWrap(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): boolean {
+  return previewKind(control.controlType) === "label" &&
+    staticBoolean(control.properties.Wrap, symbols) === true;
 }
 
 export function isDefinitelyHidden(
   control: CanvasControl,
   symbols?: Record<string, StaticPowerFxValue>
 ): boolean {
-  return staticBoolean(control.properties.Visible, symbols) === false;
+  return previewVisibility(control, symbols) === "hidden";
 }
 
 export function previewIsChecked(control: CanvasControl): boolean {
@@ -177,26 +302,30 @@ export function previewIsChecked(control: CanvasControl): boolean {
  * Only serialized styling may override approximate defaults. Unknown or
  * runtime-dependent values stay undefined rather than being guessed.
  */
-function enumValue(raw: unknown): string | null {
+function enumValue(raw: unknown, namespace: "Align" | "VerticalAlign" | "FontWeight"): string | null {
   if (typeof raw !== "string") return null;
-  const value = raw.trim().replace(/^=\s*/, "");
-  const match = value.match(/^(?:[A-Za-z]+\.)?([A-Za-z]+)$/);
-  return match ? match[1].toLowerCase() : null;
+  // Power Fx enum members must belong to their documented namespace.
+  // Bare identifiers and unrelated records (e.g. User.Right) are runtime
+  // expressions, not evidence of a static alignment or font weight.
+  const match = /^=?\s*([A-Za-z]+)\.([A-Za-z]+)\s*$/i.exec(raw.trim());
+  return match && match[1].toLowerCase() === namespace.toLowerCase()
+    ? match[2].toLowerCase() : null;
 }
 
-export type PreviewHorizontalAlign = "start" | "middle" | "end";
+export type PreviewHorizontalAlign = "start" | "middle" | "end" | "justify";
 export type PreviewVerticalAlign = "top" | "middle" | "bottom";
 
 export function previewHorizontalAlign(control: CanvasControl): PreviewHorizontalAlign | null {
-  const value = enumValue(control.properties.Align ?? control.properties.TextAlign);
+  const value = enumValue(control.properties.Align ?? control.properties.TextAlign, "Align");
   if (value === "center" || value === "middle") return "middle";
+  if (value === "justify") return "justify";
   if (value === "right" || value === "end") return "end";
   if (value === "left" || value === "start") return "start";
   return null;
 }
 
 export function previewVerticalAlign(control: CanvasControl): PreviewVerticalAlign | null {
-  const value = enumValue(control.properties.VerticalAlign ?? control.properties.TextVerticalAlignment);
+  const value = enumValue(control.properties.VerticalAlign ?? control.properties.TextVerticalAlignment, "VerticalAlign");
   if (value === "top") return "top";
   if (value === "bottom") return "bottom";
   if (value === "middle" || value === "center") return "middle";
@@ -204,11 +333,11 @@ export function previewVerticalAlign(control: CanvasControl): PreviewVerticalAli
 }
 
 export function previewFontWeight(control: CanvasControl): number | undefined {
-  const value = enumValue(control.properties.FontWeight);
+  const value = enumValue(control.properties.FontWeight, "FontWeight");
   if (value === "bold") return 700;
   if (value === "semibold") return 600;
   if (value === "normal" || value === "regular") return 400;
-  if (value === "light") return 300;
+  if (value === "light" || value === "lighter") return 300;
   return undefined;
 }
 
@@ -234,4 +363,28 @@ export function previewCanRunOnSelect(
   symbols?: Record<string, StaticPowerFxValue>
 ): boolean {
   return previewDisplayMode(control.properties.DisplayMode, symbols) === "edit";
+}
+
+/**
+ * Source-only preview must not execute local OnSelect behavior from controls
+ * that might be hidden, including descendants of unresolved Visible hosts.
+ * Inspecting a node remains allowed; only behavior simulation is gated.
+ * Gallery templates with Items are not evidence of actual loaded records.
+ */
+export function previewSelectionBehaviorGate(
+  control: CanvasControl,
+  symbols: Record<string, StaticPowerFxValue>,
+  options: {
+    ancestorVisibilityUnknown?: boolean;
+    runtimeGalleryStateUnknown?: boolean;
+    galleryRecordsUnknown?: boolean;
+  } = {}
+): "allowed" | "visibility-unverified" | "gallery-unverified" | "display-mode-unverified" {
+  if (options.ancestorVisibilityUnknown || previewVisibility(control, symbols) !== "visible") {
+    return "visibility-unverified";
+  }
+  if (options.runtimeGalleryStateUnknown || options.galleryRecordsUnknown) {
+    return "gallery-unverified";
+  }
+  return previewCanRunOnSelect(control, symbols) ? "allowed" : "display-mode-unverified";
 }

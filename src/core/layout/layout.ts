@@ -80,28 +80,26 @@ export function literalText(value: unknown): string | null {
   return staticString(value);
 }
 
+/**
+ * Resolve only literal Power Fx RGBA colors. Microsoft accepts numeric alpha
+ * from 0 to 1 or percentage alpha from 0% to 100%; channels are 0..255.
+ * Invalid inputs remain unknown instead of relying on browser CSS clamping.
+ * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-colors
+ */
 export function rgba(value: unknown): string | null {
   if (typeof value !== "string") return null;
-
-  const match = value
-    .trim()
-    .match(
-      /^=\s*RGBA\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)\s*$/i
-    );
-
-  if (!match) return null;
-
-  return (
-    "rgba(" +
-    match[1] +
-    "," +
-    match[2] +
-    "," +
-    match[3] +
-    "," +
-    match[4] +
-    ")"
+  const number = String.raw`(?:\d+(?:\.\d*)?|\.\d+)`;
+  const pattern = new RegExp(
+    String.raw`^=?\s*RGBA\(\s*(${number})\s*,\s*(${number})\s*,\s*(${number})\s*,\s*(${number})(%)?\s*\)\s*$`,
+    "i"
   );
+  const match = pattern.exec(value.trim());
+  if (!match) return null;
+  const channels = match.slice(1, 4).map(Number);
+  const alpha = Number(match[4]) / (match[5] ? 100 : 1);
+  if (channels.some(channel => !Number.isFinite(channel) || channel < 0 || channel > 255) ||
+      !Number.isFinite(alpha) || alpha < 0 || alpha > 1) return null;
+  return `rgba(${channels.join(',')},${alpha})`;
 }
 
 export function defaultControlSize(
@@ -154,29 +152,46 @@ export function buildSiblingGeometrySymbols(
 
       const width = staticNumber(control.properties.Width, baseSymbols);
       const height = staticNumber(control.properties.Height, baseSymbols);
-
       const setNumber = (key: string, value: number | null): void => {
         if (value === null || resolved[key] === value) return;
         resolved[key] = value;
         changed = true;
       };
 
-      setNumber(control.name + ".Width", width);
-      setNumber(control.name + ".Height", height);
-
-      const selfSymbols: Record<string, StaticPowerFxValue> = {
+      // Power Apps formulas may derive Height from Self.Y, while Self.Y
+      // depends on a preceding sibling (for example gallery below toolbar).
+      // Resolve positions with any known sizes, then retry dimensions using
+      // the resolved Self.X/Y. The outer passes resolve sibling dependencies.
+      const firstSymbols: Record<string, StaticPowerFxValue> = {
         ...baseSymbols,
         ...(width !== null ? { "Self.Width": width } : {}),
         ...(height !== null ? { "Self.Height": height } : {})
       };
-
+      const earlyX = control.properties.X === undefined
+        ? 0 : staticNumber(control.properties.X, firstSymbols);
+      const earlyY = control.properties.Y === undefined
+        ? 0 : staticNumber(control.properties.Y, firstSymbols);
+      const positionedSymbols: Record<string, StaticPowerFxValue> = {
+        ...firstSymbols,
+        ...(earlyX !== null ? { "Self.X": earlyX } : {}),
+        ...(earlyY !== null ? { "Self.Y": earlyY } : {})
+      };
+      const finalWidth = staticNumber(control.properties.Width, positionedSymbols) ?? width;
+      const finalHeight = staticNumber(control.properties.Height, positionedSymbols) ?? height;
+      const finalSymbols: Record<string, StaticPowerFxValue> = {
+        ...positionedSymbols,
+        ...(finalWidth !== null ? { "Self.Width": finalWidth } : {}),
+        ...(finalHeight !== null ? { "Self.Height": finalHeight } : {})
+      };
+      setNumber(control.name + ".Width", finalWidth);
+      setNumber(control.name + ".Height", finalHeight);
       setNumber(
         control.name + ".X",
-        control.properties.X === undefined ? 0 : staticNumber(control.properties.X, selfSymbols)
+        control.properties.X === undefined ? 0 : staticNumber(control.properties.X, finalSymbols)
       );
       setNumber(
         control.name + ".Y",
-        control.properties.Y === undefined ? 0 : staticNumber(control.properties.Y, selfSymbols)
+        control.properties.Y === undefined ? 0 : staticNumber(control.properties.Y, finalSymbols)
       );
     }
 
@@ -197,8 +212,10 @@ export function controlRect(
   const width = resolvedNumber(control.properties.Width, baseSymbols);
   const height = resolvedNumber(control.properties.Height, baseSymbols);
 
-  const finalWidth = Math.max(8, width ?? defaults.width);
-  const finalHeight = Math.max(8, height ?? defaults.height);
+  // Zero is a valid resolved Canvas dimension; do not invent an 8px control.
+  // Keep fallback defaults only for dimensions that are genuinely unresolved.
+  const finalWidth = Math.max(0, width ?? defaults.width);
+  const finalHeight = Math.max(0, height ?? defaults.height);
 
   const selfSymbols = layoutSymbols(
     context,
@@ -218,8 +235,8 @@ export function controlRect(
   };
   const resolvedWidth = resolvedNumber(control.properties.Width, positionedSymbols) ?? width;
   const resolvedHeight = resolvedNumber(control.properties.Height, positionedSymbols) ?? height;
-  const effectiveWidth = Math.max(8, resolvedWidth ?? defaults.width);
-  const effectiveHeight = Math.max(8, resolvedHeight ?? defaults.height);
+  const effectiveWidth = Math.max(0, resolvedWidth ?? defaults.width);
+  const effectiveHeight = Math.max(0, resolvedHeight ?? defaults.height);
   const finalSymbols = {
     ...(layoutSymbols(context, effectiveWidth, effectiveHeight) ?? {}),
     ...positionedSymbols,
@@ -262,10 +279,10 @@ export function autoLayoutChildren(
   if (children.length === 0) return [];
 
   const symbols = layoutSymbols(context) ?? {};
-  const direction =
-    enumTail(staticString(parent.properties.LayoutDirection, symbols)) ??
-    parent.layout?.toLowerCase() ??
-    "vertical";
+  const resolvedDirection = enumTail(staticString(parent.properties.LayoutDirection, symbols));
+  const direction = resolvedDirection ?? parent.layout?.toLowerCase() ?? "vertical";
+  const directionUnknown = parent.properties.LayoutDirection !== undefined &&
+    !["horizontal", "vertical"].includes(resolvedDirection ?? "");
   const horizontal = direction.includes("horizontal");
 
   const gap = staticNumber(parent.properties.LayoutGap, symbols) ?? 0;
@@ -273,6 +290,13 @@ export function autoLayoutChildren(
   const paddingRight = staticNumber(parent.properties.PaddingRight, symbols) ?? 0;
   const paddingTop = staticNumber(parent.properties.PaddingTop, symbols) ?? 0;
   const paddingBottom = staticNumber(parent.properties.PaddingBottom, symbols) ?? 0;
+  // An unresolved layout formula is not equivalent to its fallback value.
+  // Keep approximate positions inspectable without claiming exact geometry.
+  const spacingUnknown = [
+    parent.properties.LayoutGap,
+    parent.properties.PaddingLeft, parent.properties.PaddingRight,
+    parent.properties.PaddingTop, parent.properties.PaddingBottom
+  ].some(value => value !== undefined && staticNumber(value, symbols) === null);
 
   const innerWidth = Math.max(
     0,
@@ -318,6 +342,71 @@ export function autoLayoutChildren(
     };
   });
 
+  // Microsoft Canvas Wrap moves fixed-size children to the next row/column
+  // when they no longer fit on the main axis. Child AlignInContainer is
+  // ignored with Wrap (Microsoft responsive-layout documented limitation).
+  // Only claim exact geometry for a fully static, Start-justified case.
+  const wrap = staticBoolean(parent.properties.LayoutWrap, symbols);
+  const numericKnown = (value: unknown): boolean =>
+    value === undefined || staticNumber(value, symbols) !== null;
+  const justifyRaw = parent.properties.LayoutJustifyContent;
+  const justifyStart = justifyRaw === undefined ||
+    enumTail(staticString(justifyRaw, symbols)) === "start";
+  const knownSpacing = [
+    parent.properties.LayoutGap,
+    parent.properties.PaddingLeft, parent.properties.PaddingRight,
+    parent.properties.PaddingTop, parent.properties.PaddingBottom
+  ].every(numericKnown) &&
+    gap >= 0 && paddingLeft >= 0 && paddingRight >= 0 &&
+    paddingTop >= 0 && paddingBottom >= 0;
+  const fixedChildren = sizing.every(item =>
+    item.fill === 0 && item.width !== null && item.height !== null &&
+    [
+      item.control.properties.FillPortions,
+      item.control.properties.LayoutMinWidth,
+      item.control.properties.LayoutMinHeight,
+      item.control.properties.LayoutMaxWidth,
+      item.control.properties.LayoutMaxHeight
+    ].every(numericKnown)
+  );
+  const knownDirection = parent.properties.LayoutDirection === undefined ||
+    ["horizontal", "vertical"].includes(
+      enumTail(staticString(parent.properties.LayoutDirection, symbols)) ?? ""
+    );
+
+  if (wrap === true && justifyStart && knownSpacing && fixedChildren && knownDirection) {
+    const startMain = horizontal ? paddingLeft : paddingTop;
+    const maxMain = startMain + (horizontal ? innerWidth : innerHeight);
+    let cursorMain = startMain;
+    let cursorCross = horizontal ? paddingTop : paddingLeft;
+    let lineCrossSize = 0;
+
+    return sizing.map(item => {
+      const mainSize = horizontal ? item.baseWidth : item.baseHeight;
+      const crossSize = horizontal ? item.baseHeight : item.baseWidth;
+      if (cursorMain > startMain && cursorMain + mainSize > maxMain) {
+        cursorMain = startMain;
+        cursorCross += lineCrossSize + gap;
+        lineCrossSize = 0;
+      }
+      const rect: VisualRect = {
+        x: horizontal ? cursorMain : cursorCross,
+        y: horizontal ? cursorCross : cursorMain,
+        width: Math.max(0, item.baseWidth),
+        height: Math.max(0, item.baseHeight),
+        dynamic: false
+      };
+      cursorMain += mainSize + gap;
+      lineCrossSize = Math.max(lineCrossSize, crossSize);
+      return { control: item.control, rect };
+    });
+  }
+
+  // A dynamic Wrap condition, or a combination whose wrap behavior cannot
+  // be established from source alone, must not appear as verified geometry.
+  const wrapUncertain = wrap === true ||
+    (parent.properties.LayoutWrap !== undefined && wrap === null);
+
   const fixedMain = sizing.reduce((sum, item) => {
     if (item.fill > 0) return sum;
     return sum + (horizontal ? item.baseWidth : item.baseHeight);
@@ -344,12 +433,16 @@ export function autoLayoutChildren(
       fallback = true;
     }
 
-    const parentAlign =
-      enumTail(staticString(parent.properties.LayoutAlignItems, symbols)) ??
-      "start";
-    const childAlign =
-      enumTail(staticString(item.control.properties.AlignInContainer, symbols)) ??
-      parentAlign;
+    const parentAlignValue = enumTail(staticString(parent.properties.LayoutAlignItems, symbols));
+    const childAlignValue = enumTail(staticString(item.control.properties.AlignInContainer, symbols));
+    // SetByContainer inherits the container's cross-axis alignment.
+    const inheritsAlign = childAlignValue === null || childAlignValue === "setbycontainer";
+    const childAlign = inheritsAlign ? parentAlignValue ?? "start" : childAlignValue ?? "start";
+    const alignUnknown =
+      (item.control.properties.AlignInContainer !== undefined && childAlignValue === null) ||
+      (inheritsAlign && parent.properties.LayoutAlignItems !== undefined && parentAlignValue === null) ||
+      !["start", "center", "end", "stretch"].includes(childAlign);
+    if (alignUnknown) fallback = true;
 
     if (childAlign === "stretch") {
       if (horizontal) {
@@ -373,8 +466,8 @@ export function autoLayoutChildren(
 
     return {
       ...item,
-      width: Math.max(8, width),
-      height: Math.max(8, height),
+      width: Math.max(0, width),
+      height: Math.max(0, height),
       fallback,
       childAlign
     };
@@ -385,9 +478,10 @@ export function autoLayoutChildren(
     0
   );
   const extra = Math.max(0, mainAvailable - usedMain);
-  const justify =
-    enumTail(staticString(parent.properties.LayoutJustifyContent, symbols)) ??
-    "start";
+  const resolvedJustify = enumTail(staticString(parent.properties.LayoutJustifyContent, symbols));
+  const justify = resolvedJustify ?? "start";
+  const justifyUnknown = parent.properties.LayoutJustifyContent !== undefined &&
+    !["start", "center", "end", "spacebetween"].includes(resolvedJustify ?? "");
 
   let leading = 0;
   let effectiveGap = gap;
@@ -419,7 +513,8 @@ export function autoLayoutChildren(
       y,
       width: item.width,
       height: item.height,
-      dynamic: item.fallback
+      dynamic: item.fallback || wrapUncertain || directionUnknown ||
+        spacingUnknown || justifyUnknown
     };
 
     cursor +=
@@ -468,28 +563,58 @@ export function galleryTemplateLayout(
   const wrapCount = Math.max(1, Math.min(64, Math.floor(resolvedWrap ?? 1)));
   const variableHeight = variant.includes("variableheight");
   const templateSize =
-    staticNumber(control.properties.TemplateSize) ??
-    staticNumber(control.properties.TemplateHeight) ??
+    staticNumber(control.properties.TemplateSize, symbols) ??
+    staticNumber(control.properties.TemplateHeight, symbols) ??
     null;
-  const padding = Math.max(
-    0,
-    staticNumber(control.properties.TemplatePadding) ?? 0
-  );
+  const resolvedPadding = staticNumber(control.properties.TemplatePadding, symbols);
+  // An unresolved Power Fx padding formula is an approximation, not verified
+  // template geometry. Never infer its value from SQL or runtime state.
+  const padding = Math.max(0, resolvedPadding ?? 0);
 
   const fallbackSize = horizontal
     ? Math.min(160, rect.width)
     : Math.min(72, rect.height);
-  const size = Math.max(8, templateSize ?? fallbackSize);
+  // Microsoft Gallery.TemplateSize has a minimum of 1, not 8.
+  const size = Math.max(1, templateSize ?? fallbackSize);
 
   return {
     x: rect.x,
     y: rect.y,
-    width: horizontal ? Math.min(rect.width, size) : rect.width / wrapCount,
-    height: horizontal ? rect.height / wrapCount : Math.min(rect.height, size),
+    // TemplateSize is an item dimension, not a viewport-bound dimension.
+    // The gallery viewport clips the template guide; shrinking the template
+    // would misrepresent tall vertical / wide horizontal gallery items.
+    // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-gallery
+    width: horizontal ? size : rect.width / wrapCount,
+    height: horizontal ? rect.height / wrapCount : size,
     orientation: horizontal ? "horizontal" : "vertical",
     variableHeight,
     padding,
     wrapCount,
-    dynamic: templateSize === null || variableHeight || (control.properties.WrapCount !== undefined && resolvedWrap === null)
+    dynamic: rect.dynamic || templateSize === null || variableHeight ||
+      (control.properties.WrapCount !== undefined && resolvedWrap === null) ||
+      (control.properties.TemplatePadding !== undefined && resolvedPadding === null)
+  };
+}
+
+
+/**
+ * Geometry for a source-only gallery template guide, never a runtime record.
+ * WrapCount creates columns in a vertical gallery and rows in a horizontal
+ * gallery. Keep the guides within their template cells; clipping to the
+ * gallery viewport is handled by the SVG renderer.
+ */
+export function galleryTemplateGuideRect(
+  template: GalleryTemplateLayout,
+  slotIndex: number,
+  originX: number,
+  originY: number
+): { x: number; y: number; width: number; height: number } {
+  const slot = Math.max(0, Math.floor(Number.isFinite(slotIndex) ? slotIndex : 0));
+  const padding = Math.max(0, template.padding);
+  return {
+    x: originX + (template.orientation === "vertical" ? slot * template.width : 0) + padding,
+    y: originY + (template.orientation === "horizontal" ? slot * template.height : 0) + padding,
+    width: Math.max(0, template.width - padding * 2),
+    height: Math.max(0, template.height - padding * 2)
   };
 }
