@@ -123,6 +123,15 @@ export function previewColorWithSymbols(
   return fallback ? previewColorWithSymbols("=" + expressionText(value, fallback), symbols, depth + 1) : null;
 }
 
+export type PreviewBorderStyle = "solid" | "dashed" | "dotted" | "none";
+
+/** Read only explicit Canvas BorderStyle enum literals. Dynamic Power Fx stays unknown. */
+export function previewBorderStyle(raw: unknown): PreviewBorderStyle | null {
+  if (typeof raw !== "string") return null;
+  const match = /^=?\s*BorderStyle\.(Solid|Dashed|Dotted|None)\s*$/i.exec(raw.trim());
+  return match ? match[1].toLowerCase() as PreviewBorderStyle : null;
+}
+
 export type PreviewDisplayMode = "edit" | "disabled" | "view" | "unresolved";
 
 export function previewDisplayMode(
