@@ -302,3 +302,25 @@ describe("CanvasPreview local-only container scrolling", () => {
       .not.toContain('data-preview-scrollbar="vertical"');
   });
 });
+
+describe("CanvasPreview loaded gallery count uncertainty", () => {
+  it("withholds conditional descendants when AllItemsCount is only known at runtime", () => {
+    const conditional = control("LoadedCountStatus", "GroupContainer@1.3.0", {
+      X: "=20", Y: "=30", Width: "=280", Height: "=80",
+      Visible: "=If(galCatalog.AllItemsCount = 0, true, false)"
+    }, [control("SensitiveChild", "Classic/Label@2.5.1", {
+      Text: '="Synthetic only"', Width: "=160", Height: "=24"
+    })]);
+    const screen: CanvasScreen = {
+      id: "LoadedCountFixture", name: "LoadedCountFixture", properties: {},
+      children: [conditional], sourceFile: "Src/LoadedCountFixture.pa.yaml",
+      sourceFormat: "pa-yaml-v3"
+    };
+    const html = renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+    expect(html).toContain("Inspect LoadedCountStatus");
+    expect(html).toContain("Gallery state unknown");
+    expect(html).toContain("not an empty result");
+    expect(html).not.toContain("Inspect SensitiveChild");
+    expect(html).not.toContain("Synthetic only");
+  });
+});
