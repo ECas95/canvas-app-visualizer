@@ -382,6 +382,36 @@ describe("Canvas container DropShadow source parsing", () => {
   });
 });
 
+describe("verified responsive container DropShadow", () => {
+  it("selects only source enum values from verified phone, tablet and desktop conditions", () => {
+    const source = "=If(App.Width < 720, DropShadow.None, App.Width < 1024, DropShadow.Light, DropShadow.Bold)";
+    expect(previewDropShadow(source, { "App.Width": 390 })).toBe("none");
+    expect(previewDropShadow(source, { "App.Width": 800 })).toBe("light");
+    expect(previewDropShadow(source, { "App.Width": 1366 })).toBe("bold");
+    expect(previewDropShadowFilter(source, { "App.Width": 390 })).toBeUndefined();
+    expect(previewDropShadowFilter(source, { "App.Width": 800 }))
+      .toContain("drop-shadow(0px 1px 2px");
+    expect(previewDropShadowFilter(source, { "App.Width": 1366 }))
+      .toContain("drop-shadow(0px 6px 12px");
+  });
+
+  it("rejects unverified conditions, string lookalikes and unsupported shadow branches", () => {
+    const source = "=If(varCanShow, DropShadow.Bold, DropShadow.None)";
+    expect(previewDropShadow(source)).toBeNull();
+    expect(previewDropShadow(source, { "App.Width": 390 })).toBeNull();
+    expect(previewDropShadow(source, { varCanShow: true })).toBe("bold");
+    expect(previewDropShadow(source, { varCanShow: false })).toBe("none");
+    expect(previewDropShadow('=If(App.Width < 720, "DropShadow.Bold", DropShadow.None)',
+      { "App.Width": 390 })).toBeNull();
+    expect(previewDropShadow('=If(App.Width < 720, DropShadow.Unknown, DropShadow.Light)',
+      { "App.Width": 390 })).toBeNull();
+    expect(previewDropShadow('=If(App.Width < 720, DropShadow.Light)',
+      { "App.Width": 1366 })).toBeNull();
+    expect(previewDropShadow('=If(App.Width < 720, If(varRuntime, DropShadow.Bold, DropShadow.Light), DropShadow.None)',
+      { "App.Width": 390 })).toBeNull();
+  });
+});
+
 describe("verified responsive Canvas typography", () => {
   const text = control("ModernText@1.0.0", {
     Align: "=If(App.Width < 720, Align.Center, Align.Right)",
