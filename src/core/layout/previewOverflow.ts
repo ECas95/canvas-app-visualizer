@@ -38,6 +38,10 @@ export function previewOverflowMode(
   const literal = /^=?\s*LayoutOverflow\.(Scroll|Hide)\s*$/i.exec(raw.trim());
   if (literal) return literal[1].toLowerCase() as "scroll" | "hide";
   // Power Fx If can select an enum using verified viewport/parent dimensions.
+  // Do not mistake a quoted string that resembles an enum for the enum itself.
+  // Conservative rejection is preferable to fabricating a scrollable control.
+  if (!/\bLayoutOverflow\.(?:Scroll|Hide)\b/i.test(raw) ||
+      /["']LayoutOverflow\.(?:Scroll|Hide)["']/i.test(raw)) return "unknown";
   // Unknown conditions and unsupported expressions never enable scrolling.
   const resolved = staticString(raw, symbols);
   const match = typeof resolved === "string"

@@ -26,6 +26,9 @@ describe("Canvas overflow semantics", () => {
     expect(previewOverflowMode(formula, { "App.Width": 390 })).toBe("scroll");
     expect(previewOverflowMode(formula, { "App.Width": 1366 })).toBe("hide");
     expect(previewOverflowMode(formula)).toBe("unknown");
+    expect(previewOverflowMode('="LayoutOverflow.Scroll"')).toBe("unknown");
+    expect(previewOverflowMode('=If(App.Width < 720, "LayoutOverflow.Scroll", LayoutOverflow.Hide)',
+      { "App.Width": 390 })).toBe("unknown");
     expect(previewOverflowMode("=If(varCanScroll, LayoutOverflow.Scroll, LayoutOverflow.Hide)",
       { "App.Width": 390 })).toBe("unknown");
   });
