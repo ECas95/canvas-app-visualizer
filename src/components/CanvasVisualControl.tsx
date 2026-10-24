@@ -69,7 +69,9 @@ export function CanvasVisualControl({
   // Preserve the old approximate inset only when no static padding is known.
   // Checkbox/toggle labels use their own icon offset, not the host's text inset.
   function alignedTextPoint(defaultX: number, defaultAnchor: "start" | "middle" | "end") {
-    const anchor = horizontalAlign ?? defaultAnchor;
+    // SVG text cannot justify; retain a deterministic left-aligned fallback.
+    // Wrapped labels use browser text layout below for real justification.
+    const anchor = horizontalAlign === "justify" ? "start" : horizontalAlign ?? defaultAnchor;
     const sourceInset = (raw: unknown) => {
       const resolved = staticNumber(raw, simulationSymbols);
       return resolved !== null && Number.isFinite(resolved) ? Math.max(0, resolved) : inset;
@@ -208,7 +210,8 @@ export function CanvasVisualControl({
               <span style={{
                 display: "block", width: "100%", whiteSpace: "pre-wrap",
                 overflowWrap: "break-word", wordBreak: "normal",
-                textAlign: horizontalAlign === "middle" ? "center" :
+                textAlign: horizontalAlign === "justify" ? "justify" :
+                  horizontalAlign === "middle" ? "center" :
                   horizontalAlign === "end" ? "right" : "left"
               }}>{text}</span>
             </div>
