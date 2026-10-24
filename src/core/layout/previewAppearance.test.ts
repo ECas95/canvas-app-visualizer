@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CanvasControl } from "../../types/canvas";
 import {
-  isDefinitelyHidden, previewVisibility, previewCanRunOnSelect, previewColor, previewColorWithSymbols, previewDisplayMode, previewFontSize, previewFontWeight,
+  isDefinitelyHidden, previewVisibility, previewCanRunOnSelect, previewColor, previewColorWithSymbols, previewDisplayMode, previewFontFamily, PREVIEW_DEFAULT_FONT, previewFontSize, previewFontWeight,
   previewHorizontalAlign, previewIsChecked, previewItalic, previewKind,
   previewText, previewTextDecoration, previewVerticalAlign
 } from "./previewAppearance";
@@ -74,6 +74,27 @@ describe("semantic preview classification", () => {
     expect(isDefinitelyHidden(control("Label", { Visible: "=App.Width >= 1000" }), symbols)).toBe(false);
     expect(isDefinitelyHidden(control("Label", { Visible: "=varIsAdmin && App.Width >= 1000" }), symbols)).toBe(false);
     expect(isDefinitelyHidden(control("Label", { Visible: "=false//App.Width >= 1000" }), symbols)).toBe(true);
+  });
+
+  it("uses explicit Canvas Font enums and quoted families without guessing", () => {
+    expect(previewFontFamily(control("Label", { Font: "=Font.Arial" })))
+      .toBe("Arial,sans-serif");
+    expect(previewFontFamily(control("Label", { Font: "=Font.'Segoe UI'" })))
+      .toBe(PREVIEW_DEFAULT_FONT);
+    expect(previewFontFamily(control("Label", { Font: "=Font.'Courier New'" })))
+      .toBe('"Courier New",monospace');
+    expect(previewFontFamily(control("Label", { Font: '="Georgia"' })))
+      .toBe("Georgia,serif");
+  });
+
+  it("keeps unknown, dynamic and unsafe fonts on a local fallback", () => {
+    expect(previewFontFamily(control("Label"))).toBe(PREVIEW_DEFAULT_FONT);
+    expect(previewFontFamily(control("Label", { Font: "=varRuntimeFont" })))
+      .toBe(PREVIEW_DEFAULT_FONT);
+    expect(previewFontFamily(control("Label", { Font: "=If(varReady, Font.Arial, Font.Verdana)" })))
+      .toBe(PREVIEW_DEFAULT_FONT);
+    expect(previewFontFamily(control("Label", { Font: '="Arial; background:url(evil)"' })))
+      .toBe(PREVIEW_DEFAULT_FONT);
   });
 
   it("uses the source-responsive font Size instead of a fixed fallback", () => {
