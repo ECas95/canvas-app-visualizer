@@ -288,6 +288,33 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
       : items,
     [items, focusSelection, target]
   );
+  // An overlay belongs to its source control's stacking context, not to a
+  // global SVG layer. Scrollbars must follow the host's last descendant so
+  // they remain above its content but below later sibling controls.
+  const scrollOverlaysAt = new Map<string, DrawItem[]>();
+  for (const host of visibleItems) {
+    if (!scrollRanges[host.control.id]) continue;
+    const last = [...visibleItems].reverse().find(candidate =>
+      candidate.control.id === host.control.id ||
+      candidate.ancestors.includes(host.control.id)
+    );
+    if (!last) continue;
+    const at = scrollOverlaysAt.get(last.control.id) ?? [];
+    at.push(host);
+    scrollOverlaysAt.set(last.control.id, at);
+  }
+
+  function clipToAncestors(child: ReactNode, ancestors: readonly string[]): ReactNode {
+    return ancestors.reduceRight<ReactNode>((node, ancestor) => {
+      const parent = itemById.get(ancestor);
+      // A Power Apps Group is an editor grouping, not a clipping container.
+      if (!parent || !/(gallery|container|form|datacard)/i.test(parent.control.controlType))
+        return node;
+      const parentIndex = indexById.get(parent.control.id) ?? 0;
+      return <g clipPath={`url(#${instanceId}-bounds-${parentIndex})`}>{node}</g>;
+    }, child);
+  }
+
   const unresolved = items.filter(item => item.dynamic).length;
   const runtimeVisibilityUnknown = items.filter(item => item.visibilityUnknown).length;
 
@@ -445,40 +472,25 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                     {item.runtimeGalleryStateUnknown ? " · AllItems unavailable; content intentionally withheld" : ""}</title>
                 </g>
               );
-              // Clip children in layout hosts only; plain editor Groups do not clip.
-              const clipped = item.ancestors.reduceRight<ReactNode>((child, ancestor) => {
-                const parent = itemById.get(ancestor);
-                if (!parent) return child;
-                // A Power Apps Group is an editor grouping, not a clipping container.
-                if (!/(gallery|container|form|datacard)/i.test(parent.control.controlType)) return child;
-                const parentIndex = indexById.get(parent.control.id) ?? 0;
-                return (
-                  <g clipPath={`url(#${instanceId}-bounds-${parentIndex})`}>
-                    {child}
-                  </g>
-                );
-              }, draw);
-              return <g key={item.control.id}>{clipped}</g>;
-            })}
-
-            {mode === "visual" && visibleItems.filter(item =>
-              galleryRecordsUnknown(item.control) && !item.visibilityUnknown
-            ).map(item => {
-              const template = galleryTemplateLayout(item.control, {
-                x: 0, y: 0, width: item.width, height: item.height, dynamic: item.dynamic
-              }, {
-                parentWidth: item.width, parentHeight: item.height,
-                appWidth: width, appHeight: height
-              });
-              if (!template) return null;
-              const slots = Math.min(6, template.wrapCount);
-              return (
-                <g key={item.control.id + "-template-legend"} pointerEvents="none"
-                  clipPath={`url(#${instanceId}-bounds-${indexById.get(item.control.id) ?? 0})`}>
-                  {Array.from({ length: Math.max(0, slots - 1) }, (_, index) => {
-                    const guide = galleryTemplateGuideRect(template, index + 1, item.x, item.y);
-                    return <rect key={index} x={guide.x} y={guide.y}
-                      width={guide.width} height={guide.height}
+              const clipped = clipToAncestors(draw, item.ancestors);
+              const template = mode === "visual" &&
+                galleryRecordsUnknown(item.control) && !item.visibilityUnknown
+                ? galleryTemplateLayout(item.control, {
+                    x: 0, y: 0, width: item.width, height: item.height,
+                    dynamic: item.dynamic
+                  }, {
+                    parentWidth: item.width, parentHeight: item.height,
+                    appWidth: width, appHeight: height
+                  })
+                : null;
+              const slots = template ? Math.min(6, template.wrapCount) : 0;
+              const guide = template && (
+                <g pointerEvents="none"
+                  clipPath={`url(#${instanceId}-bounds-${index})`}>
+                  {Array.from({ length: Math.max(0, slots - 1) }, (_, slotIndex) => {
+                    const rect = galleryTemplateGuideRect(template, slotIndex + 1, item.x, item.y);
+                    return <rect key={slotIndex} x={rect.x} y={rect.y}
+                      width={rect.width} height={rect.height}
                       rx={8} fill="none" stroke="#8194ac" strokeDasharray="6 5"
                       strokeWidth={1} opacity={0.55} />;
                   })}
@@ -492,22 +504,22 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                   </text>
                 </g>
               );
-            })}
-            {mode === "visual" && visibleItems.filter(item =>
-              scrollRanges[item.control.id] !== undefined
-            ).map(item => {
-              const range = scrollRanges[item.control.id];
-              const offset = effectiveOffsets[item.control.id] ?? { x: 0, y: 0 };
-              const bar = <PreviewScrollIndicators x={item.x} y={item.y}
-                width={item.width} height={item.height} range={range} offset={offset} />;
-              const clipped = item.ancestors.reduceRight<ReactNode>((child, ancestor) => {
-                const parent = itemById.get(ancestor);
-                if (!parent || !/(gallery|container|form|datacard)/i.test(parent.control.controlType))
-                  return child;
-                const parentIndex = indexById.get(parent.control.id) ?? 0;
-                return <g clipPath={`url(#${instanceId}-bounds-${parentIndex})`}>{child}</g>;
-              }, bar);
-              return <g key={item.control.id + "-scrollbar"}>{clipped}</g>;
+              return (
+                <g key={item.control.id}>
+                  {clipped}
+                  {guide && clipToAncestors(guide, item.ancestors)}
+                  {scrollOverlaysAt.get(item.control.id)?.map(host => {
+                    const range = scrollRanges[host.control.id];
+                    const offset = effectiveOffsets[host.control.id] ?? { x: 0, y: 0 };
+                    const bar = <PreviewScrollIndicators x={host.x} y={host.y}
+                      width={host.width} height={host.height}
+                      range={range} offset={offset} />;
+                    return <g key={host.control.id + "-scrollbar"}>
+                      {clipToAncestors(bar, host.ancestors)}
+                    </g>;
+                  })}
+                </g>
+              );
             })}
           </svg>
         </div>
