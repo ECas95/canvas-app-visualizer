@@ -160,10 +160,38 @@ export function previewIsOpaqueColor(color: string | null): boolean {
 export type PreviewDropShadow =
   | "none" | "light" | "semilight" | "regular" | "semibold" | "bold" | "extrabold";
 
-export function previewDropShadow(raw: unknown): PreviewDropShadow | null {
-  if (typeof raw !== "string") return null;
-  const match = /^=?\s*DropShadow\.(None|Light|Semilight|Regular|Semibold|Bold|ExtraBold)\s*$/i.exec(raw.trim());
-  return match ? match[1].toLowerCase() as PreviewDropShadow : null;
+export function previewDropShadow(
+  raw: unknown,
+  symbols?: Record<string, StaticPowerFxValue>,
+  depth = 0
+): PreviewDropShadow | null {
+  if (typeof raw !== "string" || depth > 6) return null;
+  const source = raw.trim();
+  const match = /^=?\s*DropShadow\.(None|Light|Semilight|Regular|Semibold|Bold|ExtraBold)\s*$/i.exec(source);
+  if (match) return match[1].toLowerCase() as PreviewDropShadow;
+  if (!symbols) return null;
+
+  // Resolve only a proven Power Fx If branch. Unavailable runtime conditions,
+  // unsupported enum names, strings and arbitrary calls remain unknown.
+  // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+  const lexed = lexPowerFx(source);
+  if (lexed.diagnostics.length) return null;
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+  if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
+      tokens[tokens.length - 1]?.value !== ")") return null;
+  const branches = splitIfArguments(tokens.slice(2, -1));
+  if (!branches || branches.length < 2) return null;
+
+  for (let i = 0; i + 1 < branches.length; i += 2) {
+    const condition = staticBoolean("=" + expressionText(source, branches[i]), symbols);
+    if (condition === null) return null;
+    if (condition) {
+      return previewDropShadow("=" + expressionText(source, branches[i + 1]), symbols, depth + 1);
+    }
+  }
+  const fallback = branches.length % 2 === 1 ? branches[branches.length - 1] : undefined;
+  return fallback ? previewDropShadow("=" + expressionText(source, fallback), symbols, depth + 1) : null;
 }
 
 const PREVIEW_SHADOW_FILTERS: Record<Exclude<PreviewDropShadow, "none">, string> = {
@@ -176,8 +204,11 @@ const PREVIEW_SHADOW_FILTERS: Record<Exclude<PreviewDropShadow, "none">, string>
 };
 
 /** Deterministic SVG-compatible CSS; never interpolates imported formulas. */
-export function previewDropShadowFilter(raw: unknown): string | undefined {
-  const level = previewDropShadow(raw);
+export function previewDropShadowFilter(
+  raw: unknown,
+  symbols?: Record<string, StaticPowerFxValue>
+): string | undefined {
+  const level = previewDropShadow(raw, symbols);
   return level && level !== "none" ? PREVIEW_SHADOW_FILTERS[level] : undefined;
 }
 
