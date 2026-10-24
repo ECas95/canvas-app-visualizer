@@ -392,6 +392,37 @@ describe("Canvas SVG text content-box padding", () => {
 });
 
 
+describe("Canvas image flip geometry", () => {
+  const asset = { name: "companylogo", path: "Resources/CompanyLogo.png", dataUrl: "data:image/png;base64,AA==" };
+  const renderFlipped = (position: string, flipH: string, flipV: string, symbols?: Record<string, string | number | boolean>) =>
+    renderToStaticMarkup(<svg><CanvasVisualControl
+      control={{ ...label({ Image: "=Media.CompanyLogo", ImagePosition: position,
+        FlipHorizontal: flipH, FlipVertical: flipV }), controlType: "Classic/Image@2.1.0" }}
+      mediaAssets={[asset]} x={10} y={20} width={140} height={64}
+      clipId="flip-image-clip" simulationSymbols={symbols} /></svg>);
+
+  it("flips raster content without flipping the border or clip for Fit and Center", () => {
+    for (const position of ["=ImagePosition.Fit", "=ImagePosition.Center"]) {
+      const html = renderFlipped(position, "=true", "=false");
+      expect(html).toContain('transform="translate(160 0) scale(-1 1)"');
+      expect(html).toContain('clip-path="url(#flip-image-clip)"');
+      expect(html).toMatch(/<path d="M 10 20[^>]*><\\/path>/);
+      expect(html.indexOf('clip-path="url(#flip-image-clip)"'))
+        .toBeLessThan(html.indexOf('transform="translate(160 0) scale(-1 1)"'));
+    }
+  });
+
+  it("supports both flips in tiled images and omits unknown transforms", () => {
+    const tiled = renderFlipped("=ImagePosition.Tile", "=true", "=true");
+    expect(tiled).toContain('transform="translate(160 104) scale(-1 -1)"');
+    expect(tiled).toContain("background-repeat:repeat");
+    expect(renderFlipped("=ImagePosition.Fit", "=varPermission", "=true"))
+      .not.toContain('transform="translate(');
+    expect(renderFlipped("=ImagePosition.Fit", "=App.Width < 720", "=false", { "App.Width": 390 }))
+      .toContain('transform="translate(160 0) scale(-1 1)"');
+  });
+});
+
 describe("native-size Canvas ImagePosition rendering", () => {
   const asset = {
     name: "companylogo",
