@@ -26,6 +26,26 @@ describe("layout literal helpers", () => {
     expect(rgba("=RGBA(1, 2, 3, 0.5)")).toBe("rgba(1,2,3,0.5)");
   });
 
+  it("resolves documented percentage alpha without browser coercion", () => {
+    expect(rgba("=RGBA(255, 128, 0, 50%)")).toBe("rgba(255,128,0,0.5)");
+    expect(rgba("=RGBA(0, 0, 0, 0%)")).toBe("rgba(0,0,0,0)");
+    expect(rgba("=RGBA(255, 255, 255, 100%)")).toBe("rgba(255,255,255,1)");
+    expect(rgba("=RGBA(10.5, 20, 30, .25)")).toBe("rgba(10.5,20,30,0.25)");
+  });
+
+  it("rejects out-of-range RGBA channels and alpha instead of CSS clamping", () => {
+    for (const source of [
+      "=RGBA(256, 0, 0, 1)", "=RGBA(0, 999, 0, 1)",
+      "=RGBA(0, 0, 256, 1)", "=RGBA(0, 0, 0, 1.1)",
+      "=RGBA(0, 0, 0, 101%)", "=RGBA(0, 0, 0, 1000%)",
+      "=RGBA(-1, 0, 0, 1)", "=RGBA(0, 0, 0, -0.1)",
+      "=RGBA(0, 0, 0, 1/2)", "=RGBA(0, 0, 0, varAlpha)",
+      "=Connector.RGBA(1, 2, 3, 1)"
+    ]) {
+      expect(rgba(source)).toBeNull();
+    }
+  });
+
   it("resolves common Parent and Self geometry expressions", () => {
     const control: CanvasControl = {
       id: "1",
