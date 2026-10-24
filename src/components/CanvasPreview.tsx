@@ -113,7 +113,10 @@ function flatten(
     // Without a verified local Items snapshot, drawing even static child labels
     // would imply that at least one runtime record exists. Keep the gallery
     // bounds and template guide inspectable instead.
-    if (runtimeGalleryStateUnknown || galleryRecordsUnknown(control) ||
+    // A source-only preview cannot prove an unresolved Visible formula true.
+    // Do not draw descendant text or actions from a potentially hidden subtree.
+    // Its geometry remains inspectable through the parent placeholder and tree.
+    if (visibilityUnknown || runtimeGalleryStateUnknown || galleryRecordsUnknown(control) ||
         depth >= 24 || control.children.length === 0) continue;
     const editorGroup = control.controlType.toLowerCase() === "group";
     const template = isGallery(control)
@@ -331,6 +334,16 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                         Gallery state unknown — not an empty result
                       </text>
                     </>
+                  ) : mode === "visual" && item.visibilityUnknown ? (
+                    <>
+                      <rect x={item.x} y={item.y} width={item.width} height={item.height}
+                        fill="#fff9ed" fillOpacity={0.92} stroke="#b68c47"
+                        strokeDasharray="5 4" />
+                      <text x={item.x + 8} y={item.y + Math.min(20, item.height / 2 + 4)}
+                        fontSize={12} fill="#77531b" pointerEvents="none">
+                        Visible unknown — runtime condition unavailable
+                      </text>
+                    </>
                   ) : mode === "visual" ? (
                     <CanvasVisualControl control={item.control} mediaAssets={mediaAssets}
                       simulationSymbols={item.renderSymbols}
@@ -374,7 +387,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
               return <g key={item.control.id}>{clipped}</g>;
             })}
 
-            {mode === "visual" && visibleItems.filter(item => galleryRecordsUnknown(item.control)).map(item => {
+            {mode === "visual" && visibleItems.filter(item =>
+              galleryRecordsUnknown(item.control) && !item.visibilityUnknown
+            ).map(item => {
               const template = galleryTemplateLayout(item.control, {
                 x: 0, y: 0, width: item.width, height: item.height, dynamic: item.dynamic
               }, {
