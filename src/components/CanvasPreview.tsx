@@ -5,6 +5,7 @@ import {
   buildSiblingGeometrySymbols,
   controlRect,
   galleryTemplateLayout,
+  galleryTemplateGuideRect,
   isAutoLayout,
   isGallery,
   rgba
@@ -375,15 +376,15 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
               if (!template) return null;
               const slots = Math.min(6, template.wrapCount);
               return (
-                <g key={item.control.id + "-template-legend"} pointerEvents="none">
-                  {Array.from({ length: Math.max(0, slots - 1) }, (_, index) => (
-                    <rect key={index} x={item.x + template.width * (index + 1) + template.padding}
-                      y={item.y + template.padding}
-                      width={Math.max(0, template.width - 2 * template.padding)}
-                      height={Math.max(0, template.height - 2 * template.padding)}
+                <g key={item.control.id + "-template-legend"} pointerEvents="none"
+                  clipPath={`url(#${instanceId}-bounds-${indexById.get(item.control.id) ?? 0})`}>
+                  {Array.from({ length: Math.max(0, slots - 1) }, (_, index) => {
+                    const guide = galleryTemplateGuideRect(template, index + 1, item.x, item.y);
+                    return <rect key={index} x={guide.x} y={guide.y}
+                      width={guide.width} height={guide.height}
                       rx={8} fill="none" stroke="#8194ac" strokeDasharray="6 5"
-                      strokeWidth={1} opacity={0.55} />
-                  ))}
+                      strokeWidth={1} opacity={0.55} />;
+                  })}
                   <rect x={item.x + 7} y={item.y + Math.max(0, Math.min(item.height - 25, template.height - 25))}
                     width={Math.min(276, Math.max(0, item.width - 14))} height={22}
                     rx={4} fill="#edf3fa" stroke="#ccd7e4" />
