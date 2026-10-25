@@ -1,6 +1,6 @@
 import type { CanvasControl, PreviewMediaAsset } from "../types/canvas";
 import { previewChildClipPath, previewCornerRadii, previewRoundedRectPath } from "../core/layout/previewCorners";
-import { staticBoolean, staticNumber, staticString } from "../core/powerfx/staticEval";
+import { staticBoolean, staticNumber } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, previewImageFlipTransform, previewImagePosition, previewImageRotationTransform, previewImageSourceState, previewRasterCssImage, resolvePreviewImage } from "../core/layout/previewMedia";
 import { PREVIEW_ICON_PATHS, previewIconName, previewIconRotation } from "../core/layout/previewIcon";
@@ -83,7 +83,7 @@ export function CanvasVisualControl({
     ? inputContent.text
     : selectContent
       ? selectContent.text
-      : (simulationSymbols && staticString(rawText, simulationSymbols)) ?? previewText(control);
+      : previewText(control, simulationSymbols);
   const fontSize = previewFontSize(control, simulationSymbols);
   const fontFamily = previewFontFamily(control, simulationSymbols);
   // Source-only preview cannot assert a fallback font or size is the runtime
