@@ -172,7 +172,7 @@ describe("Canvas corner radius preview", () => {
     expect(path.match(/A 50 50 0 0 1/g)).toHaveLength(4);
     expect(path).toContain("A 50 50 0 0 1 100 50");
     expect(path).toContain("A 50 50 0 0 1 50 100");
-    expect(path).not.toMatch(/\\bQ\\b/);
+    expect(path).not.toMatch(/\bQ\b/);
     expect(previewChildClipPath({
       RadiusTopLeft: "=50", RadiusTopRight: "=50",
       RadiusBottomRight: "=50", RadiusBottomLeft: "=50"
@@ -184,7 +184,7 @@ describe("Canvas corner radius preview", () => {
       topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0
     });
     expect(path).not.toContain("A 0 0");
-    expect(path).not.toMatch(/\\bQ\\b/);
+    expect(path).not.toMatch(/\bQ\b/);
     expect(path).toContain("M 4 6 H 84 L 84 6 V 36 L 84 36");
   });
 
@@ -202,7 +202,7 @@ describe("Canvas corner radius preview", () => {
       const radius = viewport < 720 ? 24 : 8;
       expect(clip).toContain(`A ${radius} ${radius} 0 0 1 ${10 + radius} 20`);
       expect(clip).not.toContain("A 4 4");
-      expect(clip).not.toMatch(/\\bQ\\b/);
+      expect(clip).not.toMatch(/\bQ\b/);
       // Outline can approximate unknown corners, but clipping must not.
       const outline = previewRoundedRectPath(10, 20, 100, 50,
         previewCornerRadii(props, 100, 50, symbols));
