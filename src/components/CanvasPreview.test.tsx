@@ -440,3 +440,60 @@ describe("CanvasPreview editor Group scroll geometry", () => {
     expect(html).toContain('data-preview-scrollbar="vertical"');
   });
 });
+
+describe("CanvasPreview unverified gallery template geometry", () => {
+  function renderUnverifiedTemplate(parentWidth: number, overrides: Record<string, unknown> = {}) {
+    const templateLabel = control("UnverifiedRow", "Classic/Label@2.5.1", {
+      Text: '="Source template is not a runtime record"'
+    });
+    const gallery = control("UnknownTemplate", "Classic/VerticalGallery@2.3.0", {
+      X: "=0", Y: "=0", Width: "=Parent.Width", Height: "=320",
+      Items: "=RemoteSource", WrapCount: "=If(varAuthorized, 3, 1)",
+      TemplateSize: "=292", TemplatePadding: "=8", ...overrides
+    }, [templateLabel]);
+    const host = control("ViewportHost", "GroupContainer@1.3.0", {
+      X: "=0", Y: "=0", Width: `=${parentWidth}`, Height: "=400"
+    }, [gallery]);
+    const screen: CanvasScreen = {
+      id: "UnknownTemplateFixture", name: "UnknownTemplateFixture",
+      properties: {}, children: [host],
+      sourceFile: "Src/Synthetic.pa.yaml", sourceFormat: "pa-yaml-v3"
+    };
+    return renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+  }
+
+  it.each([320, 768, 1366])(
+    "withholds guessed template slots at %ipx parent width when WrapCount is runtime-dependent",
+    width => {
+      const html = renderUnverifiedTemplate(width);
+      expect(html).toContain("Inspect UnknownTemplate");
+      expect(html).toContain("Template geometry unknown — runtime formula or missing defaults");
+      expect(html).not.toContain("Template only — runtime records unavailable");
+      expect(html).not.toContain('stroke-dasharray="6 5"');
+      expect(html).not.toContain("Inspect UnverifiedRow");
+      expect(html).not.toContain("Source template is not a runtime record");
+      expect(html).toContain("Cannot determine loading, emptiness or access from source");
+    }
+  );
+
+  it("does not claim a fixed template when TemplateSize or TemplatePadding is unresolved", () => {
+    const html = renderUnverifiedTemplate(768, {
+      WrapCount: "=2", TemplateSize: "=varTemplateHeight",
+      TemplatePadding: "=varTemplatePadding"
+    });
+    expect(html).toContain("Template geometry unknown — runtime formula or missing defaults");
+    expect(html).not.toContain('stroke-dasharray="6 5"');
+  });
+
+  it("keeps guides for verified viewport-only Power Fx template geometry", () => {
+    const html = renderUnverifiedTemplate(600, {
+      WrapCount: "=If(App.Width > 720, 3, 1)",
+      TemplateSize: "=If(App.Width > 720, 292, 180)",
+      TemplatePadding: "=8"
+    });
+    expect(html).toContain("Template only — runtime records unavailable");
+    expect(html).toContain('stroke-dasharray="6 5"');
+    expect(html).not.toContain("Template geometry unknown");
+    expect(html).not.toContain("Inspect UnverifiedRow");
+  });
+});
