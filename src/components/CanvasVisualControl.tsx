@@ -32,7 +32,9 @@ export function CanvasVisualControl({
   // Modern Icon.Icon is a Fluent string and its color is IconColor.
   const isModernIcon = kind === "icon" && /^modern\/?icon(?:@|$)/i.test(control.controlType);
   const media = kind === "image" ? resolvePreviewImage(props.Image, mediaAssets) : undefined;
-  const imagePosition = kind === "image" ? previewImagePosition(props.ImagePosition, simulationSymbols) : null;
+  const imagePosition = kind === "image"
+    ? (props.ImagePosition == null ? "fit" : previewImagePosition(props.ImagePosition, simulationSymbols))
+    : null;
   // Native-size Center/Tile use a browser raster background. The importer
   // supplies only bounded local PNG/JPEG/GIF/WebP data URLs, never remote URLs.
   const imageFlip = kind === "image" ? previewImageFlipTransform(
@@ -43,6 +45,12 @@ export function CanvasVisualControl({
   ) : null;
   const rasterCssImage = media && (imagePosition === "center" || imagePosition === "tile")
     ? previewRasterCssImage(media.dataUrl) : null;
+  // A locally imported image is not proof of its final appearance: position,
+  // flip and rotation may still depend on SQL or another runtime-only value.
+  // Withhold the bitmap instead of silently presenting unknown transforms as
+  // the default Fit / unrotated / unflipped state.
+  const imageTransformUnknown = kind === "image" && !!media &&
+    (imagePosition === null || imageFlip === null || imageRotation === null);
   const displayMode = previewDisplayMode(props.DisplayMode, simulationSymbols);
   const disabled = displayMode === "disabled";
   const explicitFill = previewColorWithSymbols(
@@ -335,9 +343,12 @@ export function CanvasVisualControl({
           );
         })()}
         {kind === "image" && (
+          <g data-preview-image-state={media
+            ? (imageTransformUnknown ? "unknown" : "verified")
+            : "source-unavailable"}>
           <g transform={imageRotation || undefined}>
           <g transform={imageFlip || undefined}>
-          {media ? (
+          {media && !imageTransformUnknown ? (
             imagePosition === "center" || imagePosition === "tile" ? (
               rasterCssImage ? (
                 <foreignObject x={x} y={y} width={width} height={height}
@@ -363,8 +374,18 @@ export function CanvasVisualControl({
             <path d={`M ${x + 12} ${y + height - 16} l ${Math.max(5, width * .28)} -${Math.max(5, height * .36)} l ${Math.max(5, width * .18)} ${Math.max(5, height * .2)} l ${Math.max(5, width * .16)} -${Math.max(5, height * .2)}`}
               fill="none" stroke="#7d90a4" strokeWidth={2}/>
             <circle cx={x + Math.min(width - 12, 24)} cy={y + 22} r={4} fill="#9ab0c5"/>
+            {imageTransformUnknown && (
+              <g data-preview-image-uncertainty="true" pointerEvents="none">
+                <text x={x + width / 2} y={y + height / 2}
+                  textAnchor="middle" dominantBaseline="middle"
+                  fontSize={Math.min(11, Math.max(7, height / 5))}
+                  fill="#526579">Image state unknown</text>
+                <title>Image position, flip or rotation requires runtime state; appearance is not verified</title>
+              </g>
+            )}
             </>
           )}
+          </g>
           </g>
           </g>
         )}
