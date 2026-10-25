@@ -33,6 +33,50 @@ describe("Canvas overflow semantics", () => {
       { "App.Width": 390 })).toBe("unknown");
   });
 
+  it("resolves selected enum branches without mistaking text for enums", () => {
+    const source = '=If(App.Width < 720, LayoutOverflow.Scroll, "LayoutOverflow.Hide")';
+    expect(previewOverflowMode(source, { "App.Width": 390 })).toBe("scroll");
+    expect(previewOverflowMode(source, { "App.Width": 1366 })).toBe("unknown");
+    expect(previewOverflowMode('=If(true, LayoutOverflow.Hide, "LayoutOverflow.Scroll")'))
+      .toBe("hide");
+    expect(previewOverflowMode('=If(true, "LayoutOverflow.Scroll", LayoutOverflow.Hide)'))
+      .toBe("unknown");
+  });
+
+  it("keeps local strings, text concatenation and connector values unknown", () => {
+    const symbols = { localOverflow: "LayoutOverflow.Scroll" };
+    expect(previewOverflowMode("=localOverflow", symbols)).toBe("unknown");
+    expect(previewOverflowMode("=If(true, localOverflow, LayoutOverflow.Hide)", symbols))
+      .toBe("unknown");
+    expect(previewOverflowMode('="LayoutOverflow." & "Scroll"')).toBe("unknown");
+    expect(previewOverflowMode("=If(true, SQL.Overflow, LayoutOverflow.Hide)"))
+      .toBe("unknown");
+  });
+
+  it("supports nested and multi-condition If with verified viewports", () => {
+    const formula = "=If(App.Width < 600, LayoutOverflow.Scroll, " +
+      "App.Width < 1000, If(App.Height > 800, LayoutOverflow.Hide, LayoutOverflow.Scroll), " +
+      "LayoutOverflow.Hide)";
+    expect(previewOverflowMode(formula, { "App.Width": 390, "App.Height": 844 }))
+      .toBe("scroll");
+    expect(previewOverflowMode(formula, { "App.Width": 768, "App.Height": 1024 }))
+      .toBe("hide");
+    expect(previewOverflowMode(formula, { "App.Width": 768, "App.Height": 600 }))
+      .toBe("scroll");
+    expect(previewOverflowMode(formula, { "App.Width": 1366, "App.Height": 768 }))
+      .toBe("hide");
+    expect(previewOverflowMode(formula, { "App.Width": 768 }))
+      .toBe("unknown");
+  });
+
+  it("does not enable scrolling from unresolved or malformed branches", () => {
+    expect(previewOverflowMode("=If(varAuthorized, LayoutOverflow.Scroll, LayoutOverflow.Hide)"))
+      .toBe("unknown");
+    expect(previewOverflowMode("=If(true, LayoutOverflow.Scroll, )")).toBe("unknown");
+    expect(previewOverflowMode("=If(true, LayoutOverflow.Scroll")).toBe("unknown");
+    expect(previewOverflowMode("=If(false, LayoutOverflow.Scroll)")).toBe("unknown");
+  });
+
   it("computes scroll extents only at viewports with proven Scroll", () => {
     const host = item("Host", [], 0, 0, 100, 100, {
       overflowY: "=If(App.Width < 720, LayoutOverflow.Scroll, LayoutOverflow.Hide)"
