@@ -90,8 +90,47 @@ describe("source-faithful Canvas label wrapping", () => {
     });
     expect(html).toContain("<foreignObject");
     expect(html).toContain("white-space:pre-wrap");
-    expect(html).toContain("overflow-wrap:break-word");
+    expect(html).toContain("overflow-wrap:anywhere");
+    expect(html).toContain("min-width:0");
+    expect(html).toContain("max-width:100%");
     expect(html).toContain("A label with enough words");
+  });
+
+  it.each([
+    { viewport: 390, width: 110 },
+    { viewport: 768, width: 220 },
+    { viewport: 1366, width: 440 }
+  ])("keeps unbroken wrapped labels within their flex content box at $viewport px", ({ viewport, width }) => {
+    const token = "InventoryReference" + "X".repeat(180);
+    const html = renderToStaticMarkup(<svg><CanvasVisualControl
+      control={label({
+        Text: '="' + token + '"',
+        Wrap: "=true",
+        Size: "=If(App.Width < 720, 16, 20)",
+        PaddingLeft: "=8", PaddingRight: "=8"
+      })}
+      x={10} y={20} width={width} height={64}
+      clipId="wrapped-viewport-clip"
+      simulationSymbols={{ "App.Width": viewport }} /></svg>);
+    expect(html).toContain("<foreignObject");
+    expect(html).toContain(token);
+    expect(html).toContain("overflow-wrap:anywhere");
+    expect(html).toContain("min-width:0");
+    expect(html).toContain("max-width:100%");
+    expect(html).toContain("box-sizing:border-box");
+    expect(html).toContain("padding-left:8px");
+    expect(html).toContain("padding-right:8px");
+    expect(html).toContain(`width="${width}"`);
+    expect(html).toContain(`font-size:${viewport < 720 ? 16 : 20}px`);
+  });
+
+  it("retains source newlines in wrapped text without enabling wrap for unknown runtime state", () => {
+    const known = render({ Text: '="First line\\nSecond line"', Wrap: "=true" });
+    const unknown = render({ Text: '="First line\\nSecond line"', Wrap: "=varSqlPermission" });
+    expect(known).toContain("white-space:pre-wrap");
+    expect(known).toContain("overflow-wrap:anywhere");
+    expect(unknown).not.toContain("<foreignObject");
+    expect(unknown).not.toContain("overflow-wrap:anywhere");
   });
 
   it("preserves single-line SVG behavior for false and unresolved Wrap", () => {
