@@ -328,8 +328,18 @@ export function CanvasVisualControl({
           // Unsupported/runtime-dependent icons are explicitly unknown, not
           // silently represented as a different Power Apps icon.
           if (icon === null) return svgText("?", x + width / 2, "middle", "#7c8794");
+          // A missing Rotation uses the Canvas default (0 degrees), but an
+          // explicit runtime-dependent Rotation cannot be shown as unrotated.
+          // Withhold the glyph until its orientation is verifiable.
+          const rotation = props.Rotation == null
+            ? 0 : previewIconRotation(props.Rotation, simulationSymbols);
+          if (rotation === null) return (
+            <g data-preview-icon-state="unknown" pointerEvents="none">
+              {svgText("?", x + width / 2, "middle", "#7c8794")}
+              <title>Icon rotation requires runtime state; orientation is not verified</title>
+            </g>
+          );
           const size = Math.max(0, Math.min(width, height) - 8);
-          const rotation = previewIconRotation(props.Rotation, simulationSymbols);
           return (
             <svg x={x + (width - size) / 2} y={y + (height - size) / 2}
               width={size} height={size} viewBox="0 0 24 24"
