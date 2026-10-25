@@ -712,7 +712,10 @@ describe("native-size Canvas ImagePosition rendering", () => {
       .toContain('preserveAspectRatio="none"');
     const unknown = renderImage("=varImagePosition");
     expect(unknown).not.toContain("<foreignObject");
-    expect(unknown).toContain('preserveAspectRatio="xMidYMid meet"');
+    expect(unknown).toContain('data-preview-image-state="unknown"');
+    expect(unknown).toContain("Image state unknown");
+    expect(unknown).not.toContain('preserveAspectRatio="xMidYMid meet"');
+    expect(unknown).not.toContain('href="data:image/png');
   });
 
   it("does not interpolate unsafe image URLs into native-size CSS", () => {
@@ -996,5 +999,71 @@ describe("Canvas select rendering without a verified Items snapshot", () => {
     expect(desktop).toContain("Desktop</tspan>");
     expect(renderSelect("ModernDropdown@1.0.0", properties))
       .toContain('data-preview-select-state="unknown"');
+  });
+});
+
+describe("fail-closed Canvas image appearance with runtime-only properties", () => {
+  const asset = {
+    name: "companylogo",
+    path: "Resources/CompanyLogo.png",
+    dataUrl: "data:image/png;base64,AA=="
+  };
+  const draw = (properties: Record<string, unknown>,
+    symbols?: Record<string, string | number | boolean>) =>
+    renderToStaticMarkup(<svg><CanvasVisualControl
+      control={{ ...label({ Image: "=Media.CompanyLogo", ...properties }),
+        controlType: "Classic/Image@2.1.0" }}
+      mediaAssets={[asset]} x={10} y={20} width={140} height={64}
+      clipId="image-unknown-clip" simulationSymbols={symbols} /></svg>);
+
+  it.each([
+    { name: "position", properties: { ImagePosition: "=If(varSqlAccess, ImagePosition.Fill, ImagePosition.Tile)" } },
+    { name: "horizontal flip", properties: { FlipHorizontal: "=varSqlAccess" } },
+    { name: "vertical flip", properties: { FlipVertical: "=varSqlAccess" } },
+    { name: "rotation", properties: { ImageRotation: "=If(varSqlAccess, ImageRotation.Rotate90, ImageRotation.None)" } }
+  ])("withholds local bitmap when $name depends on unknown runtime state", ({ properties }) => {
+    const html = draw(properties);
+    expect(html).toContain('data-preview-image-state="unknown"');
+    expect(html).toContain('data-preview-image-uncertainty="true"');
+    expect(html).toContain("Image state unknown");
+    expect(html).not.toContain('href="data:image/png');
+    expect(html).not.toContain("background-image:");
+    expect(html).toContain('clip-path="url(#image-unknown-clip)"');
+  });
+
+  it("renders an imported image when responsive appearance is fully verified", () => {
+    const properties = {
+      ImagePosition: "=If(App.Width < 720, ImagePosition.Tile, ImagePosition.Fit)",
+      ImageRotation: "=If(App.Width < 720, ImageRotation.Rotate90, ImageRotation.None)",
+      FlipHorizontal: "=App.Width < 720"
+    };
+    const phone = draw(properties, { "App.Width": 390 });
+    const desktop = draw(properties, { "App.Width": 1366 });
+    expect(phone).toContain('data-preview-image-state="verified"');
+    expect(phone).toContain("background-repeat:repeat");
+    expect(phone).toContain('transform="rotate(90 80 52)"');
+    expect(desktop).toContain('data-preview-image-state="verified"');
+    expect(desktop).toContain('preserveAspectRatio="xMidYMid meet"');
+    expect(desktop).toContain('href="data:image/png');
+    expect(phone).not.toContain("Image state unknown");
+    expect(desktop).not.toContain("Image state unknown");
+  });
+
+  it("keeps existing omitted-property defaults without claiming runtime SQL values", () => {
+    const html = draw({});
+    expect(html).toContain('data-preview-image-state="verified"');
+    expect(html).toContain('preserveAspectRatio="xMidYMid meet"');
+    expect(html).toContain('href="data:image/png');
+  });
+
+  it("does not confuse unavailable local media with an unverified transform", () => {
+    const html = renderToStaticMarkup(<svg><CanvasVisualControl
+      control={{ ...label({ Image: "=ThisItem.Photo", ImagePosition: "=ImagePosition.Fill" }),
+        controlType: "Classic/Image@2.1.0" }}
+      mediaAssets={[asset]} x={10} y={20} width={140} height={64}
+      clipId="image-source-clip" /></svg>);
+    expect(html).toContain('data-preview-image-state="source-unavailable"');
+    expect(html).not.toContain('href="data:image/png');
+    expect(html).not.toContain('data-preview-image-state="verified"');
   });
 });
