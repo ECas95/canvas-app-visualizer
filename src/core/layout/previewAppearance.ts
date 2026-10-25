@@ -477,14 +477,39 @@ export function previewFontFamily(
   return sourceFontFamily(control.properties.Font, symbols) ?? PREVIEW_DEFAULT_FONT;
 }
 
+/** An explicit unresolved Font is not proof that the fallback matches Canvas. */
+export function previewFontFamilyIsKnown(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): boolean {
+  return control.properties.Font == null ||
+    sourceFontFamily(control.properties.Font, symbols) !== null;
+}
+
+/** An explicit Size wins over legacy FontSize even when it needs runtime state. */
+function sourceFontSize(control: CanvasControl): unknown {
+  return control.properties.Size ?? control.properties.FontSize;
+}
+
+export function previewFontSizeIsKnown(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): boolean {
+  const raw = sourceFontSize(control);
+  if (raw == null) return true;
+  const resolved = staticNumber(raw, symbols);
+  // The renderer caps sizes at 256px; beyond that, its geometry is illustrative.
+  return resolved !== null && resolved > 0 && resolved <= 256;
+}
+
 export function previewFontSize(
   control: CanvasControl,
   symbols?: Record<string, StaticPowerFxValue>
 ): number {
-  const resolved = staticNumber(control.properties.Size, symbols) ??
-    staticNumber(control.properties.FontSize, symbols);
-  // The documented ModernText default is 15 pt; classic labels keep their
-  // existing approximation. Explicit Size / legacy FontSize always wins.
+  const resolved = staticNumber(sourceFontSize(control), symbols);
+  // ModernText defaults to 15 points; classic labels retain an approximate 14px.
+  // An unresolved explicit Size must not be replaced by a known legacy FontSize.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/properties-text
   return resolved !== null && resolved > 0 ? Math.min(256, resolved) :
     /^moderntext(?:@|$)/i.test(control.controlType) ? 15 : 14;
 }
