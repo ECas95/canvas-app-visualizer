@@ -512,11 +512,18 @@ function enumValue(
 ): string | null {
   if (typeof raw !== "string" || depth > 6) return null;
   const source = raw.trim();
-  // Accept only real Power Fx enum members, never quoted strings, variables,
-  // or unrelated namespaces that happen to have the same member name.
-  const exact = /^=?\s*([A-Za-z]+)\.([A-Za-z]+)\s*$/i.exec(source);
-  if (exact) return exact[1].toLowerCase() === namespace.toLowerCase()
-    ? exact[2].toLowerCase() : null;
+  // Typography enums share the same Power Fx token semantics as
+  // DisplayMode/BorderStyle: comments and whitespace are trivia, while a
+  // quoted string, extra operator or unknown member is not a valid enum.
+  // Restrict recognized members rather than treating arbitrary identifiers
+  // as verified formatting.
+  const allowed: Record<typeof namespace, readonly string[]> = {
+    Align: ["left", "right", "center", "middle", "start", "end", "justify"],
+    VerticalAlign: ["top", "middle", "center", "bottom"],
+    FontWeight: ["bold", "semibold", "normal", "regular", "light", "lighter"]
+  };
+  const literal = sourceEnumMember(source, namespace, allowed[namespace]);
+  if (literal) return literal;
 
   if (!symbols) return null;
   // Power Fx If supports condition/result pairs and an optional default,
