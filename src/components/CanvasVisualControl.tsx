@@ -1,5 +1,5 @@
 import type { CanvasControl, PreviewMediaAsset } from "../types/canvas";
-import { previewCornerRadii, previewRoundedRectPath } from "../core/layout/previewCorners";
+import { previewChildClipPath, previewCornerRadii, previewRoundedRectPath } from "../core/layout/previewCorners";
 import { staticNumber, staticString } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, previewImageFlipTransform, previewImagePosition, previewImageRotationTransform, previewRasterCssImage, resolvePreviewImage } from "../core/layout/previewMedia";
@@ -195,8 +195,11 @@ export function CanvasVisualControl({
     <g opacity={disabled ? 0.66 : displayMode === "view" ? 0.86 : 1}>
       <defs>
         <clipPath id={clipId}>
-          <path d={previewRoundedRectPath(
-            x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2), corners
+          {/* Unknown runtime corner formulas must not clip verified text or
+              images using the outline's illustrative 4px fallback. */}
+          <path d={previewChildClipPath(
+            props, x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2),
+            simulationSymbols
           )}/>
         </clipPath>
       </defs>
