@@ -20,6 +20,43 @@ function render(properties: Record<string, unknown>, symbols?: Record<string, st
   );
 }
 
+describe("unverified label Text source", () => {
+  it("marks a SQL-dependent label as unknown, never as an empty result", () => {
+    const html = render({ Text: "=ThisItem.DisplayName", Wrap: "=true" });
+    expect(html).toContain('data-preview-text-state="unknown"');
+    expect(html).toContain("Text unknown");
+    expect(html).toContain("empty content is not verified");
+    expect(html).not.toContain("ThisItem.DisplayName");
+    expect(html).not.toContain("<foreignObject");
+  });
+
+  it("does not mark a provably empty Text formula as unknown", () => {
+    const html = render({ Text: '=""', Wrap: "=true" });
+    expect(html).not.toContain('data-preview-text-state="unknown"');
+    expect(html).not.toContain("Text unknown");
+  });
+
+  it("uses verified viewport-only Text branches without unknown placeholders", () => {
+    const props = { Text: '=If(App.Width < 720, "Phone", "Desktop")' };
+    const phone = render(props, { "App.Width": 390 });
+    const desktop = render(props, { "App.Width": 1366 });
+    expect(phone).toContain("Phone</tspan>");
+    expect(desktop).toContain("Desktop</tspan>");
+    expect(phone).not.toContain('data-preview-text-state="unknown"');
+    expect(desktop).not.toContain('data-preview-text-state="unknown"');
+  });
+
+  it("does not invent text or permissions when a conditional Text is unresolved", () => {
+    const html = render({
+      Text: '=If(varSqlAuthorized, "Authorized", "Denied")',
+      Wrap: "=false"
+    });
+    expect(html).toContain('data-preview-text-state="unknown"');
+    expect(html).not.toContain("Authorized</tspan>");
+    expect(html).not.toContain("Denied</tspan>");
+  });
+});
+
 describe("Microsoft ModernText .pa.yaml rendering", () => {
   it("renders the documented ModernText family as text with wrapped content", () => {
     const yaml = [
