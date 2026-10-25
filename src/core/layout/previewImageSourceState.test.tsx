@@ -72,6 +72,8 @@ describe("Canvas image source fidelity and local-only rendering", () => {
     ["https://example.invalid/tracker.png", "=ImagePosition.Fit"],
     ["https://example.invalid/tracker.png", "=ImagePosition.Fill"],
     ["https://example.invalid/tracker.png", "=ImagePosition.Stretch"],
+    ["https://example.invalid/tracker.png", "=ImagePosition.Tile"],
+    ["https://example.invalid/tracker.png", "=ImagePosition.Center"],
     ["data:image/svg+xml;base64,PHN2Zz4=", "=ImagePosition.Fit"],
     ['data:image/png;base64,AA==\" onload=\"alert(1)', "=ImagePosition.Fit"]
   ])("never interpolates an unsafe imported asset into SVG or CSS (%s, %s)",
