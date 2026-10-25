@@ -151,14 +151,31 @@ export function previewScrollRanges(
     if (rightPadding === null || bottomPadding === null ||
         !Number.isFinite(rightPadding) || !Number.isFinite(bottomPadding) ||
         rightPadding < 0 || bottomPadding < 0) continue;
-    // Finite operands can still overflow during addition (for example, an
-    // imported extreme Width). Never expose an infinite scroll range.
-    const right = Math.max(host.x + host.width,
-      ...children.map(item => item.x + item.width + rightPadding));
-    const bottom = Math.max(host.y + host.height,
-      ...children.map(item => item.y + item.height + bottomPadding));
-    const x = horizontal ? Math.max(0, right - host.x - host.width) : 0;
-    const y = vertical ? Math.max(0, bottom - host.y - host.height) : 0;
+    // Avoid spreading child extents into Math.max: large imported screens can
+    // exceed the JavaScript argument limit even with valid, finite geometry.
+    // Compute only explicitly scrollable axes. Overflow on a hidden axis must
+    // not suppress a separately verified scroll range on the other axis.
+    const hostRight = host.x + host.width;
+    const hostBottom = host.y + host.height;
+    let right = horizontal ? hostRight : 0;
+    let bottom = vertical ? hostBottom : 0;
+    let valid = (!horizontal || Number.isFinite(hostRight)) &&
+      (!vertical || Number.isFinite(hostBottom));
+    for (const child of children) {
+      if (horizontal) {
+        const edge = child.x + child.width + rightPadding;
+        if (!Number.isFinite(edge)) { valid = false; break; }
+        right = Math.max(right, edge);
+      }
+      if (vertical) {
+        const edge = child.y + child.height + bottomPadding;
+        if (!Number.isFinite(edge)) { valid = false; break; }
+        bottom = Math.max(bottom, edge);
+      }
+    }
+    if (!valid) continue;
+    const x = horizontal ? Math.max(0, right - hostRight) : 0;
+    const y = vertical ? Math.max(0, bottom - hostBottom) : 0;
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     if (x > 0 || y > 0) ranges[host.id] = { x, y };
   }
