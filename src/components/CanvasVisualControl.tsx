@@ -54,7 +54,13 @@ export function CanvasVisualControl({
   const imageTransformUnknown = kind === "image" && !!media &&
     (imagePosition === null || imageFlip === null || imageRotation === null);
   const imageUnknown = imageSourceState === "runtime-unknown" || imageTransformUnknown;
-  const displayMode = previewDisplayMode(props.DisplayMode, simulationSymbols);
+  // Microsoft documents that ModernText keeps DisplayMode only for backward
+  // compatibility: it has no visual or interaction effect on this display-only
+  // control. Do not dim verified text, use DisabledFill/DisabledColor, or
+  // imply a runtime permission check for an ignored legacy property.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-text
+  const displayMode = kind === "label" && /^moderntext(?:@|$)/i.test(control.controlType)
+    ? "edit" : previewDisplayMode(props.DisplayMode, simulationSymbols);
   const disabled = displayMode === "disabled";
   const explicitFill = previewColorWithSymbols(
     disabled ? props.DisabledFill ?? props.Fill : props.Fill, simulationSymbols
