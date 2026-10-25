@@ -210,6 +210,37 @@ describe("semantic preview classification", () => {
       .toBe("Georgia,serif");
   });
 
+  it("accepts source Font enum trivia without changing the selected family", () => {
+    expect(previewFontFamily(control("Label", {
+      Font: "=Font /* font namespace */ . Arial // trailing comment"
+    }))).toBe("Arial,sans-serif");
+    expect(previewFontFamily(control("Label", {
+      Font: "=Font. /* quoted family */ 'Courier New'"
+    }))).toBe('"Courier New",monospace');
+  });
+
+  it("selects commented Font enum branches only from verified viewports", () => {
+    const label = control("Label", {
+      Font: "=If(App.Width < 720, Font /* mobile */ . Verdana, Font.'Courier New')"
+    });
+    expect(previewFontFamily(label, { "App.Width": 390 })).toBe("Verdana,sans-serif");
+    expect(previewFontFamily(label, { "App.Width": 1366 }))
+      .toBe('"Courier New",monospace');
+    expect(previewFontFamily(label)).toBe(PREVIEW_DEFAULT_FONT);
+  });
+
+  it("rejects Font lookalike strings, operators and malformed comments", () => {
+    for (const font of [
+      '="Font.Arial"',
+      '=Font.Arial & "extra"',
+      '=Font /* unterminated',
+      "=Font.'Courier'' New'"
+    ]) {
+      expect(previewFontFamily(control("Label", { Font: font })))
+        .toBe(PREVIEW_DEFAULT_FONT);
+    }
+  });
+
   it("keeps unknown, dynamic and unsafe fonts on a local fallback", () => {
     expect(previewFontFamily(control("Label"))).toBe(PREVIEW_DEFAULT_FONT);
     expect(previewFontFamily(control("Label", { Font: "=varRuntimeFont" })))
