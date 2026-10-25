@@ -121,7 +121,7 @@ export function previewScrollRanges(
     const horizontal = previewOverflowMode(host.overflowX, host.symbols) === "scroll";
     const vertical = previewOverflowMode(host.overflowY, host.symbols) === "scroll";
     if ((!horizontal && !vertical) || host.dynamic || host.visibilityUnknown ||
-        !Number.isFinite(host.width) || !Number.isFinite(host.height) ||
+        ![host.x, host.y, host.width, host.height].every(Number.isFinite) ||
         host.width <= 0 || host.height <= 0) continue;
     const children = items.filter(item => {
       if (item.editorGroup) return false;
@@ -136,7 +136,8 @@ export function previewScrollRanges(
     });
     if (!children.length || children.some(item =>
       item.dynamic || item.visibilityUnknown ||
-      ![item.x, item.y, item.width, item.height].every(Number.isFinite)
+      ![item.x, item.y, item.width, item.height].every(Number.isFinite) ||
+      item.width < 0 || item.height < 0
     )) continue;
     // Canvas auto-layout includes trailing padding in the content extent.
     // A runtime-dependent padding value cannot establish a safe scroll range.
@@ -150,12 +151,15 @@ export function previewScrollRanges(
     if (rightPadding === null || bottomPadding === null ||
         !Number.isFinite(rightPadding) || !Number.isFinite(bottomPadding) ||
         rightPadding < 0 || bottomPadding < 0) continue;
+    // Finite operands can still overflow during addition (for example, an
+    // imported extreme Width). Never expose an infinite scroll range.
     const right = Math.max(host.x + host.width,
       ...children.map(item => item.x + item.width + rightPadding));
     const bottom = Math.max(host.y + host.height,
       ...children.map(item => item.y + item.height + bottomPadding));
     const x = horizontal ? Math.max(0, right - host.x - host.width) : 0;
     const y = vertical ? Math.max(0, bottom - host.y - host.height) : 0;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     if (x > 0 || y > 0) ranges[host.id] = { x, y };
   }
   return ranges;
