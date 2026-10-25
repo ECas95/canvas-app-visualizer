@@ -6,7 +6,7 @@ import { previewImageFit, previewImageFlipTransform, previewImagePosition, previ
 import { PREVIEW_ICON_PATHS, previewIconName, previewIconRotation } from "../core/layout/previewIcon";
 import {
   previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewDropShadowFilter, previewIsOpaqueColor, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
-  previewCheckedState, previewInputContent, previewSelectContent, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration,
+  previewCheckedState, previewFontFamilyIsKnown, previewFontSizeIsKnown, previewInputContent, previewSelectContent, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration,
   previewVerticalAlign
 } from "../core/layout/previewAppearance";
 
@@ -83,6 +83,12 @@ export function CanvasVisualControl({
       : (simulationSymbols && staticString(rawText, simulationSymbols)) ?? previewText(control);
   const fontSize = previewFontSize(control, simulationSymbols);
   const fontFamily = previewFontFamily(control, simulationSymbols);
+  // Source-only preview cannot assert a fallback font or size is the runtime
+  // appearance. Keep a usable approximation, but label it as unverified.
+  const textBearing = kind === "label" || kind === "button" || kind === "input" ||
+    kind === "select" || kind === "checkbox" || kind === "toggle";
+  const fontUnknown = textBearing && !previewFontFamilyIsKnown(control, simulationSymbols);
+  const fontSizeUnknown = textBearing && !previewFontSizeIsKnown(control, simulationSymbols);
   // Bound pathological imported strings while retaining normal multiline labels.
   const text = label?.slice(0, 4096);
   // A serialized Text formula can depend on SQL, user identity, or other
@@ -213,8 +219,12 @@ export function CanvasVisualControl({
 
   return (
     <g opacity={disabled ? 0.66 : displayMode === "view" ? 0.86 : 1}
-      data-preview-wrap-state={wrapUnknown ? "unknown" : undefined}>
+      data-preview-wrap-state={wrapUnknown ? "unknown" : undefined}
+      data-preview-font-state={fontUnknown ? "unknown" : undefined}
+      data-preview-font-size-state={fontSizeUnknown ? "unknown" : undefined}>
       {wrapUnknown && <title>Wrap requires runtime state; single-line text is only a preview fallback</title>}
+      {fontUnknown && <title>Font requires runtime state or is unsupported; displayed family is a preview fallback</title>}
+      {fontSizeUnknown && <title>Font size requires runtime state or exceeds preview limits; displayed size is approximate</title>}
       <defs>
         <clipPath id={clipId}>
           {/* Unknown runtime corner formulas must not clip verified text or
