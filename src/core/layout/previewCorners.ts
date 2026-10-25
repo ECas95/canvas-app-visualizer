@@ -23,8 +23,10 @@ export function previewCornerRadii(
   height: number,
   symbols?: Record<string, StaticPowerFxValue>
 ): PreviewCornerRadii {
+  // Constant Power Fx arithmetic and If can be resolved without viewport symbols.
+  // Unknown runtime expressions remain approximate and must not authorize clipping.
   const radius = (raw: unknown): number => {
-    const source = literalNumber(raw) ?? (symbols ? staticNumber(raw, symbols) : null);
+    const source = literalNumber(raw) ?? staticNumber(raw, symbols);
     const approximate = source !== null && Number.isFinite(source) ? source : 4;
     return Math.max(0, approximate);
   };
@@ -109,7 +111,7 @@ export function previewChildClipPath(
 ): string {
   const radius = (key: string): number => {
     const value = literalNumber(properties[key]) ??
-      (symbols ? staticNumber(properties[key], symbols) : null);
+      staticNumber(properties[key], symbols);
     return value !== null && Number.isFinite(value) ? Math.max(0, value) : 0;
   };
   return previewRoundedRectPath(x, y, width, height, {
