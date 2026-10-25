@@ -3,15 +3,77 @@ import { literalText } from "./layout";
 import { staticBoolean, type StaticPowerFxValue } from "../powerfx/staticEval";
 import { lexPowerFx, significantTokens, type PowerFxToken } from "../powerfx/lexer";
 
-/** Resolve only exact, locally imported raster media names. Never fetch remote URLs. */
+/**
+ * Resolve only exact, locally imported raster media names. Never fetch remote
+ * URLs or evaluate connector-backed Image formulas. Power Fx comments are
+ * trivia, so a verified Media . Logo reference remains a valid local asset.
+ *
+ * https://learn.microsoft.com/en-us/power-platform/power-fx/expression-grammar
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/power-apps-yaml
+ */
+function sourceMediaName(
+  raw: string,
+  symbols?: Record<string, StaticPowerFxValue>,
+  depth = 0
+): string | null {
+  if (depth > 6) return null;
+  const source = raw.trim();
+  const lexed = lexPowerFx(source);
+  if (lexed.diagnostics.length) return null;
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+
+  if (tokens.length === 1) {
+    if (tokens[0].kind === "identifier") return tokens[0].value;
+    if (tokens[0].kind === "string") {
+      return tokens[0].value.slice(1, -1).replaceAll('""', '"');
+    }
+  }
+  if (tokens.length === 3 && tokens[0].kind === "identifier" &&
+      tokens[0].value.toLowerCase() === "media" && tokens[1].value === "." &&
+      tokens[2].kind === "identifier") return tokens[2].value;
+
+  // Only the selected branch of a provably known If can name an image.
+  // Unknown SQL/identity/security conditions must not select an asset.
+  if (tokens[0]?.kind !== "identifier" ||
+      tokens[0].value.toLowerCase() !== "if" ||
+      tokens[1]?.value !== "(" || tokens[tokens.length - 1]?.value !== ")") return null;
+  const inner = tokens.slice(2, -1);
+  const args: PowerFxToken[][] = [];
+  let nesting = 0;
+  let begin = 0;
+  for (let index = 0; index < inner.length; index += 1) {
+    if (inner[index].value === "(") nesting += 1;
+    else if (inner[index].value === ")") nesting -= 1;
+    else if (inner[index].value === "," && nesting === 0) {
+      if (index === begin) return null;
+      args.push(inner.slice(begin, index));
+      begin = index + 1;
+    }
+    if (nesting < 0) return null;
+  }
+  if (nesting !== 0 || begin >= inner.length) return null;
+  args.push(inner.slice(begin));
+  if (args.length < 2) return null;
+  const expression = (part: PowerFxToken[]) =>
+    "=" + source.slice(part[0].start, part[part.length - 1].end);
+  for (let index = 0; index + 1 < args.length; index += 2) {
+    const condition = staticBoolean(expression(args[index]), symbols);
+    if (condition === null) return null;
+    if (condition) return sourceMediaName(expression(args[index + 1]), symbols, depth + 1);
+  }
+  return args.length % 2 === 1
+    ? sourceMediaName(expression(args[args.length - 1]), symbols, depth + 1)
+    : null;
+}
+
 export function resolvePreviewImage(
   raw: unknown,
-  mediaAssets: PreviewMediaAsset[]
+  mediaAssets: PreviewMediaAsset[],
+  symbols?: Record<string, StaticPowerFxValue>
 ): PreviewMediaAsset | undefined {
   if (typeof raw !== "string") return undefined;
-  const constant = literalText(raw);
-  const symbol = /^=\s*(?:Media\.)?([A-Za-z_][A-Za-z0-9_]*)\s*$/i.exec(raw.trim())?.[1];
-  const candidate = constant ?? symbol;
+  const candidate = sourceMediaName(raw, symbols) ?? literalText(raw);
   if (!candidate || /[\\/:?#]/.test(candidate)) return undefined;
   const name = candidate.replace(/\.(png|jpe?g|gif|webp)$/i, "").toLowerCase();
   return mediaAssets.find(asset => asset.name === name);
