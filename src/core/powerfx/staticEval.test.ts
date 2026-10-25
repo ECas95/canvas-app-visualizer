@@ -122,3 +122,35 @@ describe("static Power Fx evaluator", () => {
     ).toBeNull();
   });
 });
+
+describe("documented Power Fx Coalesce source-only semantics", () => {
+  it("skips verified empty strings instead of returning the first empty argument", () => {
+    expect(staticString('=Coalesce("", "Fallback")')).toBe("Fallback");
+    expect(staticString('=Coalesce("", "", "Third")')).toBe("Third");
+    expect(staticString('=Coalesce("First", "Second")')).toBe("First");
+  });
+
+  it("uses known responsive fallbacks without requiring external state", () => {
+    const expression = '=Coalesce("", If(App.Width < 720, "Phone", "Desktop"))';
+    expect(staticString(expression, { "App.Width": 390 })).toBe("Phone");
+    expect(staticString(expression, { "App.Width": 1366 })).toBe("Desktop");
+  });
+
+  it("preserves zero and false as nonblank Power Fx values", () => {
+    expect(staticNumber("=Coalesce(0, 12)")).toBe(0);
+    expect(staticBoolean("=Coalesce(false, true)")).toBe(false);
+  });
+
+  it("does not infer blankness or permissions for unknown runtime arguments", () => {
+    expect(staticString('=Coalesce(varSqlTitle, "Fallback")')).toBeNull();
+    expect(staticString('=Coalesce("", varSqlTitle, "Fallback")')).toBeNull();
+    expect(staticString('=Coalesce("Known", varSqlTitle)')).toBeNull();
+  });
+
+  it("does not turn all-empty, malformed or mixed-type formulas into text", () => {
+    expect(staticString('=Coalesce("", "")')).toBeNull();
+    expect(staticString("=Coalesce()")).toBeNull();
+    expect(evaluateStaticPowerFx('=Coalesce("", 12)')).toBeNull();
+    expect(evaluateStaticPowerFx('=Coalesce("Text", false)')).toBeNull();
+  });
+});
