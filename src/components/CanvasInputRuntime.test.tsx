@@ -125,7 +125,6 @@ describe("Canvas source-only input placeholders", () => {
     for (const formula of [
       "=varSqlValue",
       "=If(varHasPermission, Blank(), \"ready\")",
-      '="Blank()"',
       "=Blank",
       "=Blank(unknown)",
       "=If(varHasPermission, \"filled\")"
@@ -136,6 +135,13 @@ describe("Canvas source-only input placeholders", () => {
       expect(html).toContain('data-preview-input-state="unknown"');
       expect(html).not.toContain("Must not appear");
     }
+    // A quoted Power Fx string is a real value, not a Blank() function.
+    const literal = renderInput("Classic/TextInput@2.3.2", {
+      Default: '="Blank()"', HintText: '="Must not appear"'
+    });
+    expect(literal).toContain('data-preview-input-state="value"');
+    expect(literal).toContain("Blank()");
+    expect(literal).not.toContain("Must not appear");
   });
 
   it("distinguishes an explicitly blank hint from a runtime-dependent hint", () => {
