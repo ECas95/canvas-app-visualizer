@@ -208,8 +208,13 @@ export function CanvasVisualControl({
     atY = y + height / 2
   ) => {
     const point = alignedTextPoint(atX, anchor);
-    const lines = value.split(/\r?\n/).slice(0, 5);
     const lineHeight = fontSize * 1.2;
+    // Five hard-coded SVG lines silently discarded verified source newlines
+    // even in tall Canvas labels. Render the lines that could intersect the
+    // control's clipped viewport, with a bounded DOM budget for large imports.
+    // The extra two lines cover partial glyphs at the top/bottom edges.
+    const lineBudget = Math.max(5, Math.min(128, Math.ceil(height / lineHeight) + 2));
+    const lines = value.split(/\r?\n/).slice(0, lineBudget);
     const firstY = firstTextLineY(atY, lines.length, lineHeight);
     return (
       <text x={point.x} y={firstY} dominantBaseline="middle"
