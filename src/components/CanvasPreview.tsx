@@ -15,7 +15,7 @@ import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/lay
 import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScopedState, type PreviewVariables } from "../core/powerfx/previewBehavior";
 import { CanvasVisualControl } from "./CanvasVisualControl";
 import { previewChildClipPath } from "../core/layout/previewCorners";
-import { previewClampScroll, previewScrollRanges, previewScrolledPosition, previewWheelScroll,
+import { previewClampScroll, previewScrollRanges, previewScrollOverlayAnchors, previewScrolledPosition, previewWheelScroll,
   type PreviewScrollOffset, type PreviewScrollRange } from "../core/layout/previewOverflow";
 import { Icon } from "./Icon";
 
@@ -301,17 +301,16 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
   // An overlay belongs to its source control's stacking context, not to a
   // global SVG layer. Scrollbars must follow the host's last descendant so
   // they remain above its content but below later sibling controls.
+  const scrollOverlayAnchorIds = previewScrollOverlayAnchors(
+    visibleItems.map(item => ({ id: item.control.id, ancestors: item.ancestors })),
+    new Set(Object.keys(scrollRanges))
+  );
   const scrollOverlaysAt = new Map<string, DrawItem[]>();
-  for (const host of visibleItems) {
-    if (!scrollRanges[host.control.id]) continue;
-    const last = [...visibleItems].reverse().find(candidate =>
-      candidate.control.id === host.control.id ||
-      candidate.ancestors.includes(host.control.id)
-    );
-    if (!last) continue;
-    const at = scrollOverlaysAt.get(last.control.id) ?? [];
-    at.push(host);
-    scrollOverlaysAt.set(last.control.id, at);
+  for (const [anchorId, hostIds] of scrollOverlayAnchorIds) {
+    scrollOverlaysAt.set(anchorId, hostIds.flatMap(id => {
+      const host = itemById.get(id);
+      return host ? [host] : [];
+    }));
   }
 
   function clipToAncestors(child: ReactNode, ancestors: readonly string[]): ReactNode {
