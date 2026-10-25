@@ -104,15 +104,22 @@ export function previewImageSourceState(
   if (resolvePreviewImage(raw, mediaAssets, symbols)) return "verified";
   if (typeof raw !== "string") return "source-unavailable";
 
-  // A known literal or statically selected local name that was not imported
-  // is unavailable; it is not evidence of missing SQL rows or denied access.
-  if (sourceMediaName(raw, symbols) !== null || literalText(raw) !== null) {
-    return "source-unavailable";
-  }
   const lexed = lexPowerFx(raw.trim());
   if (lexed.diagnostics.length) return "source-unavailable";
   const tokens = significantTokens(lexed.tokens);
   if (tokens[0]?.value === "=") tokens.shift();
+
+  const candidate = sourceMediaName(raw, symbols);
+  if (candidate !== null || literalText(raw) !== null) {
+    // A bare name may be an app variable rather than an imported media
+    // resource. Only a matching imported asset or an explicit Media.X/text
+    // expression makes its absence verifiable. Never infer runtime access.
+    if (tokens.length === 1 && tokens[0].kind === "identifier" &&
+        !mediaAssets.some(asset => asset.name === candidate?.toLowerCase())) {
+      return "runtime-unknown";
+    }
+    return "source-unavailable";
+  }
   if (!tokens.length || (tokens.length === 3 &&
       tokens[0].kind === "identifier" && tokens[0].value.toLowerCase() === "blank" &&
       tokens[1].value === "(" && tokens[2].value === ")")) {
