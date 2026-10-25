@@ -119,6 +119,16 @@ export function CanvasVisualControl({
   const italic = previewItalic(control, simulationSymbols);
   const textDecoration = previewTextDecoration(control, simulationSymbols);
   const wraps = previewLabelWrap(control, simulationSymbols);
+  // Classic Canvas labels expose LineHeight as a font-relative multiplier.
+  // Evaluate only a source-verifiable number (including known App.Width).
+  // An unsupported or runtime-dependent formula must remain explicitly unknown.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/properties-text
+  const sourceLineHeight = kind === "label" && props.LineHeight != null
+    ? staticNumber(props.LineHeight, simulationSymbols) : null;
+  const lineHeightKnown = kind !== "label" || props.LineHeight == null ||
+    (sourceLineHeight !== null && sourceLineHeight > 0 && sourceLineHeight <= 10);
+  const lineHeightFactor = lineHeightKnown && sourceLineHeight !== null
+    ? sourceLineHeight : 1.2;
   // An unresolved Wrap formula is not proof that the text is single-line.
   // Keep the existing conservative SVG fallback, but expose its uncertainty.
   const wrapUnknown = kind === "label" && props.Wrap != null &&
@@ -209,7 +219,7 @@ export function CanvasVisualControl({
     atY = y + height / 2
   ) => {
     const point = alignedTextPoint(atX, anchor);
-    const lineHeight = fontSize * 1.2;
+    const lineHeight = fontSize * lineHeightFactor;
     // Preserve the source lines around the clipped viewport. Truncating from
     // the beginning incorrectly shows the first lines for Bottom/Middle text.
     // Use the original block's baseline so overflow remains positioned as in
@@ -238,13 +248,15 @@ export function CanvasVisualControl({
       data-preview-display-mode-state={displayMode === "unresolved" ? "unknown" : undefined}
       data-preview-wrap-state={wrapUnknown ? "unknown" : undefined}
       data-preview-font-state={fontUnknown ? "unknown" : undefined}
-      data-preview-font-size-state={fontSizeUnknown ? "unknown" : undefined}>
+      data-preview-font-size-state={fontSizeUnknown ? "unknown" : undefined}
+      data-preview-line-height-state={!lineHeightKnown ? "unknown" : undefined}>
       {displayMode === "unresolved" && (
         <title>DisplayMode requires runtime state; appearance and interaction permissions are not verified</title>
       )}
       {wrapUnknown && <title>Wrap requires runtime state; single-line text is only a preview fallback</title>}
       {fontUnknown && <title>Font requires runtime state or is unsupported; displayed family is a preview fallback</title>}
       {fontSizeUnknown && <title>Font size requires runtime state or exceeds preview limits; displayed size is approximate</title>}
+      {!lineHeightKnown && <title>LineHeight requires runtime state or is outside supported preview bounds; displayed spacing is approximate</title>}
       <defs>
         <clipPath id={clipId}>
           {/* Unknown runtime corner formulas must not clip verified text or
@@ -300,7 +312,7 @@ export function CanvasVisualControl({
                 whiteSpace: "pre-wrap", overflowWrap: "anywhere", wordBreak: "normal",
                 // Match the existing SVG multiline preview spacing. Browser
                 // font-specific `normal` line-height otherwise shifts wrapped labels.
-                lineHeight: 1.2,
+                lineHeight: lineHeightFactor,
                 textAlign: horizontalAlign === "justify" ? "justify" :
                   horizontalAlign === "middle" ? "center" :
                   horizontalAlign === "end" ? "right" : "left"
