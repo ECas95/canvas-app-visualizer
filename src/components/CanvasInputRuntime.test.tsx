@@ -88,4 +88,66 @@ describe("Canvas source-only input placeholders", () => {
     expect(html).toContain('data-preview-input-state="hint"');
     expect(html).toContain("Find records");
   });
+  it("treats a verified Blank() Default as empty for classic and modern text inputs", () => {
+    for (const type of ["Classic/TextInput@2.3.2", "ModernTextInput@1.0.0"]) {
+      const html = renderInput(type, {
+        Default: "=Blank /* source comment */ ()",
+        HintText: '="Find records"', Placeholder: '="Find records"'
+      });
+      expect(html).toContain('data-preview-input-state="hint"');
+      expect(html).toContain("Find records");
+      expect(html).not.toContain('data-preview-input-state="unknown"');
+    }
+  });
+
+  it("recognizes only provably selected blank If branches and missing ElseResult", () => {
+    for (const formula of [
+      '=If(false, "filled")',
+      '=If(true, Blank(), "filled")',
+      '=If(false, varSqlValue, Blank())',
+      '=If(false, "filled", If(false, "other"))'
+    ]) {
+      const html = renderInput("Classic/TextInput@2.3.2", {
+        Default: formula, HintText: '="Verified hint"'
+      });
+      expect(html).toContain('data-preview-input-state="hint"');
+      expect(html).toContain("Verified hint");
+    }
+    const responsive = renderInput("ModernTextInput@1.0.0", {
+      Default: '=If(App.Width < 720, Blank(), "desktop")',
+      Placeholder: '="Search"'
+    }, { "App.Width": 390 });
+    expect(responsive).toContain('data-preview-input-state="hint"');
+    expect(responsive).toContain("Search");
+  });
+
+  it("does not mistake unknown conditions or lookalike text for a known blank", () => {
+    for (const formula of [
+      "=varSqlValue",
+      "=If(varHasPermission, Blank(), \"ready\")",
+      '="Blank()"',
+      "=Blank",
+      "=Blank(unknown)",
+      "=If(varHasPermission, \"filled\")"
+    ]) {
+      const html = renderInput("Classic/TextInput@2.3.2", {
+        Default: formula, HintText: '="Must not appear"'
+      });
+      expect(html).toContain('data-preview-input-state="unknown"');
+      expect(html).not.toContain("Must not appear");
+    }
+  });
+
+  it("distinguishes an explicitly blank hint from a runtime-dependent hint", () => {
+    const empty = renderInput("Classic/TextInput@2.3.2", {
+      Default: "=Blank()", HintText: "=Blank()"
+    });
+    expect(empty).toContain('data-preview-input-state="empty"');
+    const unknown = renderInput("ModernTextInput@1.0.0", {
+      Default: "=Blank()", Placeholder: "=varSqlHint"
+    });
+    expect(unknown).toContain('data-preview-input-state="unknown"');
+    expect(unknown).not.toContain('data-preview-input-state="empty"');
+  });
+
 });
