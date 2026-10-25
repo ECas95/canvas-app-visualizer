@@ -483,7 +483,14 @@ export function previewText(
   const kind = previewKind(control.controlType);
   if (kind === "input") return previewInputContent(control, symbols).text;
   if (kind === "select") return previewSelectContent(control, symbols).text;
-  return literalText(props.Text) ?? literalText(props.Label);
+  // A serialized Text expression takes precedence over legacy Label, even
+  // when it depends on SQL/runtime. Falling back to Label in that case would
+  // invent visible content. A proven Blank() or If-without-else is different:
+  // its verified visual result is empty text, not an unknown value.
+  // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+  const source = props.Text ?? props.Label;
+  const known = staticString(source, symbols);
+  return known ?? (previewKnownBlank(source, symbols) ? "" : null);
 }
 
 
