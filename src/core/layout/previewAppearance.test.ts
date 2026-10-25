@@ -466,6 +466,33 @@ describe("semantic preview classification", () => {
       .toBeNull();
   });
 
+  it("parses enum literals with Power Fx comments without treating text as enums", () => {
+    // Comments and whitespace are trivia in a serialized .pa.yaml formula.
+    expect(previewDisplayMode("=DisplayMode.Disabled // note")).toBe("disabled");
+    expect(previewDisplayMode("= DisplayMode /* note */ . Edit")).toBe("edit");
+    expect(previewBorderStyle("=BorderStyle.Dotted /* design note */")).toBe("dotted");
+    expect(previewDropShadow("=DropShadow.Bold // design note")).toBe("bold");
+    expect(previewDisplayMode("=If(true, DisplayMode.View /* note */, DisplayMode.Edit)"))
+      .toBe("view");
+
+    // Quoted strings, extra operators, invalid members and broken comments
+    // must never become verified Power Fx enum values.
+    expect(previewDisplayMode('="DisplayMode.Edit" // text')).toBe("unresolved");
+    expect(previewDisplayMode('=DisplayMode.Edit & "text"')).toBe("unresolved");
+    expect(previewDisplayMode("=DisplayMode.Edit /* unterminated")).toBe("unresolved");
+    expect(previewBorderStyle('="BorderStyle.Dotted"')).toBeNull();
+    expect(previewDropShadow("=DropShadow.Unsupported // not an enum")).toBeNull();
+  });
+
+  it("permits local OnSelect only when commented DisplayMode.Edit is verified", () => {
+    const action = (mode: string) => control("Classic/Button@2.2.0", {
+      OnSelect: "=Set(clicked, true)", DisplayMode: mode
+    });
+    expect(previewCanRunOnSelect(action("=DisplayMode.Edit // verified enum"))).toBe(true);
+    expect(previewCanRunOnSelect(action('="DisplayMode.Edit" // text'))).toBe(false);
+    expect(previewCanRunOnSelect(action("=DisplayMode.Disabled /* verified */"))).toBe(false);
+  });
+
   it("recognizes only explicit Canvas border style enums", () => {
     expect(previewBorderStyle("=BorderStyle.Dashed")).toBe("dashed");
     expect(previewBorderStyle("= BorderStyle.Dotted ")).toBe("dotted");
