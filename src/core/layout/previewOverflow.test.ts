@@ -199,6 +199,25 @@ describe("Canvas overflow semantics", () => {
       .toEqual({ x: 0, y: 0 });
   });
 
+  it("saturates finite wheel deltas instead of resetting after numeric overflow", () => {
+    const horizontalOnly = { x: 140, y: 0 };
+    expect(previewWheelScroll({ x: 20, y: 0 }, horizontalOnly,
+      Number.MAX_VALUE, Number.MAX_VALUE)).toEqual({ x: 140, y: 0 });
+    expect(previewWheelScroll({ x: 120, y: 0 }, horizontalOnly,
+      -Number.MAX_VALUE, -Number.MAX_VALUE)).toEqual({ x: 0, y: 0 });
+    // Opposite finite deltas cancel; neither may be silently discarded.
+    expect(previewWheelScroll({ x: 20, y: 0 }, horizontalOnly,
+      Number.MAX_VALUE, -Number.MAX_VALUE)).toEqual({ x: 20, y: 0 });
+  });
+
+  it("clamps finite wheel addition overflow on each scroll axis", () => {
+    const huge = { x: Number.MAX_VALUE, y: Number.MAX_VALUE };
+    expect(previewWheelScroll({ x: Number.MAX_VALUE, y: Number.MAX_VALUE },
+      huge, Number.MAX_VALUE, Number.MAX_VALUE)).toEqual(huge);
+    expect(previewWheelScroll({ x: 40, y: 50 }, { x: 100, y: 100 },
+      Infinity, NaN)).toEqual({ x: 40, y: 50 });
+  });
+
   it("keeps independent nested host scroll ranges", () => {
     const nodes = [
       item("Outer", [], 0, 0, 300, 200, { overflowY: "=LayoutOverflow.Scroll" }),
