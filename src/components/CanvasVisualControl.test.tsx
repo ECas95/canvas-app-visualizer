@@ -1096,13 +1096,15 @@ describe("fail-closed Canvas image appearance with runtime-only properties", () 
     expect(html).toContain('href="data:image/png');
   });
 
-  it("does not confuse unavailable local media with an unverified transform", () => {
+  it("does not mistake a ThisItem image for a missing local asset", () => {
     const html = renderToStaticMarkup(<svg><CanvasVisualControl
       control={{ ...label({ Image: "=ThisItem.Photo", ImagePosition: "=ImagePosition.Fill" }),
         controlType: "Classic/Image@2.1.0" }}
       mediaAssets={[asset]} x={10} y={20} width={140} height={64}
       clipId="image-source-clip" /></svg>);
-    expect(html).toContain('data-preview-image-state="source-unavailable"');
+    expect(html).toContain('data-preview-image-state="unknown"');
+    expect(html).toContain('data-preview-image-source-state="runtime-unknown"');
+    expect(html).toContain("Image state unknown");
     expect(html).not.toContain('href="data:image/png');
     expect(html).not.toContain('data-preview-image-state="verified"');
   });
