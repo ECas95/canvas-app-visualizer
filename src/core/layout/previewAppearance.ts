@@ -400,15 +400,25 @@ function sourceFontFamily(
 ): string | null {
   if (typeof raw !== "string" || depth > 6) return null;
   const source = raw.trim();
-  const enumMatch = /^=?\s*Font\.(?:'([^']+)'|([A-Za-z][A-Za-z ]*))\s*$/i.exec(source);
-  const family = enumMatch ? (enumMatch[1] ?? enumMatch[2]) : staticString(raw);
-  if (family) return PREVIEW_FONT_FAMILIES[family.trim().toLowerCase()] ?? null;
-  if (!symbols) return null;
-
+  // Power Fx permits whitespace and comments around member access.
+  // Parse complete tokens: neither text nor partial expressions are enums.
+  // Only the allowlisted family below is ever emitted as browser CSS.
   const lexed = lexPowerFx(source);
   if (lexed.diagnostics.length) return null;
   const tokens = significantTokens(lexed.tokens);
   if (tokens[0]?.value === "=") tokens.shift();
+  const fontMember = tokens.length === 3 &&
+    tokens[0].kind === "identifier" &&
+    tokens[0].value.toLowerCase() === "font" &&
+    tokens[1].value === "." &&
+    (tokens[2].kind === "identifier" || tokens[2].kind === "quotedIdentifier")
+      ? tokens[2].kind === "quotedIdentifier"
+        ? tokens[2].value.slice(1, -1).replaceAll("''", "'")
+        : tokens[2].value
+      : null;
+  const family = fontMember ?? staticString(raw);
+  if (family) return PREVIEW_FONT_FAMILIES[family.trim().toLowerCase()] ?? null;
+  if (!symbols) return null;
   if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
       tokens[tokens.length - 1]?.value !== ")") return null;
   const branches = splitIfArguments(tokens.slice(2, -1));
