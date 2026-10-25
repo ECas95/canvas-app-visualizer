@@ -178,6 +178,44 @@ describe("source-faithful Canvas label wrapping", () => {
     expect(render({ ...base, Wrap: "=false" })).toContain("<text");
   });
 
+  it("uses consistent 1.2 line spacing in browser-wrapped and SVG multiline labels", () => {
+    const props = { Text: '="First line\nSecond line"', Size: "=20" };
+    const wrapped = render({ ...props, Wrap: "=true" });
+    const singleLine = render({ ...props, Wrap: "=false" });
+    expect(wrapped).toContain("<foreignObject");
+    expect(wrapped).toContain("line-height:1.2");
+    expect(wrapped).toContain("font-size:20px");
+    expect(singleLine).toContain('dy="24"');
+    expect(singleLine).not.toContain("line-height:1.2");
+  });
+
+  it.each([390, 768, 1366])(
+    "keeps wrapped text line spacing stable across the %i px viewport",
+    viewport => {
+      const html = render({
+        Text: '="Responsive text that wraps"',
+        Wrap: "=App.Width < 1500",
+        Size: "=If(App.Width < 720, 16, 20)"
+      }, { "App.Width": viewport });
+      expect(html).toContain("<foreignObject");
+      expect(html).toContain("line-height:1.2");
+      expect(html).toContain(`font-size:${viewport < 720 ? 16 : 20}px`);
+      expect(html).not.toContain('data-preview-wrap-state="unknown"');
+    }
+  );
+
+  it("marks runtime-dependent Wrap as unverified instead of claiming no wrapping", () => {
+    const props = { Text: '="Known text"', Wrap: "=If(varSqlAuthorized, true, false)" };
+    const unknown = render(props, { "App.Width": 390 });
+    expect(unknown).toContain('data-preview-wrap-state="unknown"');
+    expect(unknown).toContain("Wrap requires runtime state");
+    expect(unknown).not.toContain("<foreignObject");
+    expect(render({ ...props, Wrap: "=false" }))
+      .not.toContain('data-preview-wrap-state="unknown"');
+    expect(render({ Text: '="Known text"' }))
+      .not.toContain('data-preview-wrap-state="unknown"');
+  });
+
   it("reacts to known viewport dimensions without inventing runtime variables", () => {
     const properties = {
       Text: '="Responsive heading with wrapping"',
