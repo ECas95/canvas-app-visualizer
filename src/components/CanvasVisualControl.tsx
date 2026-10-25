@@ -1,6 +1,6 @@
 import type { CanvasControl, PreviewMediaAsset } from "../types/canvas";
 import { previewChildClipPath, previewCornerRadii, previewRoundedRectPath } from "../core/layout/previewCorners";
-import { staticNumber, staticString } from "../core/powerfx/staticEval";
+import { staticBoolean, staticNumber, staticString } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, previewImageFlipTransform, previewImagePosition, previewImageRotationTransform, previewRasterCssImage, resolvePreviewImage } from "../core/layout/previewMedia";
 import { PREVIEW_ICON_PATHS, previewIconName, previewIconRotation } from "../core/layout/previewIcon";
@@ -103,6 +103,10 @@ export function CanvasVisualControl({
   const italic = previewItalic(control, simulationSymbols);
   const textDecoration = previewTextDecoration(control, simulationSymbols);
   const wraps = previewLabelWrap(control, simulationSymbols);
+  // An unresolved Wrap formula is not proof that the text is single-line.
+  // Keep the existing conservative SVG fallback, but expose its uncertainty.
+  const wrapUnknown = kind === "label" && props.Wrap != null &&
+    staticBoolean(props.Wrap, simulationSymbols) === null;
   const padding = (raw: unknown) => Math.max(0, staticNumber(raw, simulationSymbols) ?? 0);
 
   // Power Apps aligns text inside the content box after source padding.
@@ -208,7 +212,9 @@ export function CanvasVisualControl({
   };
 
   return (
-    <g opacity={disabled ? 0.66 : displayMode === "view" ? 0.86 : 1}>
+    <g opacity={disabled ? 0.66 : displayMode === "view" ? 0.86 : 1}
+      data-preview-wrap-state={wrapUnknown ? "unknown" : undefined}>
+      {wrapUnknown && <title>Wrap requires runtime state; single-line text is only a preview fallback</title>}
       <defs>
         <clipPath id={clipId}>
           {/* Unknown runtime corner formulas must not clip verified text or
@@ -262,6 +268,9 @@ export function CanvasVisualControl({
               <span style={{
                 display: "block", width: "100%", minWidth: 0, maxWidth: "100%",
                 whiteSpace: "pre-wrap", overflowWrap: "anywhere", wordBreak: "normal",
+                // Match the existing SVG multiline preview spacing. Browser
+                // font-specific `normal` line-height otherwise shifts wrapped labels.
+                lineHeight: 1.2,
                 textAlign: horizontalAlign === "justify" ? "justify" :
                   horizontalAlign === "middle" ? "center" :
                   horizontalAlign === "end" ? "right" : "left"
