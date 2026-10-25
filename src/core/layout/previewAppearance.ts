@@ -457,7 +457,8 @@ function sourceFontFamily(
       : null;
   const family = fontMember ?? staticString(raw);
   if (family) return PREVIEW_FONT_FAMILIES[family.trim().toLowerCase()] ?? null;
-  if (!symbols) return null;
+  // Literal If branches are resolvable without any App/Parent/runtime symbols.
+  // staticBoolean still fails closed for unknown variables and connectors.
   if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
       tokens[tokens.length - 1]?.value !== ")") return null;
   const branches = splitIfArguments(tokens.slice(2, -1));
@@ -599,7 +600,8 @@ function enumValue(
   const literal = sourceEnumMember(source, namespace, allowed[namespace]);
   if (literal) return literal;
 
-  if (!symbols) return null;
+  // Constant If conditions do not require a viewport or simulation context.
+  // Unknown runtime conditions remain unresolved via staticBoolean.
   // Power Fx If supports condition/result pairs and an optional default,
   // including nested If expressions. Only evaluate a selected branch when
   // every preceding condition is statically proven false. No connectors or
