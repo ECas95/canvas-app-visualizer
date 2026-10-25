@@ -1,6 +1,7 @@
 import type { PreviewMediaAsset } from "../../types/canvas";
 import { literalText } from "./layout";
-import { staticBoolean, staticString, type StaticPowerFxValue } from "../powerfx/staticEval";
+import { staticBoolean, type StaticPowerFxValue } from "../powerfx/staticEval";
+import { lexPowerFx, significantTokens, type PowerFxToken } from "../powerfx/lexer";
 
 /** Resolve only exact, locally imported raster media names. Never fetch remote URLs. */
 export function resolvePreviewImage(
@@ -23,20 +24,76 @@ export function resolvePreviewImage(
  */
 export type PreviewImagePosition = "fit" | "fill" | "stretch" | "center" | "tile";
 
+/**
+ * Resolve only a genuine Power Fx enum member, or the selected result of a
+ * statically verified If. Never coerce text (including local text variables)
+ * into an enum merely because it spells "ImagePosition.Fit" or similar.
+ * Comments and whitespace around the member are valid Power Fx trivia.
+ *
+ * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+ */
+function sourceImageEnum(
+  raw: unknown,
+  namespace: "ImagePosition" | "ImageRotation",
+  members: readonly string[],
+  symbols?: Record<string, StaticPowerFxValue>,
+  depth = 0
+): string | null {
+  if (typeof raw !== "string" || depth > 6) return null;
+  const source = raw.trim();
+  const lexed = lexPowerFx(source);
+  if (lexed.diagnostics.length) return null;
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+  if (tokens.length === 3 &&
+      tokens[0].kind === "identifier" &&
+      tokens[0].value.toLowerCase() === namespace.toLowerCase() &&
+      tokens[1].value === "." &&
+      tokens[2].kind === "identifier") {
+    const member = tokens[2].value.toLowerCase();
+    return members.includes(member) ? member : null;
+  }
+  if (tokens[0]?.kind !== "identifier" ||
+      tokens[0].value.toLowerCase() !== "if" ||
+      tokens[1]?.value !== "(" || tokens[tokens.length - 1]?.value !== ")") {
+    return null;
+  }
+  const inner = tokens.slice(2, -1);
+  const args: PowerFxToken[][] = [];
+  let nesting = 0;
+  let start = 0;
+  for (let index = 0; index < inner.length; index += 1) {
+    if (inner[index].value === "(") nesting += 1;
+    else if (inner[index].value === ")") nesting -= 1;
+    else if (inner[index].value === "," && nesting === 0) {
+      if (index === start) return null;
+      args.push(inner.slice(start, index));
+      start = index + 1;
+    }
+    if (nesting < 0) return null;
+  }
+  if (nesting !== 0 || start >= inner.length) return null;
+  args.push(inner.slice(start));
+  if (args.length < 2) return null;
+  const expression = (part: PowerFxToken[]) =>
+    "=" + source.slice(part[0].start, part[part.length - 1].end);
+  for (let index = 0; index + 1 < args.length; index += 2) {
+    const condition = staticBoolean(expression(args[index]), symbols);
+    if (condition === null) return null;
+    if (condition) {
+      return sourceImageEnum(expression(args[index + 1]), namespace, members, symbols, depth + 1);
+    }
+  }
+  return args.length % 2 === 1
+    ? sourceImageEnum(expression(args[args.length - 1]), namespace, members, symbols, depth + 1)
+    : null;
+}
+
 export function previewImagePosition(
   raw: unknown, symbols?: Record<string, StaticPowerFxValue>
 ): PreviewImagePosition | null {
-  if (typeof raw !== "string") return null;
-  const exact = /^=?\s*ImagePosition\.(Fit|Fill|Stretch|Center|Tile)\s*$/i.exec(raw.trim());
-  if (exact) return exact[1].toLowerCase() as PreviewImagePosition;
-  // Only a proven viewport/local branch selecting a real Power Fx enum may
-  // change image layout. Strings that merely spell an enum are not enums.
-  if (!/\bImagePosition\.(?:Fit|Fill|Stretch|Center|Tile)\b/i.test(raw) ||
-      /["']ImagePosition\.(?:Fit|Fill|Stretch|Center|Tile)["']/i.test(raw)) return null;
-  const resolved = staticString(raw, symbols);
-  const match = typeof resolved === "string"
-    ? /^ImagePosition\.(Fit|Fill|Stretch|Center|Tile)$/i.exec(resolved) : null;
-  return match ? match[1].toLowerCase() as PreviewImagePosition : null;
+  return sourceImageEnum(raw, "ImagePosition",
+    ["fit", "fill", "stretch", "center", "tile"], symbols) as PreviewImagePosition | null;
 }
 
 /** Map scalable ImagePosition modes to SVG preserveAspectRatio. */
@@ -88,15 +145,9 @@ export function previewImageRotation(
   raw: unknown, symbols?: Record<string, StaticPowerFxValue>
 ): 0 | 90 | 180 | 270 | null {
   if (raw === undefined || raw === null) return 0;
-  if (typeof raw !== "string") return null;
-  const exact = /^=?\s*ImageRotation\.(None|Rotate90|Rotate180|Rotate270)\s*$/i.exec(raw.trim());
-  if (!exact && (!/\bImageRotation\.(?:None|Rotate90|Rotate180|Rotate270)\b/i.test(raw) ||
-      /["']ImageRotation\.(?:None|Rotate90|Rotate180|Rotate270)["']/i.test(raw))) return null;
-  const resolved = exact?.[0] ?? staticString(raw, symbols);
-  const match = typeof resolved === "string"
-    ? /^=?\s*ImageRotation\.(None|Rotate90|Rotate180|Rotate270)\s*$/i.exec(resolved) : null;
-  if (!match) return null;
-  switch (match[1].toLowerCase()) {
+  const member = sourceImageEnum(raw, "ImageRotation",
+    ["none", "rotate90", "rotate180", "rotate270"], symbols);
+  switch (member) {
     case "none": return 0;
     case "rotate90": return 90;
     case "rotate180": return 180;
