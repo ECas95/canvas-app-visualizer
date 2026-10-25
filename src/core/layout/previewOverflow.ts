@@ -49,13 +49,22 @@ export function previewOverflowMode(
   if (raw === undefined || raw === null) return "hide";
   if (typeof raw !== "string" || depth > 6) return "unknown";
   const source = raw.trim();
-  const literal = /^=?\s*LayoutOverflow\.(Scroll|Hide)\s*$/i.exec(source);
-  if (literal) return literal[1].toLowerCase() as "scroll" | "hide";
-
+  // The serialized Power Fx expression may contain comments or whitespace
+  // around the enum member. Tokenize instead of matching the raw source, so
+  // valid trivia is accepted but text strings, operators and malformed
+  // members can never authorize scrolling.
   const lexed = lexPowerFx(source);
   if (lexed.diagnostics.length) return "unknown";
   const tokens = significantTokens(lexed.tokens);
   if (tokens[0]?.value === "=") tokens.shift();
+  if (tokens.length === 3 &&
+      tokens[0].kind === "identifier" &&
+      tokens[0].value.toLowerCase() === "layoutoverflow" &&
+      tokens[1].value === "." &&
+      tokens[2].kind === "identifier") {
+    const member = tokens[2].value.toLowerCase();
+    if (member === "scroll" || member === "hide") return member;
+  }
   if (tokens[0]?.value.toLowerCase() !== "if" ||
       tokens[1]?.value !== "(" || tokens[tokens.length - 1]?.value !== ")") {
     return "unknown";
