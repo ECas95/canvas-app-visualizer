@@ -20,11 +20,16 @@ function isLocalRasterDataUrl(value: unknown): value is string {
  * https://learn.microsoft.com/en-us/power-platform/power-fx/expression-grammar
  * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/power-apps-yaml
  */
+type SourceMediaCandidate = {
+  name: string;
+  origin: "identifier" | "media" | "literal" | "blank";
+};
+
 function sourceMediaName(
   raw: string,
   symbols?: Record<string, StaticPowerFxValue>,
   depth = 0
-): string | null {
+): SourceMediaCandidate | null {
   if (depth > 6) return null;
   const source = raw.trim();
   const lexed = lexPowerFx(source);
@@ -33,21 +38,23 @@ function sourceMediaName(
   if (tokens[0]?.value === "=") tokens.shift();
 
   if (tokens.length === 1) {
-    if (tokens[0].kind === "identifier") return tokens[0].value;
+    if (tokens[0].kind === "identifier") {
+      return { name: tokens[0].value, origin: "identifier" };
+    }
     if (tokens[0].kind === "string") {
-      return tokens[0].value.slice(1, -1).replaceAll('""', '"');
+      return { name: tokens[0].value.slice(1, -1).replaceAll('""', '"'), origin: "literal" };
     }
   }
   if (tokens.length === 3 && tokens[0].kind === "identifier" &&
       tokens[0].value.toLowerCase() === "media" && tokens[1].value === "." &&
-      tokens[2].kind === "identifier") return tokens[2].value;
+      tokens[2].kind === "identifier") return { name: tokens[2].value, origin: "media" };
 
   // A known Blank() is an intentional empty image, not an unavailable
   // resource or an unknown SQL-backed value. The empty sentinel is never
   // eligible for asset lookup. https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-isblank-isempty
   if (tokens.length === 3 && tokens[0].kind === "identifier" &&
       tokens[0].value.toLowerCase() === "blank" &&
-      tokens[1].value === "(" && tokens[2].value === ")") return "";
+      tokens[1].value === "(" && tokens[2].value === ")") return { name: "", origin: "blank" };
 
   // Only the selected branch of a provably known If can name an image.
   // Unknown SQL/identity/security conditions must not select an asset.
@@ -82,7 +89,7 @@ function sourceMediaName(
   // An unresolved condition above still returns null (runtime unknown).
   return args.length % 2 === 1
     ? sourceMediaName(expression(args[args.length - 1]), symbols, depth + 1)
-    : "";
+    : { name: "", origin: "blank" };
 }
 
 export function resolvePreviewImage(
@@ -91,7 +98,7 @@ export function resolvePreviewImage(
   symbols?: Record<string, StaticPowerFxValue>
 ): PreviewMediaAsset | undefined {
   if (typeof raw !== "string") return undefined;
-  const candidate = sourceMediaName(raw, symbols) ?? literalText(raw);
+  const candidate = sourceMediaName(raw, symbols)?.name ?? literalText(raw);
   if (!candidate || /[\\/:?#]/.test(candidate)) return undefined;
   const name = candidate.replace(/\.(png|jpe?g|gif|webp)$/i, "").toLowerCase();
   return mediaAssets.find(asset => asset.name === name && isLocalRasterDataUrl(asset.dataUrl));
@@ -121,13 +128,13 @@ export function previewImageSourceState(
   const candidate = sourceMediaName(raw, symbols);
   // Unlike a missing media asset, a provable Blank() or empty text value
   // should leave the image control visually empty (no broken-image glyph).
-  if (candidate === "") return "source-blank";
+  if (candidate?.name === "") return "source-blank";
   if (candidate !== null || literalText(raw) !== null) {
-    // A bare name may be an app variable rather than an imported media
-    // resource. Only a matching imported asset or an explicit Media.X/text
-    // expression makes its absence verifiable. Never infer runtime access.
-    if (tokens.length === 1 && tokens[0].kind === "identifier" &&
-        !mediaAssets.some(asset => asset.name === candidate?.toLowerCase())) {
+    // The selected If branch may itself be a bare variable. Preserve its
+    // origin through recursion: a missing variable is not a missing media
+    // resource, even when the condition selecting it is statically known.
+    if (candidate?.origin === "identifier" &&
+        !mediaAssets.some(asset => asset.name === candidate.name.toLowerCase())) {
       return "runtime-unknown";
     }
     return "source-unavailable";
