@@ -1134,3 +1134,28 @@ describe("constant Power Fx visual enum rendering", () => {
     expect(html).not.toContain("stroke-dasharray=");
   });
 });
+
+describe("verified Coalesce text in source-only Canvas previews", () => {
+  it.each([
+    { viewport: 390, caption: "Phone" },
+    { viewport: 768, caption: "Desktop" },
+    { viewport: 1366, caption: "Desktop" }
+  ])("renders a known empty-string fallback at $viewport px", ({ viewport, caption }) => {
+    const html = render({
+      Text: '=Coalesce("", If(App.Width < 720, "Phone", "Desktop"))',
+      Wrap: "=true"
+    }, { "App.Width": viewport });
+    expect(html).toContain("<foreignObject");
+    expect(html).toContain(caption);
+    expect(html).not.toContain('data-preview-text-state="unknown"');
+  });
+
+  it("never substitutes a fallback for a SQL-dependent first argument", () => {
+    const html = render({
+      Text: '=Coalesce(varSqlTitle, "Not verified")',
+      Wrap: "=true"
+    });
+    expect(html).toContain('data-preview-text-state="unknown"');
+    expect(html).not.toContain("Not verified");
+  });
+});
