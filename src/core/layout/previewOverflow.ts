@@ -202,10 +202,18 @@ export function previewWheelScroll(
   deltaY: number
 ): PreviewScrollOffset {
   const current = previewClampScroll(offset, range);
-  const horizontalWheel = range.x > 0 && range.y === 0 ? deltaX + deltaY : deltaX;
+  // Reject non-finite input deltas, but preserve finite deltas whose sum
+  // overflows to +/-Infinity. Those represent movement toward a boundary,
+  // not a reason to reset the scroll offset to zero.
+  const dx = Number.isFinite(deltaX) ? deltaX : 0;
+  const dy = Number.isFinite(deltaY) ? deltaY : 0;
+  const horizontalWheel = range.x > 0 && range.y === 0 ? dx + dy : dx;
+  // Saturate before previewClampScroll: that helper intentionally treats
+  // non-finite *stored offsets* as invalid, whereas a finite wheel movement
+  // can legitimately overflow during addition.
   return previewClampScroll({
-    x: current.x + (Number.isFinite(horizontalWheel) ? horizontalWheel : 0),
-    y: current.y + (Number.isFinite(deltaY) ? deltaY : 0)
+    x: Math.min(range.x, Math.max(0, current.x + horizontalWheel)),
+    y: Math.min(range.y, Math.max(0, current.y + dy))
   }, range);
 }
 
