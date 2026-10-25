@@ -1,5 +1,6 @@
 import type { CanvasControl, PreviewMediaAsset } from "../types/canvas";
 import { previewChildClipPath, previewCornerRadii, previewRoundedRectPath } from "../core/layout/previewCorners";
+import { previewSvgTextWindow } from "../core/layout/previewSvgTextWindow";
 import { staticBoolean, staticNumber } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, previewImageFlipTransform, previewImagePosition, previewImageRotationTransform, previewImageSourceState, previewRasterCssImage, resolvePreviewImage } from "../core/layout/previewMedia";
@@ -209,13 +210,14 @@ export function CanvasVisualControl({
   ) => {
     const point = alignedTextPoint(atX, anchor);
     const lineHeight = fontSize * 1.2;
-    // Five hard-coded SVG lines silently discarded verified source newlines
-    // even in tall Canvas labels. Render the lines that could intersect the
-    // control's clipped viewport, with a bounded DOM budget for large imports.
-    // The extra two lines cover partial glyphs at the top/bottom edges.
-    const lineBudget = Math.max(5, Math.min(128, Math.ceil(height / lineHeight) + 2));
-    const lines = value.split(/\r?\n/).slice(0, lineBudget);
-    const firstY = firstTextLineY(atY, lines.length, lineHeight);
+    // Preserve the source lines around the clipped viewport. Truncating from
+    // the beginning incorrectly shows the first lines for Bottom/Middle text.
+    // Use the original block's baseline so overflow remains positioned as in
+    // the full Canvas label; never synthesize lines or runtime values.
+    const { lines, firstIndex, totalLines } = previewSvgTextWindow(
+      value, height, lineHeight, verticalAlign
+    );
+    const firstY = firstTextLineY(atY, totalLines, lineHeight) + firstIndex * lineHeight;
     return (
       <text x={point.x} y={firstY} dominantBaseline="middle"
         textAnchor={point.anchor} fill={color} fontFamily={fontFamily}
