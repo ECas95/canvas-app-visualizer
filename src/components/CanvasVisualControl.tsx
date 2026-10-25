@@ -6,7 +6,7 @@ import { previewImageFit, previewImageFlipTransform, previewImagePosition, previ
 import { PREVIEW_ICON_PATHS, previewIconName, previewIconRotation } from "../core/layout/previewIcon";
 import {
   previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewDropShadowFilter, previewIsOpaqueColor, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
-  previewCheckedState, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration,
+  previewCheckedState, previewInputContent, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration,
   previewVerticalAlign
 } from "../core/layout/previewAppearance";
 
@@ -61,12 +61,15 @@ export function CanvasVisualControl({
   const thickness = resolvedThickness !== null && resolvedThickness >= 0
     ? resolvedThickness : null;
   const borderStyle = previewBorderStyle(props.BorderStyle, simulationSymbols);
-  const rawText = kind === "input"
-    ? props.Default ?? props.Value ?? props.HintText
-    : kind === "select"
-      ? props.Default ?? props.InputTextPlaceholder
-      : props.Text ?? props.Label;
-  const label = (simulationSymbols && staticString(rawText, simulationSymbols)) ?? previewText(control);
+  const rawText = kind === "select"
+    ? props.Default ?? props.InputTextPlaceholder
+    : props.Text ?? props.Label;
+  // Empty Default is not an empty label: it selects HintText/Placeholder.
+  // Keep the input's value/hint/unknown state separate from generic text.
+  const inputContent = kind === "input" ? previewInputContent(control, simulationSymbols) : null;
+  const label = inputContent
+    ? inputContent.text
+    : (simulationSymbols && staticString(rawText, simulationSymbols)) ?? previewText(control);
   const fontSize = previewFontSize(control, simulationSymbols);
   const fontFamily = previewFontFamily(control, simulationSymbols);
   // Bound pathological imported strings while retaining normal multiline labels.
@@ -238,9 +241,15 @@ export function CanvasVisualControl({
             </div>
           </foreignObject>
         ) : svgText(text))}
-        {kind === "input" && svgText(text ?? (props.Default || props.Value ? "…" : ""),
-          x + inset, "start", previewColorWithSymbols(props.Color, simulationSymbols) ??
-          (label ? "#242424" : "#7f8792"))}
+        {kind === "input" && (
+          <g data-preview-input-state={inputContent?.state}>
+            {svgText(text ?? (inputContent?.state === "unknown" ? "…" : ""),
+              x + inset, "start",
+              inputContent?.state === "hint" || inputContent?.state === "unknown"
+                ? "#7f8792"
+                : previewColorWithSymbols(props.Color, simulationSymbols) ?? "#242424")}
+          </g>
+        )}
         {kind === "select" && (
           <>
             {svgText(text ?? "", x + inset)}

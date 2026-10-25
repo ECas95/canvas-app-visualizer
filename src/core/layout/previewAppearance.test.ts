@@ -3,7 +3,7 @@ import type { CanvasControl } from "../../types/canvas";
 import {
   isDefinitelyHidden, previewVisibility, previewCanRunOnSelect, previewBorderStyle, previewDropShadow, previewDropShadowFilter, previewColor, previewColorWithSymbols, previewDisplayMode, previewFontFamily, PREVIEW_DEFAULT_FONT, previewFontSize, previewFontWeight,
   previewHorizontalAlign, previewCheckedState, previewIsChecked, previewItalic, previewKind,
-  previewText, previewTextDecoration, previewVerticalAlign, previewSelectionBehaviorGate
+  previewInputContent, previewText, previewTextDecoration, previewVerticalAlign, previewSelectionBehaviorGate
 } from "./previewAppearance";
 
 function control(type: string, properties: Record<string, unknown> = {}): CanvasControl {
@@ -120,6 +120,50 @@ describe("semantic preview classification", () => {
         ...hint, Default: "=varRuntimeText", Value: '="Fallback should not override Default"'
       }))).toBeNull();
     }
+  });
+
+  it("resolves modern Placeholder separately from classic HintText", () => {
+    const modern = control("ModernTextInput@1.0.0", {
+      Default: '=""', Placeholder: '="Find items"'
+    });
+    const classic = control("Classic/TextInput@2.3.2", {
+      Default: '=""', HintText: '="Find records"'
+    });
+    expect(previewInputContent(modern)).toEqual({ text: "Find items", state: "hint" });
+    expect(previewText(modern)).toBe("Find items");
+    expect(previewInputContent(classic)).toEqual({ text: "Find records", state: "hint" });
+  });
+
+  it("shows a local hint only for a verified empty Default, never unknown SQL", () => {
+    const input = control("ModernTextInput@1.0.0", {
+      Default: "=varSearch", Placeholder: '="Search local data"'
+    });
+    expect(previewInputContent(input)).toEqual({ text: null, state: "unknown" });
+    expect(previewInputContent(input, { varSearch: "" }))
+      .toEqual({ text: "Search local data", state: "hint" });
+    expect(previewInputContent(input, { varSearch: "Ready" }))
+      .toEqual({ text: "Ready", state: "value" });
+    expect(previewInputContent(input, { varSearch: false }))
+      .toEqual({ text: null, state: "unknown" });
+    expect(previewInputContent(control("ModernTextInput@1.0.0", {
+      Default: "=SqlRecord.Name", Placeholder: '="Search"'
+    }), { varSearch: "" })).toEqual({ text: null, state: "unknown" });
+  });
+
+  it("keeps missing and unresolved hints distinct from confirmed empty text", () => {
+    const modern = "ModernTextInput@1.0.0";
+    expect(previewInputContent(control(modern, { Default: '=""' })))
+      .toEqual({ text: "", state: "empty" });
+    expect(previewInputContent(control(modern, {
+      Default: '=""', Placeholder: "=varHint"
+    }))).toEqual({ text: null, state: "unknown" });
+    expect(previewInputContent(control(modern, {
+      Default: '=""', Placeholder: "=varHint"
+    }), { varHint: "Enter name" }))
+      .toEqual({ text: "Enter name", state: "hint" });
+    expect(previewInputContent(control(modern, {
+      Default: '="Default wins"', Value: '="Ignored"', Placeholder: '="Ignored"'
+    }))).toEqual({ text: "Default wins", state: "value" });
   });
 
   it("honors only resolved false visibility", () => {

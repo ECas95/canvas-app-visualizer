@@ -268,23 +268,43 @@ export function previewDisplayMode(
   return "unresolved";
 }
 
-export function previewText(control: CanvasControl): string | null {
+export type PreviewInputState = "value" | "hint" | "empty" | "unknown";
+
+/**
+ * Distinguish a verified empty field from an unresolved runtime value.
+ * Classic TextInput uses HintText; ModernTextInput@1.0.0 uses Placeholder.
+ * A local, statically resolved empty Default permits the hint to appear;
+ * SQL/connector-dependent values never imply an empty field or access.
+ *
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-text-input
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-text-input
+ */
+export function previewInputContent(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): { text: string | null; state: PreviewInputState } {
+  const props = control.properties;
+  const modern = /^modern\/?textinput(?:@|$)/i.test(control.controlType);
+  const hint = modern ? props.Placeholder ?? props.HintText : props.HintText;
+  const source = props.Default !== undefined ? props.Default : props.Value;
+  if (source !== undefined && source !== null) {
+    const initial = staticString(source, symbols);
+    if (initial === null) return { text: null, state: "unknown" };
+    if (initial !== "") return { text: initial, state: "value" };
+  }
+  if (hint === undefined || hint === null) return { text: "", state: "empty" };
+  const placeholder = staticString(hint, symbols);
+  if (placeholder === null) return { text: null, state: "unknown" };
+  return { text: placeholder, state: placeholder === "" ? "empty" : "hint" };
+}
+
+export function previewText(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): string | null {
   const props = control.properties;
   const kind = previewKind(control.controlType);
-  if (kind === "input") {
-    // HintText is visible only when the input is blank. An unresolved Default
-    // or Value is not proof of an empty input, so never paint the hint as a
-    // confirmed runtime state. This is source-only; no data is evaluated.
-    // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-text-input
-    const source = props.Default !== undefined ? props.Default : props.Value;
-    if (source !== undefined && source !== null) {
-      const initial = literalText(source);
-      if (initial === null) return null;
-      if (initial !== "") return initial;
-      return literalText(props.HintText) ?? "";
-    }
-    return literalText(props.HintText);
-  }
+  if (kind === "input") return previewInputContent(control, symbols).text;
   if (kind === "select") {
     return literalText(props.DefaultSelectedItems) ??
       literalText(props.Default) ??
