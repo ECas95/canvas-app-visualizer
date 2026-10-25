@@ -128,3 +128,69 @@ describe("verified responsive Canvas image enumerations", () => {
     expect(previewImageRotation("=User.Rotate90", phone)).toBeNull();
   });
 });
+
+
+describe("strict token-based Canvas image enum selection", () => {
+  const phone = { "App.Width": 390, "App.Height": 844 };
+  const tablet = { "App.Width": 768, "App.Height": 1024 };
+  const desktop = { "App.Width": 1366, "App.Height": 768 };
+
+  it("accepts documented enum members with valid comments and whitespace", () => {
+    expect(previewImagePosition("=ImagePosition /* note */ . Tile // end")).toBe("tile");
+    expect(previewImagePosition("=ImagePosition. /* note */ Stretch")).toBe("stretch");
+    expect(previewImageRotation("=ImageRotation /* note */ . Rotate270")).toBe(270);
+    expect(previewImageRotation("=ImageRotation.Rotate90 // end")).toBe(90);
+  });
+
+  it("never coerces verified local text into image enums", () => {
+    const symbols = { ...desktop, localPosition: "ImagePosition.Fill",
+      localRotation: "ImageRotation.Rotate90" };
+    expect(previewImagePosition("=localPosition", symbols)).toBeNull();
+    expect(previewImageRotation("=localRotation", symbols)).toBeNull();
+    expect(previewImagePosition(
+      "=If(App.Width < 720, ImagePosition.Tile, localPosition)", symbols
+    )).toBeNull();
+    expect(previewImageRotation(
+      "=If(App.Width < 720, ImageRotation.None, localRotation)", symbols
+    )).toBeNull();
+    expect(previewImagePosition(
+      "=If(App.Width < 720, ImagePosition.Tile, localPosition)",
+      { ...symbols, "App.Width": 390 }
+    )).toBe("tile");
+  });
+
+  it("resolves nested and multi-condition image enums by verified viewport", () => {
+    const position = "=If(App.Width < 600, ImagePosition.Tile, " +
+      "App.Width < 1000, If(App.Height > 800, ImagePosition.Center, ImagePosition.Fill), " +
+      "ImagePosition.Fit)";
+    expect(previewImagePosition(position, phone)).toBe("tile");
+    expect(previewImagePosition(position, tablet)).toBe("center");
+    expect(previewImagePosition(position, { ...tablet, "App.Height": 600 })).toBe("fill");
+    expect(previewImagePosition(position, desktop)).toBe("fit");
+    expect(previewImagePosition(position, { "App.Width": 768 })).toBeNull();
+    const rotation = "=If(App.Width < 600, ImageRotation.Rotate90, " +
+      "App.Width < 1000, ImageRotation.Rotate180, ImageRotation.None)";
+    expect(previewImageRotation(rotation, phone)).toBe(90);
+    expect(previewImageRotation(rotation, tablet)).toBe(180);
+    expect(previewImageRotation(rotation, desktop)).toBe(0);
+  });
+
+  it("rejects quoted, malformed and compound expressions without guessing", () => {
+    for (const source of [
+      '="ImagePosition.Fill"',
+      "=ImagePosition.Fill & localValue",
+      "=ImagePosition /* unterminated",
+      "=ImagePosition.Unknown",
+      "=If(true, ImagePosition.Tile, )",
+      "=If(varAccess, ImagePosition.Tile, ImagePosition.Fit)"
+    ]) expect(previewImagePosition(source, phone)).toBeNull();
+    for (const source of [
+      '="ImageRotation.Rotate90"',
+      "=ImageRotation.Rotate90 & localValue",
+      "=ImageRotation /* unterminated",
+      "=ImageRotation.Rotate45",
+      "=If(true, ImageRotation.Rotate90, )",
+      "=If(varAccess, ImageRotation.Rotate90, ImageRotation.None)"
+    ]) expect(previewImageRotation(source, phone)).toBeNull();
+  });
+});
