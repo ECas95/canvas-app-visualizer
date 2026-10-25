@@ -398,7 +398,7 @@ export function CanvasVisualControl({
                 href={media.dataUrl}
                 preserveAspectRatio={previewImageFit(props.ImagePosition, simulationSymbols)} />
             )
-          ) : (
+          ) : imageSourceState === "source-blank" ? null : (
             <>
             <rect x={x + 6} y={y + 6} width={Math.max(4, width - 12)}
               height={Math.max(4, height - 12)} rx={3} fill="#eaf0f5" stroke="#abb7c4"/>
