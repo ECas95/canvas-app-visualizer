@@ -758,7 +758,9 @@ describe("Canvas ImageRotation SVG content geometry", () => {
   it("never guesses runtime-dependent rotation", () => {
     const html = renderRotated("=varSqlRotation");
     expect(html).not.toContain('transform="rotate(');
-    expect(html).toContain('preserveAspectRatio="xMidYMid meet"');
+    expect(html).toContain('data-preview-image-state="unknown"');
+    expect(html).toContain("Image state unknown");
+    expect(html).not.toContain('href="data:image/png');
   });
 });
 
