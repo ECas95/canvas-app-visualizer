@@ -42,6 +42,13 @@ function sourceMediaName(
       tokens[0].value.toLowerCase() === "media" && tokens[1].value === "." &&
       tokens[2].kind === "identifier") return tokens[2].value;
 
+  // A known Blank() is an intentional empty image, not an unavailable
+  // resource or an unknown SQL-backed value. The empty sentinel is never
+  // eligible for asset lookup. https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-isblank-isempty
+  if (tokens.length === 3 && tokens[0].kind === "identifier" &&
+      tokens[0].value.toLowerCase() === "blank" &&
+      tokens[1].value === "(" && tokens[2].value === ")") return "";
+
   // Only the selected branch of a provably known If can name an image.
   // Unknown SQL/identity/security conditions must not select an asset.
   if (tokens[0]?.kind !== "identifier" ||
@@ -71,9 +78,11 @@ function sourceMediaName(
     if (condition === null) return null;
     if (condition) return sourceMediaName(expression(args[index + 1]), symbols, depth + 1);
   }
+  // Power Fx If without a matching condition or default returns Blank().
+  // An unresolved condition above still returns null (runtime unknown).
   return args.length % 2 === 1
     ? sourceMediaName(expression(args[args.length - 1]), symbols, depth + 1)
-    : null;
+    : "";
 }
 
 export function resolvePreviewImage(
@@ -100,7 +109,7 @@ export function previewImageSourceState(
   raw: unknown,
   mediaAssets: PreviewMediaAsset[],
   symbols?: Record<string, StaticPowerFxValue>
-): "verified" | "runtime-unknown" | "source-unavailable" {
+): "verified" | "runtime-unknown" | "source-unavailable" | "source-blank" {
   if (resolvePreviewImage(raw, mediaAssets, symbols)) return "verified";
   if (typeof raw !== "string") return "source-unavailable";
 
@@ -110,6 +119,9 @@ export function previewImageSourceState(
   if (tokens[0]?.value === "=") tokens.shift();
 
   const candidate = sourceMediaName(raw, symbols);
+  // Unlike a missing media asset, a provable Blank() or empty text value
+  // should leave the image control visually empty (no broken-image glyph).
+  if (candidate === "") return "source-blank";
   if (candidate !== null || literalText(raw) !== null) {
     // A bare name may be an app variable rather than an imported media
     // resource. Only a matching imported asset or an explicit Media.X/text
