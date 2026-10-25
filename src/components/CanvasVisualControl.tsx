@@ -305,7 +305,7 @@ export function CanvasVisualControl({
         )}
         {kind === "icon" && (() => {
           const icon = previewIconName(
-            props.Icon, isModernIcon
+            props.Icon, isModernIcon, simulationSymbols
           );
           if (icon === "none") return null;
           // Unsupported/runtime-dependent icons are explicitly unknown, not

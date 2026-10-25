@@ -8,7 +8,8 @@
  * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-shapes-icons
  * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-icon
  */
-import { staticNumber, type StaticPowerFxValue } from "../powerfx/staticEval";
+import { staticBoolean, staticNumber, type StaticPowerFxValue } from "../powerfx/staticEval";
+import { lexPowerFx, significantTokens, type PowerFxToken } from "../powerfx/lexer";
 
 export const PREVIEW_ICON_PATHS = {
   add: "M12 4V20 M4 12H20",
@@ -34,21 +35,76 @@ export type PreviewIconResult = PreviewIconName | "none" | null;
 const iconNames = new Set<string>(Object.keys(PREVIEW_ICON_PATHS));
 
 /** No substring matching: Icon.AddressBook must never be rendered as Add. */
-export function previewIconName(raw: unknown, modern = false): PreviewIconResult {
-  if (typeof raw !== "string") return null;
-  const value = raw.trim();
-  const enumMatch = /^=?\s*Icon\.([A-Za-z]+)\s*$/i.exec(value);
+/**
+ * Resolve a source Icon only from an explicit supported literal or a
+ * provably selected Power Fx If branch. Conditions are evaluated locally
+ * with known App/Parent/Self/simulation symbols; no connector or behavior
+ * expression is executed. An unresolved condition or unsupported glyph
+ * stays unknown rather than silently choosing a fallback.
+ *
+ * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-shapes-icons
+ */
+export function previewIconName(
+  raw: unknown,
+  modern = false,
+  symbols?: Record<string, StaticPowerFxValue>,
+  depth = 0
+): PreviewIconResult {
+  if (typeof raw !== "string" || depth > 6) return null;
+  const source = raw.trim();
+  const enumMatch = /^=?\s*Icon\.([A-Za-z]+)\s*$/i.exec(source);
   let name = enumMatch?.[1]?.toLowerCase();
   if (!name && modern) {
-    // Modern Icon property is a Fluent icon name string, not a classic enum.
-    const literal = /^=?\s*"([A-Za-z]+)"\s*$/.exec(value);
+    // Modern Icon.Icon is a Fluent string; classic Icon enums are distinct.
+    const literal = /^=?\s*"([A-Za-z]+)"\s*$/.exec(source);
     name = literal?.[1]?.toLowerCase();
   }
   if (name === "none") return "none";
-  // Modern Fluent uses "Delete" where the supported classic glyph is Trash.
-  // Keep the alias scoped to modern controls; do not infer arbitrary names.
   if (modern && name === "delete") name = "trash";
-  return name && iconNames.has(name) ? name as PreviewIconName : null;
+  if (name && iconNames.has(name)) return name as PreviewIconName;
+  if (!symbols) return null;
+
+  const lexed = lexPowerFx(source);
+  if (lexed.diagnostics.length) return null;
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+  if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
+      tokens[tokens.length - 1]?.value !== ")") return null;
+
+  // Split only at the top-level commas of If(...); nested If and other
+  // parentheses remain intact. Malformed or empty arguments fail closed.
+  const inner = tokens.slice(2, -1);
+  const args: PowerFxToken[][] = [];
+  let nesting = 0;
+  let begin = 0;
+  for (let index = 0; index < inner.length; index++) {
+    const value = inner[index].value;
+    if (value === "(") nesting++;
+    else if (value === ")") nesting--;
+    else if (value === "," && nesting === 0) {
+      if (index === begin) return null;
+      args.push(inner.slice(begin, index));
+      begin = index + 1;
+    }
+    if (nesting < 0) return null;
+  }
+  if (nesting !== 0 || begin >= inner.length) return null;
+  args.push(inner.slice(begin));
+  if (args.length < 2) return null;
+
+  const expression = (part: PowerFxToken[]) =>
+    "=" + source.slice(part[0].start, part[part.length - 1].end);
+  for (let index = 0; index + 1 < args.length; index += 2) {
+    const condition = staticBoolean(expression(args[index]), symbols);
+    if (condition === null) return null;
+    if (condition) {
+      return previewIconName(expression(args[index + 1]), modern, symbols, depth + 1);
+    }
+  }
+  return args.length % 2 === 1
+    ? previewIconName(expression(args[args.length - 1]), modern, symbols, depth + 1)
+    : null;
 }
 
 /**
