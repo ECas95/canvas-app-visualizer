@@ -6,7 +6,7 @@ import { previewImageFit, previewImageFlipTransform, previewImagePosition, previ
 import { PREVIEW_ICON_PATHS, previewIconName, previewIconRotation } from "../core/layout/previewIcon";
 import {
   previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewDropShadowFilter, previewIsOpaqueColor, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
-  previewCheckedState, previewInputContent, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration,
+  previewCheckedState, previewInputContent, previewSelectContent, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration,
   previewVerticalAlign
 } from "../core/layout/previewAppearance";
 
@@ -67,9 +67,12 @@ export function CanvasVisualControl({
   // Empty Default is not an empty label: it selects HintText/Placeholder.
   // Keep the input's value/hint/unknown state separate from generic text.
   const inputContent = kind === "input" ? previewInputContent(control, simulationSymbols) : null;
+  const selectContent = kind === "select" ? previewSelectContent(control, simulationSymbols) : null;
   const label = inputContent
     ? inputContent.text
-    : (simulationSymbols && staticString(rawText, simulationSymbols)) ?? previewText(control);
+    : selectContent
+      ? selectContent.text
+      : (simulationSymbols && staticString(rawText, simulationSymbols)) ?? previewText(control);
   const fontSize = previewFontSize(control, simulationSymbols);
   const fontFamily = previewFontFamily(control, simulationSymbols);
   // Bound pathological imported strings while retaining normal multiline labels.
@@ -268,11 +271,17 @@ export function CanvasVisualControl({
           </g>
         )}
         {kind === "select" && (
-          <>
-            {svgText(text ?? "", x + inset)}
+          <g data-preview-select-state={selectContent?.state}>
+            {svgText(selectContent?.state === "unknown" ? "?" : text ?? "",
+              x + inset, "start",
+              selectContent?.state === "unknown" || selectContent?.state === "hint"
+                ? "#7f8792" : foreground)}
+            {selectContent?.state === "unknown" && (
+              <title>Selection requires runtime data or state; no option inferred</title>
+            )}
             <path d={`M ${x + width - 20} ${y + height / 2 - 3} l 5 6 l 5 -6`}
               fill="none" stroke="#5b6470" strokeWidth="1.6" />
-          </>
+          </g>
         )}
         {kind === "checkbox" && (
           <g data-preview-checked={checkedState}>
