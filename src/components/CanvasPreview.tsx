@@ -476,10 +476,15 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                     <rect x={item.x} y={item.y} width={item.width} height={item.height}
                       fill="none" stroke="#0067c0" strokeWidth={3} pointerEvents="none" />
                   )}
-                  <title>{item.control.name} · {item.control.controlType}
-                    {item.dynamic ? " · unresolved layout" : ""}
-                    {item.visibilityUnknown ? " · runtime visibility not verified" : ""}
-                    {item.runtimeGalleryStateUnknown ? " · AllItems unavailable; content intentionally withheld" : ""}</title>
+                  {/* React requires one text child for SVG title. Keep the
+                      source name/type and uncertainty qualifiers intact. */}
+                  <title>{[
+                    item.control.name,
+                    item.control.controlType,
+                    item.dynamic ? "unresolved layout" : null,
+                    item.visibilityUnknown ? "runtime visibility not verified" : null,
+                    item.runtimeGalleryStateUnknown ? "AllItems unavailable; content intentionally withheld" : null
+                  ].filter(Boolean).join(" · ")}</title>
                 </g>
               );
               const clipped = clipToAncestors(draw, item.ancestors);

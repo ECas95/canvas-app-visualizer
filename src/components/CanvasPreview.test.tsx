@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CanvasControl, CanvasScreen } from "../types/canvas";
 import { CanvasPreview } from "./CanvasPreview";
@@ -495,5 +495,36 @@ describe("CanvasPreview unverified gallery template geometry", () => {
     expect(html).toContain('stroke-dasharray="6 5"');
     expect(html).not.toContain("Template geometry unknown");
     expect(html).not.toContain("Inspect UnverifiedRow");
+  });
+});
+
+describe("CanvasPreview SVG title compatibility", () => {
+  it("uses a single React-compatible title child for source-only controls", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const html = renderGalleryItems("=Filter(RemoteModules, IsEnabled)");
+      expect(html).toContain("<title>DataGallery · Classic/VerticalGallery@2.3.0</title>");
+      expect(errorSpy.mock.calls.flat().join(" ")).not.toContain(
+        "React expects the `children` prop of <title>"
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("retains unresolved visibility and AllItems qualifiers without React title warnings", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const html = renderGalleryCondition("=IsEmpty(galCatalog.AllItems)");
+      expect(html).toContain(
+        "<title>GalleryStatus · GroupContainer@1.3.0 · runtime visibility not verified · AllItems unavailable; content intentionally withheld</title>"
+      );
+      expect(errorSpy.mock.calls.flat().join(" ")).not.toContain(
+        "React expects the `children` prop of <title>"
+      );
+      expect(html).not.toContain("Synthetic child text");
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
