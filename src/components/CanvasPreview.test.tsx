@@ -31,8 +31,8 @@ function renderHost(radius: string) {
 describe("CanvasPreview nested host clipping", () => {
   it("uses serialized host corners for the child clipping definition", () => {
     const html = renderHost("=12");
-    expect(html).toMatch(/<clipPath[^>]*><path d="M 22 20 H 110 Q 110 20 110 20/);
-    expect(html).toContain("Q 110 60 104 60");
+    expect(html).toMatch(/<clipPath[^>]*><path d="M 22 20 H 110 L 110 20/);
+    expect(html).toContain("A 6 6 0 0 1 104 60");
     expect(html).toContain("Local fixture");
   });
 
