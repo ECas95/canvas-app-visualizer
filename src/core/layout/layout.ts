@@ -1,4 +1,5 @@
 import type { CanvasControl } from "../../types/canvas";
+import { previewLayoutEnum } from "./previewLayoutEnums";
 import {
   staticBoolean,
   staticNumber,
@@ -269,11 +270,6 @@ export function isAutoLayout(control: CanvasControl | undefined): boolean {
   );
 }
 
-function enumTail(value: string | null): string | null {
-  if (!value) return null;
-  return value.split(".").at(-1)?.toLowerCase() ?? null;
-}
-
 export function autoLayoutChildren(
   parent: CanvasControl,
   context: LayoutContext
@@ -282,7 +278,7 @@ export function autoLayoutChildren(
   if (children.length === 0) return [];
 
   const symbols = layoutSymbols(context) ?? {};
-  const resolvedDirection = enumTail(staticString(parent.properties.LayoutDirection, symbols));
+  const resolvedDirection = previewLayoutEnum(parent.properties.LayoutDirection, "LayoutDirection", symbols);
   const direction = resolvedDirection ?? parent.layout?.toLowerCase() ?? "vertical";
   const directionUnknown = parent.properties.LayoutDirection !== undefined &&
     !["horizontal", "vertical"].includes(resolvedDirection ?? "");
@@ -354,7 +350,7 @@ export function autoLayoutChildren(
     value === undefined || staticNumber(value, symbols) !== null;
   const justifyRaw = parent.properties.LayoutJustifyContent;
   const justifyStart = justifyRaw === undefined ||
-    enumTail(staticString(justifyRaw, symbols)) === "start";
+    previewLayoutEnum(justifyRaw, "LayoutJustifyContent", symbols) === "start";
   const knownSpacing = [
     parent.properties.LayoutGap,
     parent.properties.PaddingLeft, parent.properties.PaddingRight,
@@ -372,10 +368,7 @@ export function autoLayoutChildren(
       item.control.properties.LayoutMaxHeight
     ].every(numericKnown)
   );
-  const knownDirection = parent.properties.LayoutDirection === undefined ||
-    ["horizontal", "vertical"].includes(
-      enumTail(staticString(parent.properties.LayoutDirection, symbols)) ?? ""
-    );
+  const knownDirection = parent.properties.LayoutDirection === undefined || resolvedDirection !== null;
 
   if (wrap === true && justifyStart && knownSpacing && fixedChildren && knownDirection) {
     const startMain = horizontal ? paddingLeft : paddingTop;
@@ -436,8 +429,8 @@ export function autoLayoutChildren(
       fallback = true;
     }
 
-    const parentAlignValue = enumTail(staticString(parent.properties.LayoutAlignItems, symbols));
-    const childAlignValue = enumTail(staticString(item.control.properties.AlignInContainer, symbols));
+    const parentAlignValue = previewLayoutEnum(parent.properties.LayoutAlignItems, "LayoutAlignItems", symbols);
+    const childAlignValue = previewLayoutEnum(item.control.properties.AlignInContainer, "AlignInContainer", symbols);
     // SetByContainer inherits the container's cross-axis alignment.
     const inheritsAlign = childAlignValue === null || childAlignValue === "setbycontainer";
     const childAlign = inheritsAlign ? parentAlignValue ?? "start" : childAlignValue ?? "start";
@@ -481,7 +474,7 @@ export function autoLayoutChildren(
     0
   );
   const extra = Math.max(0, mainAvailable - usedMain);
-  const resolvedJustify = enumTail(staticString(parent.properties.LayoutJustifyContent, symbols));
+  const resolvedJustify = previewLayoutEnum(parent.properties.LayoutJustifyContent, "LayoutJustifyContent", symbols);
   const justify = resolvedJustify ?? "start";
   const justifyUnknown = parent.properties.LayoutJustifyContent !== undefined &&
     !["start", "center", "end", "spacebetween"].includes(resolvedJustify ?? "");
