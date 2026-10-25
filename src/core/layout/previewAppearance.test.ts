@@ -52,6 +52,37 @@ describe("semantic preview classification", () => {
     expect(previewColor('=ColorValue("url(https://test.example)")')).toBeNull();
   });
 
+  it("resolves constant Canvas color If branches without viewport symbols", () => {
+    expect(previewColorWithSymbols("=If(true, Color.Red, Color.Blue)")).toBe("#ff0000");
+    expect(previewColorWithSymbols("=If(false, Color.Red, Color.Blue)")).toBe("#0000ff");
+    expect(previewColorWithSymbols(
+      "=If(false, Color.Red, true, Color.Green, Color.Black)"
+    )).toBe("#008000");
+  });
+
+  it("resolves nested conditional colors and selected RGBA values without runtime symbols", () => {
+    expect(previewColorWithSymbols(
+      '=If(true, If(false, Color.Red, ColorValue("#123456")), Color.Blue)'
+    )).toBe("#123456");
+    expect(previewColorWithSymbols(
+      "=If(true, RGBA(10,20,30,0.5), Color.Black)"
+    )).toBe("rgba(10,20,30,0.5)");
+  });
+
+  it("keeps unknown security conditions and unsupported color values unresolved", () => {
+    expect(previewColorWithSymbols("=If(varAuthorized, Color.Green, Color.Red)")).toBeNull();
+    expect(previewColorWithSymbols(
+      "=If(false, Color.Red, varAuthorized, Color.Blue, Color.Black)"
+    )).toBeNull();
+    expect(previewColorWithSymbols('=If(true, "Color.Red", Color.White)')).toBeNull();
+    expect(previewColorWithSymbols(
+      '=If(true, ColorValue("javascript:alert(1)"), Color.White)'
+    )).toBeNull();
+    expect(previewColorWithSymbols("=If(varAuthorized, Color.Green, Color.Red)", {
+      varAuthorized: true
+    })).toBe("#008000");
+  });
+
   it("propagates verified percentage RGBA colors into the visual preview", () => {
     expect(previewColor("=RGBA(10, 20, 30, 75%)")).toBe("rgba(10,20,30,0.75)");
     expect(previewColorWithSymbols("=If(varReady, RGBA(10,20,30,100%), Color.Red)",
