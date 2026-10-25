@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CanvasControl } from "../../types/canvas";
 import { autoLayoutChildren, type LayoutContext } from "./layout";
 import { previewLayoutEnum } from "./previewLayoutEnums";
+import { buildCanvasModel } from "../model/normalize";
 
 function child(name: string, extra: Record<string, unknown> = {}): CanvasControl {
   return {
@@ -102,6 +103,42 @@ describe("Canvas typed layout enums", () => {
     });
     expect(positions(parent, 390)).toEqual([[0, 0, false], [0, 30, false]]);
     expect(positions(parent, 1366)).toEqual([[80, 0, false], [160, 0, false]]);
+  });
+
+  it("preserves responsive geometry through synthetic Microsoft pa.yaml import", () => {
+    const yaml = [
+      "Screens:",
+      "  Responsive:",
+      "    Children:",
+      "      - Row:",
+      "          Control: GroupContainer@1.3.0",
+      "          Variant: AutoLayout",
+      "          Layout: Vertical",
+      "          Properties:",
+      "            Width: =240",
+      "            Height: =100",
+      "            LayoutDirection: =If(App.Width < 720, LayoutDirection.Vertical, LayoutDirection.Horizontal)",
+      "          Children:",
+      "            - One:",
+      "                Control: Label@1.2.3",
+      "                Properties:",
+      "                  Width: =80",
+      "                  Height: =30",
+      "            - Two:",
+      "                Control: Label@1.2.3",
+      "                Properties:",
+      "                  Width: =80",
+      "                  Height: =30"
+    ].join("\\n");
+    const model = buildCanvasModel([{
+      path: "Src/SyntheticResponsive.pa.yaml", name: "SyntheticResponsive.pa.yaml",
+      content: yaml, origin: "yaml", format: "pa-yaml-v3"
+    }], "yaml");
+    const parent = model.screens[0].children[0];
+    expect(parent.variant).toBe("AutoLayout");
+    expect(positions(parent, 390)).toEqual([[0, 0, false], [0, 30, false]]);
+    expect(positions(parent, 768)).toEqual([[0, 0, false], [80, 0, false]]);
+    expect(positions(parent, 1366)).toEqual([[0, 0, false], [80, 0, false]]);
   });
 
   it("does not use a text enum to certify wrapped positions", () => {
