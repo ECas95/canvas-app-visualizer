@@ -191,6 +191,41 @@ export function previewScrollRanges(
   return ranges;
 }
 
+/**
+ * Keep each local scrollbar in its source host's stacking context: after the
+ * last visible descendant of that host, but before a later sibling. Index
+ * ancestry in a single pass instead of reversing/scanning every item per host.
+ * This is only paint ordering; no runtime records or permissions are inferred.
+ *
+ * .pa.yaml source order determines control ZIndex:
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/power-apps-yaml
+ */
+export function previewScrollOverlayAnchors(
+  items: readonly Pick<PreviewScrollItem, "id" | "ancestors">[],
+  scrollHostIds: ReadonlySet<string>
+): Map<string, string[]> {
+  const lastVisibleByHost = new Map<string, string>();
+  for (const item of items) {
+    if (scrollHostIds.has(item.id)) lastVisibleByHost.set(item.id, item.id);
+    for (const ancestorId of item.ancestors) {
+      if (scrollHostIds.has(ancestorId)) lastVisibleByHost.set(ancestorId, item.id);
+    }
+  }
+  // Preserve the original host order when multiple nested scrollbars anchor
+  // to the same last descendant. Do not let a later unrelated sibling move
+  // an earlier host's scrollbar above that sibling.
+  const overlays = new Map<string, string[]>();
+  for (const item of items) {
+    if (!scrollHostIds.has(item.id)) continue;
+    const anchorId = lastVisibleByHost.get(item.id);
+    if (!anchorId) continue;
+    const hosts = overlays.get(anchorId) ?? [];
+    hosts.push(item.id);
+    overlays.set(anchorId, hosts);
+  }
+  return overlays;
+}
+
 export function previewClampScroll(
   offset: PreviewScrollOffset | undefined,
   range: PreviewScrollRange
