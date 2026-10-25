@@ -254,18 +254,47 @@ export function previewBorderStyle(
 
 export type PreviewDisplayMode = "edit" | "disabled" | "view" | "unresolved";
 
+/**
+ * A DisplayMode enum is not interchangeable with a Power Fx text value.
+ * staticString deliberately represents both as strings for general preview
+ * expressions, so using it here would allow ="DisplayMode.Edit" (or a local
+ * string variable) to enable simulated OnSelect. Resolve only source enum
+ * tokens, optionally through a statically verified If branch.
+ *
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-card
+ * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+ */
 export function previewDisplayMode(
   raw: unknown,
-  symbols?: Record<string, StaticPowerFxValue>
+  symbols?: Record<string, StaticPowerFxValue>,
+  depth = 0
 ): PreviewDisplayMode {
   if (raw === undefined || raw === null) return "edit";
-  const resolved = staticString(raw, symbols);
-  if (resolved === null) return "unresolved";
-  const mode = resolved.toLowerCase();
-  if (mode === "displaymode.edit") return "edit";
-  if (mode === "displaymode.disabled") return "disabled";
-  if (mode === "displaymode.view") return "view";
-  return "unresolved";
+  if (typeof raw !== "string" || depth > 6) return "unresolved";
+  const source = raw.trim();
+  const literal = /^=?\\s*DisplayMode\\s*\\.\\s*(Edit|Disabled|View)\\s*$/i.exec(source);
+  if (literal) return literal[1].toLowerCase() as "edit" | "disabled" | "view";
+
+  const lexed = lexPowerFx(source);
+  if (lexed.diagnostics.length) return "unresolved";
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+  if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
+      tokens[tokens.length - 1]?.value !== ")") return "unresolved";
+  const branches = splitIfArguments(tokens.slice(2, -1));
+  if (!branches || branches.length < 2) return "unresolved";
+
+  for (let i = 0; i + 1 < branches.length; i += 2) {
+    const condition = staticBoolean("=" + expressionText(source, branches[i]), symbols);
+    if (condition === null) return "unresolved";
+    if (condition) {
+      return previewDisplayMode("=" + expressionText(source, branches[i + 1]), symbols, depth + 1);
+    }
+  }
+  const fallback = branches.length % 2 === 1 ? branches[branches.length - 1] : undefined;
+  return fallback
+    ? previewDisplayMode("=" + expressionText(source, fallback), symbols, depth + 1)
+    : "unresolved";
 }
 
 export type PreviewInputState = "value" | "hint" | "empty" | "unknown";

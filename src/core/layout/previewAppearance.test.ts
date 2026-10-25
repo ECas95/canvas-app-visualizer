@@ -403,6 +403,45 @@ describe("semantic preview classification", () => {
   });
 
 
+  it("does not treat text that resembles DisplayMode.Edit as an editable enum", () => {
+    const action = (displayMode: string) => control("Classic/Button@2.2.0", {
+      OnSelect: "=Set(clicked, true)", DisplayMode: displayMode
+    });
+    for (const expression of [
+      '="DisplayMode.Edit"',
+      '=If(true, "DisplayMode.Edit", DisplayMode.Disabled)',
+      '=If(false, DisplayMode.Disabled, "DisplayMode.Edit")',
+      '=If(true, "DisplayMode." & "Edit", DisplayMode.Disabled)',
+      "=Connector.DisplayMode()"
+    ]) {
+      expect(previewDisplayMode(expression)).toBe("unresolved");
+      expect(previewCanRunOnSelect(action(expression))).toBe(false);
+      expect(previewSelectionBehaviorGate(action(expression), {}))
+        .toBe("display-mode-unverified");
+    }
+    expect(previewDisplayMode("=localMode", { localMode: "DisplayMode.Edit" }))
+      .toBe("unresolved");
+    expect(previewCanRunOnSelect(action("=localMode"),
+      { localMode: "DisplayMode.Edit" })).toBe(false);
+  });
+
+  it("resolves only source enum branches under verified local and viewport conditions", () => {
+    const responsive = "=If(App.Width < 600, DisplayMode.Disabled, " +
+      "App.Width < 1000, DisplayMode.View, DisplayMode.Edit)";
+    expect(previewDisplayMode(responsive, { "App.Width": 390 })).toBe("disabled");
+    expect(previewDisplayMode(responsive, { "App.Width": 768 })).toBe("view");
+    expect(previewDisplayMode(responsive, { "App.Width": 1366 })).toBe("edit");
+    expect(previewDisplayMode(responsive)).toBe("unresolved");
+    expect(previewDisplayMode("=If(true, DisplayMode.Edit, \"DisplayMode.Disabled\")"))
+      .toBe("edit");
+    expect(previewDisplayMode("=If(true, If(false, DisplayMode.Edit, DisplayMode.View), DisplayMode.Disabled)"))
+      .toBe("view");
+    expect(previewDisplayMode("=If(varAuthorized, DisplayMode.Edit, DisplayMode.Disabled)"))
+      .toBe("unresolved");
+    expect(previewDisplayMode("=If(false, DisplayMode.Edit)")).toBe("unresolved");
+    expect(previewDisplayMode("=If(true, DisplayMode.Edit, )")).toBe("unresolved");
+  });
+
   it("resolves responsive Canvas BorderStyle only from verified If branches", () => {
     const formula = "=If(App.Width < 600, BorderStyle.None, App.Width < 1000, BorderStyle.Dotted, BorderStyle.Dashed)";
     expect(previewBorderStyle(formula, { "App.Width": 390 })).toBe("none");
