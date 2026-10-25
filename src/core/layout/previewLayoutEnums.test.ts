@@ -129,7 +129,7 @@ describe("Canvas typed layout enums", () => {
       "                Properties:",
       "                  Width: =80",
       "                  Height: =30"
-    ].join("\\n");
+    ].join("\n");
     const model = buildCanvasModel([{
       path: "Src/SyntheticResponsive.pa.yaml", name: "SyntheticResponsive.pa.yaml",
       content: yaml, origin: "yaml", format: "pa-yaml-v3"
