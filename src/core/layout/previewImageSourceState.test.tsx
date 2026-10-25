@@ -89,6 +89,35 @@ describe("Canvas image source fidelity and local-only rendering", () => {
     }
   );
 
+  it("renders provably blank images without a missing-asset placeholder", () => {
+    for (const formula of [
+      "=Blank()",
+      '=""',
+      "=If(false, Media.CompanyLogo)",
+      "=If(false, Media.CompanyLogo, false, Media.Other)",
+      "=If(true, Blank(), Media.CompanyLogo)",
+      "=If(true, If(false, Media.CompanyLogo), Media.CompanyLogo)"
+    ]) {
+      expect(previewImageSourceState(formula, media)).toBe("source-blank");
+      expect(resolvePreviewImage(formula, media)).toBeUndefined();
+      const html = draw(formula);
+      expect(html).toContain('data-preview-image-state="source-blank"');
+      expect(html).not.toContain("<image ");
+      expect(html).not.toContain('fill="#eaf0f5"');
+    }
+  });
+
+  it("keeps unresolved image conditions unknown even when a branch is Blank", () => {
+    for (const formula of [
+      "=If(varSqlAuthorized, Blank(), Media.CompanyLogo)",
+      "=If(varSqlAuthorized, Media.CompanyLogo)",
+      "=If(false, Media.CompanyLogo, varSqlImage)"
+    ]) {
+      expect(previewImageSourceState(formula, media)).toBe("runtime-unknown");
+      expect(draw(formula)).toContain('data-preview-image-state="unknown"');
+    }
+  });
+
   it("does not use a remote asset even when the name is statically selected", () => {
     const injected = [{ ...asset, dataUrl: "https://example.invalid/tracker.png" }];
     expect(previewImageSourceState("=If(true, Media.CompanyLogo, Media.Other)", injected))
