@@ -222,9 +222,13 @@ export function CanvasVisualControl({
 
   return (
     <g opacity={disabled ? 0.66 : displayMode === "view" ? 0.86 : 1}
+      data-preview-display-mode-state={displayMode === "unresolved" ? "unknown" : undefined}
       data-preview-wrap-state={wrapUnknown ? "unknown" : undefined}
       data-preview-font-state={fontUnknown ? "unknown" : undefined}
       data-preview-font-size-state={fontSizeUnknown ? "unknown" : undefined}>
+      {displayMode === "unresolved" && (
+        <title>DisplayMode requires runtime state; appearance and interaction permissions are not verified</title>
+      )}
       {wrapUnknown && <title>Wrap requires runtime state; single-line text is only a preview fallback</title>}
       {fontUnknown && <title>Font requires runtime state or is unsupported; displayed family is a preview fallback</title>}
       {fontSizeUnknown && <title>Font size requires runtime state or exceeds preview limits; displayed size is approximate</title>}
