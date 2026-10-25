@@ -61,6 +61,26 @@ export function previewColor(raw: unknown): string | null {
   if (named) return NAMED_COLORS[named[1].toLowerCase()] ?? null;
   const hex = value.match(/^=?\s*ColorValue\(\s*"(#[a-fA-F0-9]+)"\s*\)\s*$/i);
   if (hex && HEX_COLOR_RE.test(hex[1])) return hex[1];
+
+  // Power Fx comments and whitespace are trivia, including around the dot
+  // in Color.Red and around a ColorValue argument. Tokenize the complete
+  // expression before accepting it: a string or a longer formula must never
+  // masquerade as a typed Color enum or literal ColorValue.
+  // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-colors
+  const member = sourceEnumMember(value, "Color", Object.keys(NAMED_COLORS));
+  if (member) return NAMED_COLORS[member];
+  const lexed = lexPowerFx(value);
+  if (!lexed.diagnostics.length) {
+    const tokens = significantTokens(lexed.tokens);
+    if (tokens[0]?.value === "=") tokens.shift();
+    if (tokens.length === 4 && tokens[0].kind === "identifier" &&
+        tokens[0].value.toLowerCase() === "colorvalue" &&
+        tokens[1].value === "(" && tokens[2].kind === "string" &&
+        tokens[3].value === ")") {
+      const literalHex = tokens[2].value.slice(1, -1).replaceAll('""', '"');
+      if (HEX_COLOR_RE.test(literalHex)) return literalHex;
+    }
+  }
   const literal = literalText(value);
   if (literal && HEX_COLOR_RE.test(literal)) return literal;
   return null;
