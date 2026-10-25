@@ -13,7 +13,7 @@ function renderLabel(
     name: "SyntheticLineHeight",
     controlType: "Classic/Label@2.5.1",
     properties: {
-      Text: '="First\\nSecond\\nThird"',
+      Text: '="First\nSecond\nThird"',
       Size: "=20",
       Wrap: wrap ? "=true" : "=false",
       VerticalAlign: "=VerticalAlign.Top",
