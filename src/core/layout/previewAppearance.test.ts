@@ -798,3 +798,41 @@ describe("source-only Canvas selection state", () => {
     }))).toEqual({ text: null, state: "unknown" });
   });
 });
+
+
+describe("constant Power Fx visual enums without runtime symbols", () => {
+  it("selects a known DropShadow branch without requiring App or local state", () => {
+    expect(previewDropShadow("=If(true, DropShadow.Bold, DropShadow.None)")).toBe("bold");
+    expect(previewDropShadowFilter("=If(true, DropShadow.Light, DropShadow.None)"))
+      .toContain("drop-shadow(0px 1px 2px");
+  });
+
+  it("selects known false and nested DropShadow branches", () => {
+    expect(previewDropShadow("=If(false, DropShadow.Bold, DropShadow.None)")).toBe("none");
+    expect(previewDropShadow("=If(true, If(false, DropShadow.Bold, DropShadow.Regular), DropShadow.None)"))
+      .toBe("regular");
+  });
+
+  it("never treats unknown runtime conditions or string lookalikes as shadows", () => {
+    expect(previewDropShadow("=If(varSqlAccess, DropShadow.Bold, DropShadow.None)"))
+      .toBeNull();
+    expect(previewDropShadow('=If(true, "DropShadow.Bold", DropShadow.None)'))
+      .toBeNull();
+    expect(previewDropShadowFilter("=If(varSqlAccess, DropShadow.Bold, DropShadow.None)"))
+      .toBeUndefined();
+  });
+
+  it("selects constant BorderStyle If branches without runtime symbols", () => {
+    expect(previewBorderStyle("=If(true, BorderStyle.Dashed, BorderStyle.None)"))
+      .toBe("dashed");
+    expect(previewBorderStyle("=If(false, BorderStyle.Solid, true, BorderStyle.Dotted, BorderStyle.None)"))
+      .toBe("dotted");
+  });
+
+  it("rejects unknown conditions and quoted BorderStyle impostors", () => {
+    expect(previewBorderStyle("=If(varSqlAccess, BorderStyle.Solid, BorderStyle.None)"))
+      .toBeNull();
+    expect(previewBorderStyle('=If(true, "BorderStyle.Dashed", BorderStyle.None)'))
+      .toBeNull();
+  });
+});
