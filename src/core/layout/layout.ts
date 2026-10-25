@@ -370,6 +370,19 @@ export function autoLayoutChildren(
   );
   const knownDirection = parent.properties.LayoutDirection === undefined || resolvedDirection !== null;
 
+  // A source-only preview cannot certify AutoLayout placement when a child
+  // size, FillPortions or size constraint depends on runtime state. Such a
+  // value can redistribute available space and move *other* siblings, even
+  // when their own dimensions are literal. Keep fallback geometry inspectable
+  // but mark the entire sibling layout approximate. Omitted .pa.yaml
+  // properties are defaults, not unresolved formulas.
+  const sizingUnknown = children.some(control => [
+    control.properties.Width, control.properties.Height,
+    control.properties.FillPortions,
+    control.properties.LayoutMinWidth, control.properties.LayoutMinHeight,
+    control.properties.LayoutMaxWidth, control.properties.LayoutMaxHeight
+  ].some(value => value !== undefined && staticNumber(value, symbols) === null));
+
   if (wrap === true && justifyStart && knownSpacing && fixedChildren && knownDirection) {
     const startMain = horizontal ? paddingLeft : paddingTop;
     const maxMain = startMain + (horizontal ? innerWidth : innerHeight);
@@ -510,7 +523,7 @@ export function autoLayoutChildren(
       width: item.width,
       height: item.height,
       dynamic: item.fallback || wrapUncertain || directionUnknown ||
-        spacingUnknown || justifyUnknown
+        spacingUnknown || justifyUnknown || sizingUnknown
     };
 
     cursor +=
