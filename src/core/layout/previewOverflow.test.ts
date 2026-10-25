@@ -21,6 +21,35 @@ describe("Canvas overflow semantics", () => {
     expect(previewOverflowMode(undefined)).toBe("hide");
   });
 
+  it("recognizes Canvas overflow enum tokens despite valid Power Fx comments", () => {
+    expect(previewOverflowMode("=LayoutOverflow /* layout */ . Scroll // trailing"))
+      .toBe("scroll");
+    expect(previewOverflowMode("= LayoutOverflow. /* note */ Hide"))
+      .toBe("hide");
+    expect(previewOverflowMode(
+      "=If(App.Width < 720, LayoutOverflow /* note */ . Scroll, LayoutOverflow.Hide)",
+      { "App.Width": 390 }
+    )).toBe("scroll");
+    expect(previewOverflowMode(
+      "=If(App.Width < 720, LayoutOverflow.Scroll, LayoutOverflow /* note */ . Hide)",
+      { "App.Width": 1366 }
+    )).toBe("hide");
+  });
+
+  it("rejects text and malformed overflow expressions even with comments", () => {
+    expect(previewOverflowMode('="LayoutOverflow.Scroll" /* not an enum */'))
+      .toBe("unknown");
+    expect(previewOverflowMode("=LayoutOverflow.Scroll /* note */ & other"))
+      .toBe("unknown");
+    expect(previewOverflowMode("=LayoutOverflow /* note */ . Unknown"))
+      .toBe("unknown");
+    expect(previewOverflowMode("=LayoutOverflow.Scroll /* unterminated"))
+      .toBe("unknown");
+    expect(previewOverflowMode(
+      '=If(true, "LayoutOverflow.Scroll" /* text */, LayoutOverflow.Hide)'
+    )).toBe("unknown");
+  });
+
   it("resolves viewport-dependent overflow enums without running behaviors", () => {
     const formula = "=If(App.Width < 720, LayoutOverflow.Scroll, LayoutOverflow.Hide)";
     expect(previewOverflowMode(formula, { "App.Width": 390 })).toBe("scroll");
