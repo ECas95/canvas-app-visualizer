@@ -347,6 +347,50 @@ export function previewDisplayMode(
     : "unresolved";
 }
 
+/**
+ * A Power Fx Blank() or a proven If branch returning Blank is not the same
+ * as an unavailable runtime value. Restrict this to exact lexical forms:
+ * a variable named Blank, a quoted string, or a SQL-backed condition must
+ * never be interpreted as a known empty input.
+ *
+ * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-isblank-isempty
+ * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+ */
+function previewKnownBlank(
+  raw: unknown,
+  symbols?: Record<string, StaticPowerFxValue>,
+  depth = 0
+): boolean {
+  if (typeof raw !== "string" || depth > 6) return false;
+  const source = raw.trim();
+  const lexed = lexPowerFx(source);
+  if (lexed.diagnostics.length) return false;
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+
+  if (tokens.length === 3 &&
+      tokens[0].kind === "identifier" &&
+      tokens[0].value.toLowerCase() === "blank" &&
+      tokens[1].value === "(" && tokens[2].value === ")") return true;
+
+  if (tokens[0]?.kind !== "identifier" ||
+      tokens[0].value.toLowerCase() !== "if" ||
+      tokens[1]?.value !== "(" || tokens[tokens.length - 1]?.value !== ")") return false;
+  const branches = splitIfArguments(tokens.slice(2, -1));
+  if (!branches || branches.length < 2) return false;
+
+  for (let i = 0; i + 1 < branches.length; i += 2) {
+    const condition = staticBoolean("=" + expressionText(source, branches[i]), symbols);
+    if (condition === null) return false;
+    if (condition) {
+      return previewKnownBlank("=" + expressionText(source, branches[i + 1]), symbols, depth + 1);
+    }
+  }
+  // If with no matching condition and no ElseResult returns Blank().
+  return branches.length % 2 === 0 ||
+    previewKnownBlank("=" + expressionText(source, branches[branches.length - 1]), symbols, depth + 1);
+}
+
 export type PreviewInputState = "value" | "hint" | "empty" | "unknown";
 
 /**
@@ -368,12 +412,18 @@ export function previewInputContent(
   const source = props.Default !== undefined ? props.Default : props.Value;
   if (source !== undefined && source !== null) {
     const initial = staticString(source, symbols);
-    if (initial === null) return { text: null, state: "unknown" };
-    if (initial !== "") return { text: initial, state: "value" };
+    if (initial === null) {
+      if (!previewKnownBlank(source, symbols)) return { text: null, state: "unknown" };
+    } else if (initial !== "") {
+      return { text: initial, state: "value" };
+    }
   }
   if (hint === undefined || hint === null) return { text: "", state: "empty" };
   const placeholder = staticString(hint, symbols);
-  if (placeholder === null) return { text: null, state: "unknown" };
+  if (placeholder === null) {
+    return previewKnownBlank(hint, symbols)
+      ? { text: "", state: "empty" } : { text: null, state: "unknown" };
+  }
   return { text: placeholder, state: placeholder === "" ? "empty" : "hint" };
 }
 
