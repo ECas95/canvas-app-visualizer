@@ -31,7 +31,11 @@ export interface PreviewScrollItem {
   /** Trailing auto-layout padding can extend the scrollable content bounds. */
   paddingRight?: unknown;
   paddingBottom?: unknown;
-  /** Known App/Parent/Self/local-only symbols; /**
+  /** Known App/Parent/Self/local-only symbols; no SQL or inferred permissions. */
+  symbols?: Record<string, StaticPowerFxValue>;
+}
+
+/**
  * Resolve only literal enum members or a selected, statically verified If
  * branch. A Power Fx text value such as "LayoutOverflow.Scroll" is not an
  * enum, even if it appears in an unselected branch or a local variable.
@@ -45,7 +49,7 @@ export function previewOverflowMode(
   if (raw === undefined || raw === null) return "hide";
   if (typeof raw !== "string" || depth > 6) return "unknown";
   const source = raw.trim();
-  const literal = /^=?\\s*LayoutOverflow\\.(Scroll|Hide)\\s*$/i.exec(source);
+  const literal = /^=?\s*LayoutOverflow\.(Scroll|Hide)\s*$/i.exec(source);
   if (literal) return literal[1].toLowerCase() as "scroll" | "hide";
 
   const lexed = lexPowerFx(source);
@@ -89,9 +93,6 @@ export function previewOverflowMode(
   return args.length % 2 === 1
     ? previewOverflowMode(expression(args[args.length - 1]), symbols, depth + 1)
     : "unknown";
-}
-) : null;
-  return match ? match[1].toLowerCase() as "scroll" | "hide" : "unknown";
 }
 
 /**
