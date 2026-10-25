@@ -3,6 +3,15 @@ import { literalText } from "./layout";
 import { staticBoolean, type StaticPowerFxValue } from "../powerfx/staticEval";
 import { lexPowerFx, significantTokens, type PowerFxToken } from "../powerfx/lexer";
 
+// Defense in depth: even if an asset did not come from the bounded .msapp
+// importer, never place an external URL into SVG href or CSS background-image.
+// Only the locally supported raster formats may be rendered.
+const LOCAL_RASTER_DATA_URL = /^data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+function isLocalRasterDataUrl(value: unknown): value is string {
+  return typeof value === "string" && LOCAL_RASTER_DATA_URL.test(value);
+}
+
 /**
  * Resolve only exact, locally imported raster media names. Never fetch remote
  * URLs or evaluate connector-backed Image formulas. Power Fx comments are
@@ -76,7 +85,42 @@ export function resolvePreviewImage(
   const candidate = sourceMediaName(raw, symbols) ?? literalText(raw);
   if (!candidate || /[\\/:?#]/.test(candidate)) return undefined;
   const name = candidate.replace(/\.(png|jpe?g|gif|webp)$/i, "").toLowerCase();
-  return mediaAssets.find(asset => asset.name === name);
+  return mediaAssets.find(asset => asset.name === name && isLocalRasterDataUrl(asset.dataUrl));
+}
+
+/**
+ * Distinguish a missing local media resource from an Image formula whose
+ * result cannot be known without Power Apps runtime data (e.g. ThisItem,
+ * a connector, or a security variable). Neither state authorizes an image
+ * request or implies that a record or permission exists.
+ *
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-image
+ */
+export function previewImageSourceState(
+  raw: unknown,
+  mediaAssets: PreviewMediaAsset[],
+  symbols?: Record<string, StaticPowerFxValue>
+): "verified" | "runtime-unknown" | "source-unavailable" {
+  if (resolvePreviewImage(raw, mediaAssets, symbols)) return "verified";
+  if (typeof raw !== "string") return "source-unavailable";
+
+  // A known literal or statically selected local name that was not imported
+  // is unavailable; it is not evidence of missing SQL rows or denied access.
+  if (sourceMediaName(raw, symbols) !== null || literalText(raw) !== null) {
+    return "source-unavailable";
+  }
+  const lexed = lexPowerFx(raw.trim());
+  if (lexed.diagnostics.length) return "source-unavailable";
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+  if (!tokens.length || (tokens.length === 3 &&
+      tokens[0].kind === "identifier" && tokens[0].value.toLowerCase() === "blank" &&
+      tokens[1].value === "(" && tokens[2].value === ")")) {
+    return "source-unavailable";
+  }
+  // Unknown formulas are not necessarily errors or empty images. Do not
+  // evaluate them, select a branch, or issue network requests.
+  return "runtime-unknown";
 }
 
 /**
@@ -171,8 +215,7 @@ export function previewImageFit(
 
 /** Only bounded local raster data URLs may be interpolated into CSS. */
 export function previewRasterCssImage(dataUrl: string): string | null {
-  return /^data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(dataUrl)
-    ? `url("${dataUrl}")` : null;
+  return isLocalRasterDataUrl(dataUrl) ? `url("${dataUrl}")` : null;
 }
 
 /**
