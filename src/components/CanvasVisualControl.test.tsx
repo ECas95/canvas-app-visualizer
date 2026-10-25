@@ -960,3 +960,41 @@ describe("Power Fx trivia in Canvas typography enums", () => {
     expect(unknown).not.toContain('font-weight="700"');
   });
 });
+
+describe("Canvas select rendering without a verified Items snapshot", () => {
+  function renderSelect(type: string, properties: Record<string, unknown>,
+    symbols?: Record<string, string | number | boolean>): string {
+    return renderToStaticMarkup(<svg><CanvasVisualControl
+      control={{ ...label(properties), controlType: type }}
+      x={10} y={20} width={140} height={64} clipId="select-clip"
+      simulationSymbols={symbols} /></svg>);
+  }
+
+  it("shows an explicit unknown state instead of a fabricated SQL selection", () => {
+    const html = renderSelect("ModernComboBox@1.0.0", {
+      Items: "=SQLCatalog",
+      DefaultSelectedItems: "=First(SQLCatalog)",
+      Default: '="Not the selected record"',
+      InputTextPlaceholder: '="Find items"'
+    });
+    expect(html).toContain('data-preview-select-state="unknown"');
+    expect(html).toContain("Selection requires runtime data or state");
+    expect(html).not.toContain("Not the selected record");
+    expect(html).not.toContain("Find items");
+    expect(html).not.toContain("SQLCatalog</tspan>");
+  });
+
+  it("shows verified viewport defaults without claiming unknown SQL options are loaded", () => {
+    const properties = {
+      Items: "=SQLCatalog",
+      Default: '=If(App.Width < 720, "Phone", "Desktop")'
+    };
+    const phone = renderSelect("ModernDropdown@1.0.0", properties, { "App.Width": 390 });
+    const desktop = renderSelect("ModernDropdown@1.0.0", properties, { "App.Width": 1366 });
+    expect(phone).toContain('data-preview-select-state="value"');
+    expect(phone).toContain("Phone</tspan>");
+    expect(desktop).toContain("Desktop</tspan>");
+    expect(renderSelect("ModernDropdown@1.0.0", properties))
+      .toContain('data-preview-select-state="unknown"');
+  });
+});
