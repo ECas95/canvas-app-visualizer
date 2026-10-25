@@ -330,6 +330,44 @@ describe("Canvas overflow semantics", () => {
     expect(previewScrollRanges([host, child])).toEqual({ Host: { x: 80, y: 0 } });
   });
 
+  it("indexes many independent scroll hosts without mixing their children", () => {
+    // Synthetic Canvas geometry only: no gallery Items, SQL data or identity.
+    const count = 2_000;
+    const hosts = Array.from({ length: count }, (_, index) =>
+      item(`Host${index}`, [], 0, 0, 100, 100, {
+        overflowY: "=LayoutOverflow.Scroll"
+      }));
+    const children = Array.from({ length: count }, (_, index) =>
+      item(`Child${index}`, [`Host${index}`], 0, 0, 100, 101 + index));
+    const ranges = previewScrollRanges([...hosts, ...children]);
+    expect(Object.keys(ranges)).toHaveLength(count);
+    expect(ranges.Host0).toEqual({ x: 0, y: 1 });
+    expect(ranges.Host999).toEqual({ x: 0, y: 1000 });
+    expect(ranges.Host1999).toEqual({ x: 0, y: 2000 });
+  });
+
+  it("keeps unknown child geometry local to its own scroll host", () => {
+    const nodes = [
+      item("Left", [], 0, 0, 100, 100, { overflowY: "=LayoutOverflow.Scroll" }),
+      item("Right", [], 200, 0, 100, 100, { overflowY: "=LayoutOverflow.Scroll" }),
+      item("Unknown", ["Left"], 0, 0, 100, 250, { dynamic: true }),
+      item("Known", ["Right"], 200, 0, 100, 160)
+    ];
+    expect(previewScrollRanges(nodes)).toEqual({ Right: { x: 0, y: 60 } });
+  });
+
+  it("does not count children behind a missing or real intermediate ancestor", () => {
+    const host = item("Host", [], 0, 0, 100, 100, {
+      overflowY: "=LayoutOverflow.Scroll"
+    });
+    const hiddenBehindUnknown = item("MissingParentChild",
+      ["Host", "MissingParent"], 0, 0, 100, 500);
+    const realContainer = item("Nested", ["Host"], 0, 0, 100, 80);
+    const nestedChild = item("NestedChild", ["Host", "Nested"], 0, 0, 100, 600);
+    expect(previewScrollRanges([host, hiddenBehindUnknown, realContainer, nestedChild]))
+      .not.toHaveProperty("Host");
+  });
+
   it("computes scroll ranges for many valid siblings without a Math.max argument overflow", () => {
     const host = item("Host", [], 0, 0, 100, 100, {
       overflowY: "=LayoutOverflow.Scroll"
