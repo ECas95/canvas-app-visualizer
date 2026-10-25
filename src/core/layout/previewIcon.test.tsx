@@ -146,6 +146,45 @@ describe("Canvas Icon.Rotation source fidelity", () => {
       { "App.Width": 390 })).toContain('transform="rotate(90 12 12)"');
   });
 
+  it("withholds the glyph when Rotation depends on unknown runtime state", () => {
+    for (const rotation of [
+      "=varRotation",
+      "=If(varSqlAuthorized, 90, 0)",
+      "=SQL.IconRotation",
+      '="90deg"'
+    ]) {
+      const html = renderIcon("=Icon.ArrowRight", "Classic/Icon@2.5.0",
+        "=Color.Red", { Rotation: rotation });
+      expect(html).toContain('data-preview-icon-state="unknown"');
+      expect(html).toContain("Icon rotation requires runtime state");
+      expect(html).toContain(">?</tspan>");
+      expect(html).not.toContain('d="' + PREVIEW_ICON_PATHS.arrowright + '"');
+    }
+  });
+
+  it("keeps omitted Rotation at the Canvas default without fabricating uncertainty", () => {
+    const html = renderIcon("=Icon.ArrowRight");
+    expect(html).toContain('d="' + PREVIEW_ICON_PATHS.arrowright + '"');
+    expect(html).not.toContain('data-preview-icon-state="unknown"');
+    expect(html).not.toContain('transform="rotate(');
+  });
+
+  it("resolves responsive Rotation only for known viewport values", () => {
+    const formula = "=If(App.Width < 720, 90, 0)";
+    const props = { Rotation: formula };
+    const phone = renderIcon("=Icon.ArrowRight", "Classic/Icon@2.5.0",
+      "=Color.Red", props, { "App.Width": 390 });
+    const desktop = renderIcon("=Icon.ArrowRight", "Classic/Icon@2.5.0",
+      "=Color.Red", props, { "App.Width": 1366 });
+    const unresolved = renderIcon("=Icon.ArrowRight", "Classic/Icon@2.5.0",
+      "=Color.Red", props);
+    expect(phone).toContain('d="' + PREVIEW_ICON_PATHS.arrowright + '" transform="rotate(90 12 12)"');
+    expect(desktop).toContain('d="' + PREVIEW_ICON_PATHS.arrowright + '"');
+    expect(desktop).not.toContain('transform="rotate(');
+    expect(unresolved).toContain('data-preview-icon-state="unknown"');
+    expect(unresolved).not.toContain('d="' + PREVIEW_ICON_PATHS.arrowright + '"');
+  });
+
   it("preserves Rotation from a generic, versioned Canvas .pa.yaml fixture", () => {
     const yaml = [
       "Screens:",
