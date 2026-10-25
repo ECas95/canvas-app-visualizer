@@ -353,6 +353,45 @@ export function previewInputContent(
   return { text: placeholder, state: placeholder === "" ? "empty" : "hint" };
 }
 
+/**
+ * A ComboBox DefaultSelectedItems formula yields a table of records, not
+ * display text. Without a verified Items snapshot and ItemDisplayText scope,
+ * its selected caption is unknown even when a fallback placeholder is known.
+ * A Dropdown may implicitly select its first Items row, also unavailable in
+ * source-only previews. Do not fabricate either selection from SQL.
+ *
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-combo-box
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-drop-down
+ */
+export type PreviewSelectState = "value" | "hint" | "empty" | "unknown";
+export function previewSelectContent(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): { text: string | null; state: PreviewSelectState } {
+  const props = control.properties;
+  const combo = /combobox/i.test(control.controlType);
+  if (combo && props.DefaultSelectedItems !== undefined &&
+      props.DefaultSelectedItems !== null) {
+    return { text: null, state: "unknown" };
+  }
+  if (props.Default !== undefined && props.Default !== null) {
+    const value = staticString(props.Default, symbols);
+    if (value === null) return { text: null, state: "unknown" };
+    if (value !== "") return { text: value, state: "value" };
+  }
+  if (props.InputTextPlaceholder !== undefined &&
+      props.InputTextPlaceholder !== null) {
+    const hint = staticString(props.InputTextPlaceholder, symbols);
+    if (hint === null) return { text: null, state: "unknown" };
+    return { text: hint, state: hint === "" ? "empty" : "hint" };
+  }
+  // A dropdown with Items but no serialized Default may select the first
+  // record at runtime. ComboBox without DefaultSelectedItems does not.
+  return !combo && props.Items !== undefined
+    ? { text: null, state: "unknown" }
+    : { text: "", state: "empty" };
+}
+
 export function previewText(
   control: CanvasControl,
   symbols?: Record<string, StaticPowerFxValue>
@@ -360,11 +399,7 @@ export function previewText(
   const props = control.properties;
   const kind = previewKind(control.controlType);
   if (kind === "input") return previewInputContent(control, symbols).text;
-  if (kind === "select") {
-    return literalText(props.DefaultSelectedItems) ??
-      literalText(props.Default) ??
-      literalText(props.InputTextPlaceholder);
-  }
+  if (kind === "select") return previewSelectContent(control, symbols).text;
   return literalText(props.Text) ?? literalText(props.Label);
 }
 
