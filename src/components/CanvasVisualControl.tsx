@@ -31,7 +31,7 @@ export function CanvasVisualControl({
   // Microsoft .pa.yaml uses ModernIcon@1.1.0 (not only Modern/Icon).
   // Modern Icon.Icon is a Fluent string and its color is IconColor.
   const isModernIcon = kind === "icon" && /^modern\/?icon(?:@|$)/i.test(control.controlType);
-  const media = kind === "image" ? resolvePreviewImage(props.Image, mediaAssets) : undefined;
+  const media = kind === "image" ? resolvePreviewImage(props.Image, mediaAssets, simulationSymbols) : undefined;
   const imagePosition = kind === "image"
     ? (props.ImagePosition == null ? "fit" : previewImagePosition(props.ImagePosition, simulationSymbols))
     : null;
