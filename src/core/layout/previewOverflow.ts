@@ -114,6 +114,25 @@ export function previewScrollRanges(
 ): Record<string, PreviewScrollRange> {
   const ranges: Record<string, PreviewScrollRange> = Object.create(null);
   const byId = new Map(items.map(item => [item.id, item]));
+  // Index each visible non-Group node under its nearest real ancestor once.
+  // A Canvas editor Group is organizational: its children belong to the
+  // surrounding container. Do not flatten through a real nested control.
+  // Repeatedly filtering all items per scroll host was quadratic for screens
+  // with many nested containers, even when each host had only one child.
+  const childrenByHost = new Map<string, PreviewScrollItem[]>();
+  for (const item of items) {
+    if (item.editorGroup) continue;
+    for (let index = item.ancestors.length - 1; index >= 0; index -= 1) {
+      const ancestorId = item.ancestors[index];
+      const ancestor = byId.get(ancestorId);
+      if (!ancestor) break;
+      if (ancestor.editorGroup) continue;
+      const children = childrenByHost.get(ancestorId) ?? [];
+      children.push(item);
+      childrenByHost.set(ancestorId, children);
+      break;
+    }
+  }
   for (const host of items) {
     // Editor Groups are organizational only. Their serialized bounding boxes
     // do not contribute layout geometry or create independent scroll hosts.
@@ -123,17 +142,7 @@ export function previewScrollRanges(
     if ((!horizontal && !vertical) || host.dynamic || host.visibilityUnknown ||
         ![host.x, host.y, host.width, host.height].every(Number.isFinite) ||
         host.width <= 0 || host.height <= 0) continue;
-    const children = items.filter(item => {
-      if (item.editorGroup) return false;
-      const hostIndex = item.ancestors.indexOf(host.id);
-      if (hostIndex < 0) return false;
-      // A Group does not introduce a layout boundary. Count descendants
-      // through editor Groups as direct content of the actual scroll host,
-      // but stop at real nested containers, galleries and other controls.
-      return item.ancestors.slice(hostIndex + 1).every(id =>
-        byId.get(id)?.editorGroup === true
-      );
-    });
+    const children = childrenByHost.get(host.id) ?? [];
     if (!children.length || children.some(item =>
       item.dynamic || item.visibilityUnknown ||
       ![item.x, item.y, item.width, item.height].every(Number.isFinite) ||
