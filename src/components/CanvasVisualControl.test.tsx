@@ -1107,3 +1107,28 @@ describe("fail-closed Canvas image appearance with runtime-only properties", () 
     expect(html).not.toContain('data-preview-image-state="verified"');
   });
 });
+
+
+describe("constant Power Fx visual enum rendering", () => {
+  it("renders a provable container shadow and dashed outline without runtime symbols", () => {
+    const html = renderContainer({
+      Fill: "=Color.White",
+      DropShadow: "=If(true, DropShadow.Light, DropShadow.None)",
+      BorderColor: "=Color.Black",
+      BorderThickness: "=2",
+      BorderStyle: "=If(true, BorderStyle.Dashed, BorderStyle.None)"
+    });
+    expect(html).toContain("filter:drop-shadow(0px 1px 2px");
+    expect(html).toContain('stroke-dasharray="6 4"');
+  });
+
+  it("does not draw unverified shadows or enable an unknown border enum", () => {
+    const html = renderContainer({
+      Fill: "=Color.White",
+      DropShadow: "=If(varSqlAuthorized, DropShadow.Bold, DropShadow.None)",
+      BorderStyle: "=If(varSqlAuthorized, BorderStyle.Dashed, BorderStyle.None)"
+    });
+    expect(html).not.toContain("filter:drop-shadow(");
+    expect(html).not.toContain("stroke-dasharray=");
+  });
+});
