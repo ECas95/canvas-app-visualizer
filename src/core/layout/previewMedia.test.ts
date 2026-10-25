@@ -15,6 +15,51 @@ describe("local-only image preview", () => {
     expect(resolvePreviewImage('="CompanyLogo.png"', media)).toBe(media[0]);
   });
 
+  it("resolves only exact local Media tokens with Power Fx comments and whitespace", () => {
+    expect(resolvePreviewImage("=Media /* source */ . CompanyLogo // trailing", media))
+      .toBe(media[0]);
+    expect(resolvePreviewImage("=Media. /* source */ CompanyLogo", media))
+      .toBe(media[0]);
+    expect(resolvePreviewImage('="CompanyLogo.png" /* local */', media))
+      .toBe(media[0]);
+    expect(resolvePreviewImage("=CompanyLogo /* source */", media))
+      .toBe(media[0]);
+  });
+
+  it("selects only a statically verified local image branch", () => {
+    const formula = "=If(App.Width < 720, Media.CompanyLogo, Media.Other)";
+    expect(resolvePreviewImage(formula, media, { "App.Width": 390 }))
+      .toBe(media[0]);
+    expect(resolvePreviewImage(formula, media, { "App.Width": 1366 }))
+      .toBeUndefined();
+    expect(resolvePreviewImage(formula, media)).toBeUndefined();
+    expect(resolvePreviewImage(
+      "=If(true, If(false, Media.Other, Media.CompanyLogo), Media.Other)", media
+    )).toBe(media[0]);
+  });
+
+  it("does not infer permission-dependent media from YAML or a viewport", () => {
+    const formula = "=If(varSqlAuthorized, Media.CompanyLogo, Media.Other)";
+    expect(resolvePreviewImage(formula, media)).toBeUndefined();
+    expect(resolvePreviewImage(formula, media, { "App.Width": 390 }))
+      .toBeUndefined();
+    expect(resolvePreviewImage("=ThisItem.Image", media)).toBeUndefined();
+    expect(resolvePreviewImage("=SQL.Image", media)).toBeUndefined();
+  });
+
+  it("rejects text impersonation, malformed syntax and external paths", () => {
+    for (const formula of [
+      '=Media.CompanyLogo & "x"',
+      "=Media.CompanyLogo /* unterminated",
+      "=Media.CompanyLogo + 1",
+      '=If(true, "https://example.com/CompanyLogo.png", Media.CompanyLogo)',
+      '=If(true, "Media.CompanyLogo", Media.CompanyLogo)',
+      "=If(true, Media.CompanyLogo, )"
+    ]) {
+      expect(resolvePreviewImage(formula, media)).toBeUndefined();
+    }
+  });
+
   it("rejects dynamic and remote image references", () => {
     expect(resolvePreviewImage("=ThisItem.Photo", media)).toBeUndefined();
     expect(resolvePreviewImage("=If(varA, CompanyLogo, Blank())", media)).toBeUndefined();
