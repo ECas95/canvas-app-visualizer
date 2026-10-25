@@ -39,6 +39,49 @@ describe("Canvas corner radius preview", () => {
     expect(radii.bottomRight).toBe(4);
   });
 
+  it("evaluates source-only constant Power Fx radii without viewport symbols", () => {
+    const properties = {
+      RadiusTopLeft: "=If(true, 24, 8)",
+      RadiusTopRight: "=Max(4, 12)",
+      RadiusBottomRight: "=2 * 6",
+      RadiusBottomLeft: "=If(false, 30, 5)"
+    };
+    expect(previewCornerRadii(properties, 200, 100)).toEqual({
+      topLeft: 24, topRight: 12, bottomRight: 12, bottomLeft: 5
+    });
+    const outline = previewRoundedRectPath(0, 0, 200, 100,
+      previewCornerRadii(properties, 200, 100));
+    expect(previewChildClipPath(properties, 0, 0, 200, 100)).toBe(outline);
+    expect(outline).toContain("M 24 0");
+    expect(outline).toContain("A 12 12 0 0 1 200 12");
+  });
+
+  it("keeps runtime-dependent and non-finite radii unverified without symbols", () => {
+    const properties = {
+      RadiusTopLeft: "=If(varSqlAuthorized, 30, 0)",
+      RadiusTopRight: "=Parent.Width / 10",
+      RadiusBottomRight: "=1 / 0"
+    };
+    expect(previewCornerRadii(properties, 100, 60)).toEqual({
+      topLeft: 4, topRight: 4, bottomRight: 4, bottomLeft: 4
+    });
+    expect(previewChildClipPath(properties, 0, 0, 100, 60))
+      .toBe(previewChildClipPath({}, 0, 0, 100, 60));
+  });
+
+  it("does not require symbols for known constants inside responsive-independent If", () => {
+    const properties = {
+      RadiusTopLeft: "=If(false, 18, 6)",
+      RadiusTopRight: "=If(true, 0, 18)"
+    };
+    expect(previewCornerRadii(properties, 120, 80)).toEqual({
+      topLeft: 6, topRight: 0, bottomRight: 4, bottomLeft: 4
+    });
+    const clip = previewChildClipPath(properties, 0, 0, 120, 80);
+    expect(clip).toContain("M 6 0");
+    expect(clip).toContain("H 120 L 120 0");
+  });
+
   it("retains the previous approximate default when radius is omitted", () => {
     expect(previewCornerRadii({}, 100, 50)).toEqual({
       topLeft: 4, topRight: 4, bottomRight: 4, bottomLeft: 4
