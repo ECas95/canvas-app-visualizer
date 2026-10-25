@@ -292,4 +292,35 @@ describe("Canvas overflow semantics", () => {
     expect(previewScrollRanges(nodes)).not.toHaveProperty("Host");
   });
 
+
+  it("keeps a verified vertical range when only the hidden horizontal axis overflows", () => {
+    const host = item("Host", [], 0, 0, 100, 100, {
+      overflowX: "=LayoutOverflow.Hide", overflowY: "=LayoutOverflow.Scroll"
+    });
+    const child = item("Child", ["Host"], Number.MAX_VALUE, 0,
+      Number.MAX_VALUE, 180);
+    expect(previewScrollRanges([host, child])).toEqual({ Host: { x: 0, y: 80 } });
+  });
+
+  it("keeps a verified horizontal range when only the hidden vertical axis overflows", () => {
+    const host = item("Host", [], 0, 0, 100, 100, {
+      overflowX: "=LayoutOverflow.Scroll", overflowY: "=LayoutOverflow.Hide"
+    });
+    const child = item("Child", ["Host"], 0, Number.MAX_VALUE,
+      180, Number.MAX_VALUE);
+    expect(previewScrollRanges([host, child])).toEqual({ Host: { x: 80, y: 0 } });
+  });
+
+  it("computes scroll ranges for many valid siblings without a Math.max argument overflow", () => {
+    const host = item("Host", [], 0, 0, 100, 100, {
+      overflowY: "=LayoutOverflow.Scroll"
+    });
+    // Larger than the engine's safe function-argument count. No SQL rows are
+    // generated; these are synthetic layout nodes exercising the extent reducer.
+    const children = Array.from({ length: 140_000 }, (_, index) =>
+      item(`Child${index}`, ["Host"], 0, index, 100, 10));
+    expect(previewScrollRanges([host, ...children]))
+      .toEqual({ Host: { x: 0, y: 139_909 } });
+  });
+
 });
