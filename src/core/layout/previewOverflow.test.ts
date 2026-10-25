@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  previewOverflowMode, previewScrollRanges, previewClampScroll,
+  previewOverflowMode, previewScrollRanges, previewScrollOverlayAnchors, previewClampScroll,
   previewScrolledPosition, previewWheelScroll, type PreviewScrollItem
 } from "./previewOverflow";
 
@@ -380,4 +380,48 @@ describe("Canvas overflow semantics", () => {
       .toEqual({ Host: { x: 0, y: 139_909 } });
   });
 
+});
+
+
+describe("scroll overlay paint order", () => {
+  it("anchors nested scrollbars after their last descendant and before later siblings", () => {
+    const nodes = [
+      { id: "Outer", ancestors: [] },
+      { id: "First", ancestors: ["Outer"] },
+      { id: "Inner", ancestors: ["Outer"] },
+      { id: "Leaf", ancestors: ["Outer", "Inner"] },
+      { id: "LaterSibling", ancestors: [] }
+    ];
+    const overlays = previewScrollOverlayAnchors(nodes, new Set(["Outer", "Inner"]));
+    expect([...overlays.entries()]).toEqual([["Leaf", ["Outer", "Inner"]]]);
+    expect(overlays.has("LaterSibling")).toBe(false);
+  });
+
+  it("respects filtered visibility and editor groups without inventing descendants", () => {
+    const focused = [
+      { id: "Host", ancestors: [] },
+      { id: "EditorGroup", ancestors: ["Host"] },
+      { id: "Child", ancestors: ["Host", "EditorGroup"] },
+      { id: "Unrelated", ancestors: [] }
+    ];
+    expect([...previewScrollOverlayAnchors(focused, new Set(["Host"])).entries()])
+      .toEqual([["Child", ["Host"]]]);
+    // When focus mode hides descendants, the visible host is its own anchor.
+    expect([...previewScrollOverlayAnchors(focused.slice(0, 1), new Set(["Host"])).entries()])
+      .toEqual([["Host", ["Host"]]]);
+    expect(previewScrollOverlayAnchors(focused, new Set(["Missing"])).size).toBe(0);
+  });
+
+  it("indexes thousands of independent hosts without cross-host overlays", () => {
+    const count = 2_000;
+    const nodes = Array.from({ length: count }, (_, index) => [
+      { id: `Host${index}`, ancestors: [] },
+      { id: `Leaf${index}`, ancestors: [`Host${index}`] }
+    ]).flat();
+    const hosts = new Set(Array.from({ length: count }, (_, index) => `Host${index}`));
+    const overlays = previewScrollOverlayAnchors(nodes, hosts);
+    expect(overlays.size).toBe(count);
+    expect(overlays.get("Leaf0")).toEqual(["Host0"]);
+    expect(overlays.get("Leaf1999")).toEqual(["Host1999"]);
+  });
 });
