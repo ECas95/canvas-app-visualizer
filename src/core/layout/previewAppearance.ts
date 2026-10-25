@@ -126,7 +126,9 @@ export function previewColorWithSymbols(
 ): string | null {
   const known = previewColor(raw);
   if (known) return known;
-  if (!symbols || typeof raw !== "string" || depth > 6) return null;
+  // Constant If branches are resolvable without runtime symbols. Preserve
+  // unknown for variables/connectors rather than inventing a fill color.
+  if (typeof raw !== "string" || depth > 6) return null;
   const value = raw.trim();
 
   // Literal text variables and ColorValue(variable) are only accepted as
