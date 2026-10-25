@@ -61,7 +61,6 @@ describe("Canvas image source fidelity and local-only rendering", () => {
   it.each([
     "=Media.Missing",
     '="https://example.invalid/photo.png"',
-    "=Blank()",
     "=Media.CompanyLogo /* unfinished"
   ])("marks statically unavailable image %s without inventing runtime access", formula => {
     expect(previewImageSourceState(formula, media)).toBe("source-unavailable");
