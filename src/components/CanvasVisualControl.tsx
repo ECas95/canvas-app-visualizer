@@ -106,6 +106,10 @@ export function CanvasVisualControl({
   // Keep the uncertainty visible without evaluating external dependencies.
   const labelTextUnknown = kind === "label" && rawText !== undefined &&
     rawText !== null && label === null;
+  // A Button.Text expression can depend on SQL, identity or runtime state.
+  // Keep the ellipsis as an explicitly unverified placeholder, not a label.
+  const buttonTextUnknown = kind === "button" && rawText !== undefined &&
+    rawText !== null && label === null;
   const inset = Math.min(12, Math.max(3, width * 0.04));
   const corners = previewCornerRadii(props, width, height, simulationSymbols);
   const outline = previewRoundedRectPath(x, y, width, height, corners);
@@ -253,7 +257,8 @@ export function CanvasVisualControl({
       data-preview-wrap-state={wrapUnknown ? "unknown" : undefined}
       data-preview-font-state={fontUnknown ? "unknown" : undefined}
       data-preview-font-size-state={fontSizeUnknown ? "unknown" : undefined}
-      data-preview-line-height-state={!lineHeightKnown ? "unknown" : undefined}>
+      data-preview-line-height-state={!lineHeightKnown ? "unknown" : undefined}
+      data-preview-text-state={buttonTextUnknown ? "unknown" : undefined}>
       {displayMode === "unresolved" && (
         <title>DisplayMode requires runtime state; appearance and interaction permissions are not verified</title>
       )}
@@ -261,6 +266,7 @@ export function CanvasVisualControl({
       {fontUnknown && <title>Font requires runtime state or is unsupported; displayed family is a preview fallback</title>}
       {fontSizeUnknown && <title>Font size requires runtime state or exceeds preview limits; displayed size is approximate</title>}
       {!lineHeightKnown && <title>LineHeight requires runtime state or is outside supported preview bounds; displayed spacing is approximate</title>}
+      {buttonTextUnknown && <title>Button Text requires runtime data or state; the ellipsis is a preview placeholder, not verified content</title>}
       <defs>
         <clipPath id={clipId}>
           {/* Unknown runtime corner formulas must not clip verified text or
@@ -281,7 +287,7 @@ export function CanvasVisualControl({
         ) : basicRect}
 
       <g clipPath={`url(#${clipId})`}>
-        {kind === "button" && svgText(text ?? (props.Text ? "…" : "Button"), x + width / 2, "middle",
+        {kind === "button" && svgText(text ?? (rawText != null ? "…" : "Button"), x + width / 2, "middle",
           previewColorWithSymbols(
             disabled ? props.DisabledColor ?? props.Color : props.Color, simulationSymbols
           ) ?? (disabled ? "#555555" : "#ffffff"))}
