@@ -272,7 +272,7 @@ export function previewDisplayMode(
   if (raw === undefined || raw === null) return "edit";
   if (typeof raw !== "string" || depth > 6) return "unresolved";
   const source = raw.trim();
-  const literal = /^=?\\s*DisplayMode\\s*\\.\\s*(Edit|Disabled|View)\\s*$/i.exec(source);
+  const literal = /^=?\s*DisplayMode\s*\.\s*(Edit|Disabled|View)\s*$/i.exec(source);
   if (literal) return literal[1].toLowerCase() as "edit" | "disabled" | "view";
 
   const lexed = lexPowerFx(source);
