@@ -2,7 +2,7 @@ import type { CanvasControl, PreviewMediaAsset } from "../types/canvas";
 import { previewChildClipPath, previewCornerRadii, previewRoundedRectPath } from "../core/layout/previewCorners";
 import { staticBoolean, staticNumber, staticString } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
-import { previewImageFit, previewImageFlipTransform, previewImagePosition, previewImageRotationTransform, previewRasterCssImage, resolvePreviewImage } from "../core/layout/previewMedia";
+import { previewImageFit, previewImageFlipTransform, previewImagePosition, previewImageRotationTransform, previewImageSourceState, previewRasterCssImage, resolvePreviewImage } from "../core/layout/previewMedia";
 import { PREVIEW_ICON_PATHS, previewIconName, previewIconRotation } from "../core/layout/previewIcon";
 import {
   previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewDropShadowFilter, previewIsOpaqueColor, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
@@ -32,6 +32,8 @@ export function CanvasVisualControl({
   // Modern Icon.Icon is a Fluent string and its color is IconColor.
   const isModernIcon = kind === "icon" && /^modern\/?icon(?:@|$)/i.test(control.controlType);
   const media = kind === "image" ? resolvePreviewImage(props.Image, mediaAssets, simulationSymbols) : undefined;
+  const imageSourceState = kind === "image"
+    ? previewImageSourceState(props.Image, mediaAssets, simulationSymbols) : null;
   const imagePosition = kind === "image"
     ? (props.ImagePosition == null ? "fit" : previewImagePosition(props.ImagePosition, simulationSymbols))
     : null;
@@ -51,6 +53,7 @@ export function CanvasVisualControl({
   // the default Fit / unrotated / unflipped state.
   const imageTransformUnknown = kind === "image" && !!media &&
     (imagePosition === null || imageFlip === null || imageRotation === null);
+  const imageUnknown = imageSourceState === "runtime-unknown" || imageTransformUnknown;
   const displayMode = previewDisplayMode(props.DisplayMode, simulationSymbols);
   const disabled = displayMode === "disabled";
   const explicitFill = previewColorWithSymbols(
@@ -372,9 +375,8 @@ export function CanvasVisualControl({
           );
         })()}
         {kind === "image" && (
-          <g data-preview-image-state={media
-            ? (imageTransformUnknown ? "unknown" : "verified")
-            : "source-unavailable"}>
+          <g data-preview-image-state={imageUnknown ? "unknown" : imageSourceState ?? "source-unavailable"}
+            data-preview-image-source-state={imageSourceState ?? undefined}>
           <g transform={imageRotation || undefined}>
           <g transform={imageFlip || undefined}>
           {media && !imageTransformUnknown ? (
@@ -403,13 +405,15 @@ export function CanvasVisualControl({
             <path d={`M ${x + 12} ${y + height - 16} l ${Math.max(5, width * .28)} -${Math.max(5, height * .36)} l ${Math.max(5, width * .18)} ${Math.max(5, height * .2)} l ${Math.max(5, width * .16)} -${Math.max(5, height * .2)}`}
               fill="none" stroke="#7d90a4" strokeWidth={2}/>
             <circle cx={x + Math.min(width - 12, 24)} cy={y + 22} r={4} fill="#9ab0c5"/>
-            {imageTransformUnknown && (
+            {imageUnknown && (
               <g data-preview-image-uncertainty="true" pointerEvents="none">
                 <text x={x + width / 2} y={y + height / 2}
                   textAnchor="middle" dominantBaseline="middle"
                   fontSize={Math.min(11, Math.max(7, height / 5))}
                   fill="#526579">Image state unknown</text>
-                <title>Image position, flip or rotation requires runtime state; appearance is not verified</title>
+                <title>{imageSourceState === "runtime-unknown"
+                  ? "Image source requires runtime data or state; no image or access is inferred"
+                  : "Image position, flip or rotation requires runtime state; appearance is not verified"}</title>
               </g>
             )}
             </>
