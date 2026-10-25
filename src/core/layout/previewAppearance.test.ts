@@ -3,7 +3,7 @@ import type { CanvasControl } from "../../types/canvas";
 import {
   isDefinitelyHidden, previewVisibility, previewCanRunOnSelect, previewBorderStyle, previewDropShadow, previewDropShadowFilter, previewColor, previewColorWithSymbols, previewDisplayMode, previewFontFamily, PREVIEW_DEFAULT_FONT, previewFontSize, previewFontWeight,
   previewHorizontalAlign, previewCheckedState, previewIsChecked, previewItalic, previewKind,
-  previewInputContent, previewText, previewTextDecoration, previewVerticalAlign, previewSelectionBehaviorGate
+  previewInputContent, previewSelectContent, previewText, previewTextDecoration, previewVerticalAlign, previewSelectionBehaviorGate
 } from "./previewAppearance";
 
 function control(type: string, properties: Record<string, unknown> = {}): CanvasControl {
@@ -747,5 +747,54 @@ describe("verified viewport-dependent Canvas Font families", () => {
     expect(previewFontFamily(control("Label", {
       Font: "=If(App.Width < 720, Font.Arial, Font.Georgia)"
     }), { "App.Width": 1366 })).toBe("Georgia,serif");
+  });
+});
+
+describe("source-only Canvas selection state", () => {
+  it("does not substitute a placeholder or deprecated Default for unresolved ComboBox records", () => {
+    const combo = control("Classic/ComboBox@2.4.0", {
+      Items: "=SQLCatalog",
+      DefaultSelectedItems: "=Filter(SQLCatalog, IsSelected)",
+      Default: '="Stale fallback"',
+      InputTextPlaceholder: '="Find a record"'
+    });
+    expect(previewSelectContent(combo)).toEqual({ text: null, state: "unknown" });
+    expect(previewSelectContent(combo, { "App.Width": 390 }))
+      .toEqual({ text: null, state: "unknown" });
+    expect(previewText(combo)).toBeNull();
+  });
+
+  it("does not infer the first dropdown record from Items alone", () => {
+    const dropdown = control("ModernDropdown@1.0.0", { Items: "=SQLCatalog" });
+    expect(previewSelectContent(dropdown)).toEqual({ text: null, state: "unknown" });
+    expect(previewSelectContent(control("Classic/DropDown@2.3.1")))
+      .toEqual({ text: "", state: "empty" });
+  });
+
+  it("distinguishes a known initial value, an empty default and a verified hint", () => {
+    const dropdown = control("ModernDropdown@1.0.0", {
+      Default: '=If(App.Width < 720, "Phone", "Desktop")',
+      Items: "=SQLCatalog"
+    });
+    expect(previewSelectContent(dropdown, { "App.Width": 390 }))
+      .toEqual({ text: "Phone", state: "value" });
+    expect(previewSelectContent(dropdown, { "App.Width": 1366 }))
+      .toEqual({ text: "Desktop", state: "value" });
+    expect(previewSelectContent(dropdown)).toEqual({ text: null, state: "unknown" });
+    expect(previewSelectContent(control("ModernComboBox@1.0.0", {
+      Default: '=""', InputTextPlaceholder: '="Search"'
+    }))).toEqual({ text: "Search", state: "hint" });
+  });
+
+  it("does not turn unknown SQL-dependent defaults into confirmed empty selections", () => {
+    const dropdown = control("ModernDropdown@1.0.0", {
+      Default: "=First(SQLCatalog).Name",
+      InputTextPlaceholder: '="Select a value"'
+    });
+    expect(previewSelectContent(dropdown)).toEqual({ text: null, state: "unknown" });
+    expect(previewSelectContent(control("ModernComboBox@1.0.0", {
+      DefaultSelectedItems: "=Table()",
+      InputTextPlaceholder: '="Select a value"'
+    }))).toEqual({ text: null, state: "unknown" });
   });
 });
