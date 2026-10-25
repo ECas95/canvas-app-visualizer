@@ -195,7 +195,8 @@ export function previewDropShadow(
   const literal = sourceEnumMember(source, "DropShadow",
     ["none", "light", "semilight", "regular", "semibold", "bold", "extrabold"]);
   if (literal) return literal as PreviewDropShadow;
-  if (!symbols) return null;
+  // Constant If conditions are provable even without App/Parent/local symbols.
+  // Runtime-dependent conditions still return null via staticBoolean.
 
   // Resolve only a proven Power Fx If branch. Unavailable runtime conditions,
   // unsupported enum names, strings and arbitrary calls remain unknown.
@@ -256,7 +257,8 @@ export function previewBorderStyle(
   const source = raw.trim();
   const literal = sourceEnumMember(source, "BorderStyle", ["solid", "dashed", "dotted", "none"]);
   if (literal) return literal as PreviewBorderStyle;
-  if (!symbols) return null;
+  // Resolve constant If branches without requiring viewport symbols; keep
+  // SQL, identity, and other runtime-dependent branches unresolved.
 
   const lexed = lexPowerFx(source);
   if (lexed.diagnostics.length) return null;
