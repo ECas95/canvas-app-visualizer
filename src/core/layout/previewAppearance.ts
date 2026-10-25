@@ -409,7 +409,16 @@ export function previewInputContent(
   const props = control.properties;
   const modern = /^modern\/?textinput(?:@|$)/i.test(control.controlType);
   const hint = modern ? props.Placeholder ?? props.HintText : props.HintText;
-  const source = props.Default !== undefined ? props.Default : props.Value;
+  // Text (classic/modern) and Value are live output properties, not
+  // serialized initial input. Even a literal-looking output cannot prove
+  // what a user has typed or whether a placeholder is currently visible.
+  // Only Default establishes the source-defined initial text.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-text-input
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-text-input
+  const source = props.Default;
+  if (source === undefined && (props.Text !== undefined || props.Value !== undefined)) {
+    return { text: null, state: "unknown" };
+  }
   if (source !== undefined && source !== null) {
     const initial = staticString(source, symbols);
     if (initial === null) {
@@ -635,8 +644,12 @@ export function previewCheckedState(
   const props = control.properties;
   // Prefer the source-controlled property over Value, which may be a runtime
   // output. Never OR contradictory properties into an invented true state.
-  const raw = props.Checked !== undefined ? props.Checked :
-    props.Default !== undefined ? props.Default : props.Value;
+  // Modern Checked and classic Default configure the initial state.
+  // Classic Value is a runtime output; never treat it as an initial check.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-toggle
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-checkbox
+  const raw = props.Checked !== undefined ? props.Checked : props.Default;
+  if (raw === undefined && props.Value !== undefined) return "unknown";
   if (raw === undefined || raw === null) return "unchecked";
   const resolved = staticBoolean(raw, symbols);
   return resolved === null ? "unknown" : resolved ? "checked" : "unchecked";
