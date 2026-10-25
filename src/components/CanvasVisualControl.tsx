@@ -74,6 +74,11 @@ export function CanvasVisualControl({
   const fontFamily = previewFontFamily(control, simulationSymbols);
   // Bound pathological imported strings while retaining normal multiline labels.
   const text = label?.slice(0, 4096);
+  // A serialized Text formula can depend on SQL, user identity, or other
+  // runtime state. An unresolved value is not a verified empty string.
+  // Keep the uncertainty visible without evaluating external dependencies.
+  const labelTextUnknown = kind === "label" && rawText !== undefined &&
+    rawText !== null && label === null;
   const inset = Math.min(12, Math.max(3, width * 0.04));
   const corners = previewCornerRadii(props, width, height, simulationSymbols);
   const outline = previewRoundedRectPath(x, y, width, height, corners);
@@ -217,6 +222,15 @@ export function CanvasVisualControl({
           previewColorWithSymbols(
             disabled ? props.DisabledColor ?? props.Color : props.Color, simulationSymbols
           ) ?? (disabled ? "#555555" : "#ffffff"))}
+        {labelTextUnknown && (
+          <g data-preview-text-state="unknown" pointerEvents="none">
+            <text x={x + Math.min(8, width / 8)}
+              y={y + Math.min(16, height / 2 + 4)}
+              fontSize={Math.min(11, Math.max(7, height / 3))}
+              fill="#6b7280">Text unknown</text>
+            <title>Text requires runtime data or state; empty content is not verified</title>
+          </g>
+        )}
         {kind === "label" && text && (wraps ? (
           // HTML layout measures glyphs in the browser: SVG <text> does not wrap.
           // Only serialized Wrap=true (or a provably true local expression) opts in.
