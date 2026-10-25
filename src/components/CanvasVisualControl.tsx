@@ -230,6 +230,10 @@ export function CanvasVisualControl({
     const firstY = firstTextLineY(atY, totalLines, lineHeight) + firstIndex * lineHeight;
     return (
       <text x={point.x} y={firstY} dominantBaseline="middle"
+        // SVG defaults to collapsing repeated/edge spaces. Canvas Text source
+        // literals retain whitespace; Wrap=false must not introduce wrapping.
+        // CSS white-space is the SVG 2 replacement for deprecated xml:space.
+        style={{ whiteSpace: "pre" }}
         textAnchor={point.anchor} fill={color} fontFamily={fontFamily}
         fontSize={fontSize} fontWeight={fontWeight}
         fontStyle={italic ? "italic" : undefined}
