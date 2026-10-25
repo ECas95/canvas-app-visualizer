@@ -232,8 +232,8 @@ export function CanvasVisualControl({
               textDecoration
             }}>
               <span style={{
-                display: "block", width: "100%", whiteSpace: "pre-wrap",
-                overflowWrap: "break-word", wordBreak: "normal",
+                display: "block", width: "100%", minWidth: 0, maxWidth: "100%",
+                whiteSpace: "pre-wrap", overflowWrap: "anywhere", wordBreak: "normal",
                 textAlign: horizontalAlign === "justify" ? "justify" :
                   horizontalAlign === "middle" ? "center" :
                   horizontalAlign === "end" ? "right" : "left"
