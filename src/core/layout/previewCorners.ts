@@ -69,16 +69,24 @@ export function previewRoundedRectPath(
   const tr = topRight * scale;
   const br = bottomRight * scale;
   const bl = bottomLeft * scale;
+  // SVG quadratic Q corners are parabolic, not quarter-circular. Canvas
+  // radius properties describe circular corners, so use SVG elliptical arcs
+  // (equal radii). A zero-radius corner is a straight line, not a degenerate
+  // arc. Share this exact geometry between the outline and child clip path.
+  const corner = (radius: number, endX: number, endY: number) =>
+    radius > 0
+      ? `A ${radius} ${radius} 0 0 1 ${endX} ${endY}`
+      : `L ${endX} ${endY}`;
   return [
     `M ${x + tl} ${y}`,
     `H ${x + w - tr}`,
-    `Q ${x + w} ${y} ${x + w} ${y + tr}`,
+    corner(tr, x + w, y + tr),
     `V ${y + h - br}`,
-    `Q ${x + w} ${y + h} ${x + w - br} ${y + h}`,
+    corner(br, x + w - br, y + h),
     `H ${x + bl}`,
-    `Q ${x} ${y + h} ${x} ${y + h - bl}`,
+    corner(bl, x, y + h - bl),
     `V ${y + tl}`,
-    `Q ${x} ${y} ${x + tl} ${y}`,
+    corner(tl, x + tl, y),
     "Z"
   ].join(" ");
 }
