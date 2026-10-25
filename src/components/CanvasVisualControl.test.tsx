@@ -903,3 +903,60 @@ describe("Canvas responsive Font family rendering", () => {
     expect(unknown).toContain('font-family:&quot;Segoe UI&quot;,system-ui,sans-serif');
   });
 });
+
+describe("Power Fx trivia in Canvas typography enums", () => {
+  it("preserves commented alignment and font weight in SVG and wrapped labels", () => {
+    const properties = {
+      Text: '="Synthetic typography"',
+      Align: "=Align /* source comment */ . Right // trailing comment",
+      VerticalAlign: "=VerticalAlign /* source comment */ . Bottom",
+      FontWeight: "=FontWeight /* source comment */ . Semibold"
+    };
+    const svg = render({ ...properties, Wrap: "=false" });
+    expect(svg).toContain('text-anchor="end"');
+    expect(svg).toContain('font-weight="600"');
+    const wrapped = render({ ...properties, Wrap: "=true" });
+    expect(wrapped).toContain("<foreignObject");
+    expect(wrapped).toContain("text-align:right");
+    expect(wrapped).toContain("align-items:flex-end");
+    expect(wrapped).toContain("font-weight:600");
+  });
+
+  it.each([
+    { viewport: 390, anchor: "start", weight: 700, vertical: "flex-start" },
+    { viewport: 768, anchor: "end", weight: 400, vertical: "flex-end" },
+    { viewport: 1366, anchor: "end", weight: 400, vertical: "flex-end" }
+  ])("selects only verified responsive typography at $viewport px", ({ viewport, anchor, weight, vertical }) => {
+    const properties = {
+      Text: '="Responsive text"',
+      Align: "=If(App.Width < 720, Align /* phone */ . Left, Align.Right /* desktop */)",
+      VerticalAlign: "=If(App.Width < 720, VerticalAlign.Top, VerticalAlign /* desktop */ . Bottom)",
+      FontWeight: "=If(App.Width < 720, FontWeight.Bold /* phone */, FontWeight.Normal)"
+    };
+    const symbols = { "App.Width": viewport };
+    const svg = render({ ...properties, Wrap: "=false" }, symbols);
+    const wrapped = render({ ...properties, Wrap: "=true" }, symbols);
+    expect(svg).toContain(`text-anchor="${anchor}"`);
+    expect(svg).toContain(`font-weight="${weight}"`);
+    expect(wrapped).toContain(`align-items:${vertical}`);
+    expect(wrapped).toContain(`font-weight:${weight}`);
+  });
+
+  it("never promotes text, malformed members or runtime conditions to verified styling", () => {
+    const invalid = render({
+      Text: '="Unverified style"',
+      Align: '="Align.Right"',
+      VerticalAlign: "=VerticalAlign.NotAValue",
+      FontWeight: "=FontWeight.Bold + 1"
+    });
+    expect(invalid).not.toContain('text-anchor="end"');
+    expect(invalid).not.toContain('font-weight="700"');
+    const unknown = render({
+      Text: '="Unverified permission"',
+      Align: "=If(varSqlPermission, Align.Right, Align.Left)",
+      FontWeight: "=If(varSqlPermission, FontWeight.Bold, FontWeight.Normal)"
+    }, { "App.Width": 1366 });
+    expect(unknown).not.toContain('text-anchor="end"');
+    expect(unknown).not.toContain('font-weight="700"');
+  });
+});
