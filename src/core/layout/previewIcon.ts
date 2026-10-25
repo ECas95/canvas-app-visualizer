@@ -53,22 +53,32 @@ export function previewIconName(
 ): PreviewIconResult {
   if (typeof raw !== "string" || depth > 6) return null;
   const source = raw.trim();
-  const enumMatch = /^=?\s*Icon\.([A-Za-z]+)\s*$/i.exec(source);
-  let name = enumMatch?.[1]?.toLowerCase();
-  if (!name && modern) {
-    // Modern Icon.Icon is a Fluent string; classic Icon enums are distinct.
-    const literal = /^=?\s*"([A-Za-z]+)"\s*$/.exec(source);
-    name = literal?.[1]?.toLowerCase();
-  }
-  if (name === "none") return "none";
-  if (modern && name === "delete") name = "trash";
-  if (name && iconNames.has(name)) return name as PreviewIconName;
-  if (!symbols) return null;
-
+  // Icon enums and modern Fluent names have different Power Fx types.
+  // Tokenize first so valid comments/trivia do not hide an enum, while
+  // strings, concatenations and malformed formulas cannot impersonate one.
   const lexed = lexPowerFx(source);
   if (lexed.diagnostics.length) return null;
   const tokens = significantTokens(lexed.tokens);
   if (tokens[0]?.value === "=") tokens.shift();
+
+  let name: string | undefined;
+  if (tokens.length === 3 &&
+      tokens[0].kind === "identifier" &&
+      tokens[0].value.toLowerCase() === "icon" &&
+      tokens[1].value === "." &&
+      tokens[2].kind === "identifier") {
+    name = tokens[2].value.toLowerCase();
+  } else if (modern && tokens.length === 1 && tokens[0].kind === "string") {
+    // Fluent icon names are text only on modern Icon controls.
+    const literal = tokens[0].value.slice(1, -1).replaceAll('""', '"');
+    if (/^[A-Za-z]+$/.test(literal)) name = literal.toLowerCase();
+  }
+  if (name === "none") return "none";
+  if (modern && name === "delete") name = "trash";
+  if (name && iconNames.has(name)) return name as PreviewIconName;
+
+  // An If with a literal condition is resolvable even without a symbol
+  // context. Runtime-dependent conditions still return null (fail closed).
   if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
       tokens[tokens.length - 1]?.value !== ")") return null;
 
