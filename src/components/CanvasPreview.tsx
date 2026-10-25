@@ -487,7 +487,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                 galleryRecordsUnknown(item.control) && !item.visibilityUnknown
                 ? item.galleryTemplate
                 : null;
-              const slots = template ? Math.min(6, template.wrapCount) : 0;
+              // A fallback for unresolved WrapCount/TemplateSize is not verified geometry.
+              // Do not draw additional template slots when their positions are unknown.
+              const slots = template && !template.dynamic ? Math.min(6, template.wrapCount) : 0;
               const guide = template && (
                 <g pointerEvents="none"
                   clipPath={`url(#${instanceId}-bounds-${index})`}>
@@ -498,13 +500,15 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                       rx={8} fill="none" stroke="#8194ac" strokeDasharray="6 5"
                       strokeWidth={1} opacity={0.55} />;
                   })}
-                  <rect x={item.x + 7} y={item.y + Math.max(0, Math.min(item.height - 25, template.height - 25))}
+                  <rect x={item.x + 7} y={item.y + (template.dynamic ? 7 : Math.max(0, Math.min(item.height - 25, template.height - 25)))}
                     width={Math.min(276, Math.max(0, item.width - 14))} height={22}
                     rx={4} fill="#edf3fa" stroke="#ccd7e4" />
                   <text x={item.x + 13}
-                    y={item.y + Math.max(0, Math.min(item.height - 25, template.height - 25)) + 15}
+                    y={item.y + (template.dynamic ? 7 : Math.max(0, Math.min(item.height - 25, template.height - 25))) + 15}
                     fontSize={11} fill="#42536b">
-                    Template only — runtime records unavailable
+                    {template.dynamic
+                      ? "Template geometry unknown — runtime formula or missing defaults"
+                      : "Template only — runtime records unavailable"}
                   </text>
                   <title>Cannot determine loading, emptiness or access from source</title>
                 </g>
