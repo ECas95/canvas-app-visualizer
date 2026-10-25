@@ -462,6 +462,46 @@ describe("responsive Canvas outline radii", () => {
   });
 });
 
+describe("verified Canvas control content clipping", () => {
+  it("does not clip text using the illustrative radius for an unknown runtime formula", () => {
+    const html = render({
+      Text: '="Protected by the control bounds"',
+      Fill: "=Color.White",
+      RadiusTopLeft: "=If(varRuntimePermission, 32, 0)",
+      RadiusTopRight: "=0", RadiusBottomRight: "=0", RadiusBottomLeft: "=0"
+    });
+    // The outline is still an approximation, but clipping cannot discard
+    // visible pixels based on an unavailable permission or runtime value.
+    expect(html).toContain('<path d="M 14 20');
+    expect(html).toContain('<clipPath id="test-label-clip"><path d="M 11 21 H 149');
+    expect(html).toContain("Protected by the control bounds");
+  });
+
+  it("preserves verified asymmetric source corners in the content clip", () => {
+    const html = render({
+      Text: '="Rounded"',
+      RadiusTopLeft: "=12", RadiusTopRight: "=0",
+      RadiusBottomRight: "=6", RadiusBottomLeft: "=2"
+    });
+    expect(html).toContain('<clipPath id="test-label-clip"><path d="M 23 21 H 149');
+    expect(html).toContain("Rounded");
+  });
+
+  it("selects responsive clip radii only with known viewport dimensions", () => {
+    const props = {
+      Text: '="Responsive"',
+      RadiusTopLeft: "=If(App.Width < 720, 12, 0)",
+      RadiusTopRight: "=0", RadiusBottomRight: "=0", RadiusBottomLeft: "=0"
+    };
+    const phone = render(props, { "App.Width": 390 });
+    const desktop = render(props, { "App.Width": 1366 });
+    const unresolved = render(props);
+    expect(phone).toContain('<clipPath id="test-label-clip"><path d="M 23 21 H 149');
+    expect(desktop).toContain('<clipPath id="test-label-clip"><path d="M 11 21 H 149');
+    expect(unresolved).toContain('<clipPath id="test-label-clip"><path d="M 11 21 H 149');
+  });
+});
+
 describe("Canvas multiline SVG text vertical alignment", () => {
   const multiline = { Text: "=LocalText", Size: "=20", Wrap: "=false" };
   const symbols = { LocalText: "First line\nSecond line" };
