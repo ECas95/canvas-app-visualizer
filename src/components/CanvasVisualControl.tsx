@@ -382,7 +382,12 @@ export function CanvasVisualControl({
           if (icon === "none") return null;
           // Unsupported/runtime-dependent icons are explicitly unknown, not
           // silently represented as a different Power Apps icon.
-          if (icon === null) return svgText("?", x + width / 2, "middle", "#7c8794");
+          if (icon === null) return (
+            <g data-preview-icon-state="unknown" pointerEvents="none">
+              {svgText("?", x + width / 2, "middle", "#7c8794")}
+              <title>Icon source is missing, unsupported, or requires runtime state; no glyph is verified</title>
+            </g>
+          );
           // A missing Rotation uses the Canvas default (0 degrees), but an
           // explicit runtime-dependent Rotation cannot be shown as unrotated.
           // Withhold the glyph until its orientation is verifiable.
