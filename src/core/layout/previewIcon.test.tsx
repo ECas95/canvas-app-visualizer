@@ -43,6 +43,35 @@ describe("Canvas source-only Icon enums", () => {
     expect(previewIconName('="UnrecognizedFluentIcon"', true)).toBeNull();
   });
 
+  it("accepts Power Fx comments in classic and modern icon literals", () => {
+    expect(previewIconName("=Icon /* note */ . Add // trailing")).toBe("add");
+    expect(previewIconName("=Icon. /* note */ ChevronRight")).toBe("chevronright");
+    expect(previewIconName("=Icon /* note */ . None")).toBe("none");
+    expect(previewIconName('= /* note */ "Delete" // trailing', true)).toBe("trash");
+    expect(previewIconName('= /* note */ "Add"', false)).toBeNull();
+    expect(renderIcon("=Icon /* note */ . Add"))
+      .toContain('d="' + PREVIEW_ICON_PATHS.add + '"');
+  });
+
+  it("resolves literal If conditions but keeps unknown runtime icons unresolved", () => {
+    expect(previewIconName("=If(true, Icon.Add, Icon.Cancel)")).toBe("add");
+    expect(previewIconName("=If(false, Icon.Add, Icon.Cancel)")).toBe("cancel");
+    expect(previewIconName("=If(true, Icon /* note */ . Search, Icon.Home)"))
+      .toBe("search");
+    expect(previewIconName('=If(true, "Delete", "Check")', true)).toBe("trash");
+    expect(previewIconName("=If(varCanRead, Icon.Add, Icon.Home)")).toBeNull();
+  });
+
+  it("rejects invalid icon expressions without guessing a glyph", () => {
+    for (const formula of [
+      "=Icon.Add /* unterminated", "=Icon.Add & Icon.Home",
+      '="Icon.Add"', "=Icon.AddressBook", "=Icon.Add.Extra",
+      "=If(true, Icon.Add, )", "=If(true, Icon.Add"
+    ]) expect(previewIconName(formula)).toBeNull();
+    expect(previewIconName('="Add" & "More"', true)).toBeNull();
+    expect(previewIconName('=If(true, "Icon.Add", Icon.Home)')).toBeNull();
+  });
+
   it("renders known SVG glyphs at the center without font-dependent symbols", () => {
     const html = renderIcon("=Icon.Add");
     expect(html).toContain('viewBox="0 0 24 24"');
