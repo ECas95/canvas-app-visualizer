@@ -12,12 +12,13 @@ const asset: PreviewMediaAsset = {
 };
 const media = [asset];
 
-function draw(image: string, assets: PreviewMediaAsset[] = media): string {
+function draw(image: string, assets: PreviewMediaAsset[] = media,
+  position = "=ImagePosition.Fit"): string {
   const control: CanvasControl = {
     id: "synthetic-image",
     name: "SyntheticImage",
     controlType: "Classic/Image@2.1.0",
-    properties: { Image: image, ImagePosition: "=ImagePosition.Fit" },
+    properties: { Image: image, ImagePosition: position },
     children: [],
     sourceFile: "Src/Synthetic.pa.yaml",
     sourcePath: "Screens/Synthetic/SyntheticImage",
@@ -77,7 +78,7 @@ describe("Canvas image source fidelity and local-only rendering", () => {
     (dataUrl, position) => {
       const injected: PreviewMediaAsset = { ...asset, dataUrl };
       expect(resolvePreviewImage("=Media.CompanyLogo", [injected])).toBeUndefined();
-      const html = draw("=Media.CompanyLogo", [injected]);
+      const html = draw("=Media.CompanyLogo", [injected], position);
       expect(html).toContain('data-preview-image-state="source-unavailable"');
       expect(html).not.toContain("<image ");
       expect(html).not.toContain("<foreignObject");
