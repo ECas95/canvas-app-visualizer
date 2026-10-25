@@ -153,6 +153,35 @@ describe("Canvas overflow semantics", () => {
     expect(previewScrollRanges(nodes)).not.toHaveProperty("Host");
   });
 
+  it("rejects non-finite host origins and negative child dimensions", () => {
+    const host = item("Host", [], 0, 0, 100, 100, {
+      overflowY: "=LayoutOverflow.Scroll"
+    });
+    const child = item("Child", ["Host"], 0, 120, 100, 50);
+    expect(previewScrollRanges([host, child])).toEqual({
+      Host: { x: 0, y: 70 }
+    });
+    expect(previewScrollRanges([{ ...host, x: NaN }, child]))
+      .not.toHaveProperty("Host");
+    expect(previewScrollRanges([host, { ...child, height: -50 }]))
+      .not.toHaveProperty("Host");
+    expect(previewScrollRanges([host, { ...child, width: -10 }]))
+      .not.toHaveProperty("Host");
+  });
+
+  it("never creates infinite scroll offsets from finite but overflowing extents", () => {
+    const host = item("Host", [], 0, 0, 100, 100, {
+      overflowX: "=LayoutOverflow.Scroll"
+    });
+    const enormous = item("Huge", ["Host"], Number.MAX_VALUE, 0,
+      Number.MAX_VALUE, 20);
+    expect(previewScrollRanges([host, enormous])).not.toHaveProperty("Host");
+    const normal = item("Normal", ["Host"], 0, 0, 180, 20);
+    expect(previewScrollRanges([host, normal])).toEqual({
+      Host: { x: 80, y: 0 }
+    });
+  });
+
   it("applies nested offsets to descendants but never to the host itself", () => {
     const outer = item("Outer", [], 10, 20, 200, 200);
     const inner = item("Inner", ["Outer"], 20, 80, 100, 100);
