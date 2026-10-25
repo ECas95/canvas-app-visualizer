@@ -94,6 +94,31 @@ function expressionText(source: string, tokens: PowerFxToken[]): string {
   return tokens.length ? source.slice(tokens[0].start, tokens[tokens.length - 1].end) : "";
 }
 
+/**
+ * Read a complete Power Fx enum literal using lexer tokens. Canvas formulas
+ * may contain whitespace and comments around an enum member; those trivia
+ * must not turn a known state into an approximation. Strings, identifiers,
+ * operators and malformed expressions must never masquerade as enums.
+ * This remains source-only analysis, not a Power Fx runtime evaluator.
+ */
+function sourceEnumMember(
+  raw: string,
+  namespace: string,
+  members: readonly string[]
+): string | null {
+  const lexed = lexPowerFx(raw);
+  if (lexed.diagnostics.length) return null;
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+  if (tokens.length !== 3 ||
+      tokens[0].kind !== "identifier" ||
+      tokens[0].value.toLowerCase() !== namespace.toLowerCase() ||
+      tokens[1].value !== "." ||
+      tokens[2].kind !== "identifier") return null;
+  const member = tokens[2].value.toLowerCase();
+  return members.includes(member) ? member : null;
+}
+
 export function previewColorWithSymbols(
   raw: unknown,
   symbols?: Record<string, StaticPowerFxValue>,
@@ -167,8 +192,9 @@ export function previewDropShadow(
 ): PreviewDropShadow | null {
   if (typeof raw !== "string" || depth > 6) return null;
   const source = raw.trim();
-  const match = /^=?\s*DropShadow\.(None|Light|Semilight|Regular|Semibold|Bold|ExtraBold)\s*$/i.exec(source);
-  if (match) return match[1].toLowerCase() as PreviewDropShadow;
+  const literal = sourceEnumMember(source, "DropShadow",
+    ["none", "light", "semilight", "regular", "semibold", "bold", "extrabold"]);
+  if (literal) return literal as PreviewDropShadow;
   if (!symbols) return null;
 
   // Resolve only a proven Power Fx If branch. Unavailable runtime conditions,
@@ -228,8 +254,8 @@ export function previewBorderStyle(
 ): PreviewBorderStyle | null {
   if (typeof raw !== "string" || depth > 6) return null;
   const source = raw.trim();
-  const match = /^=?\s*BorderStyle\.(Solid|Dashed|Dotted|None)\s*$/i.exec(source);
-  if (match) return match[1].toLowerCase() as PreviewBorderStyle;
+  const literal = sourceEnumMember(source, "BorderStyle", ["solid", "dashed", "dotted", "none"]);
+  if (literal) return literal as PreviewBorderStyle;
   if (!symbols) return null;
 
   const lexed = lexPowerFx(source);
@@ -272,8 +298,8 @@ export function previewDisplayMode(
   if (raw === undefined || raw === null) return "edit";
   if (typeof raw !== "string" || depth > 6) return "unresolved";
   const source = raw.trim();
-  const literal = /^=?\s*DisplayMode\s*\.\s*(Edit|Disabled|View)\s*$/i.exec(source);
-  if (literal) return literal[1].toLowerCase() as "edit" | "disabled" | "view";
+  const literal = sourceEnumMember(source, "DisplayMode", ["edit", "disabled", "view"]);
+  if (literal) return literal as "edit" | "disabled" | "view";
 
   const lexed = lexPowerFx(source);
   if (lexed.diagnostics.length) return "unresolved";
