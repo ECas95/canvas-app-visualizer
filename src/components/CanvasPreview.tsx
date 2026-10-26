@@ -346,9 +346,15 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
     );
   }
 
-  const fill = previewColorWithSymbols(screen.properties.Fill, {
+  // A screen's Fill is a Power Fx formula just like a control's Fill.
+  // A white source-only fallback must not masquerade as the runtime color
+  // when the formula depends on identity, SQL or other unavailable state.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-screen
+  const resolvedScreenFill = previewColorWithSymbols(screen.properties.Fill, {
     "App.Width": width, "App.Height": height, ...variables
-  }) ?? rgba(screen.properties.Fill) ?? "#ffffff";
+  }) ?? rgba(screen.properties.Fill);
+  const screenFillUnknown = screen.properties.Fill != null && resolvedScreenFill === null;
+  const fill = resolvedScreenFill ?? "#ffffff";
   const zoomWidth = zoom === "fit" ? "min(100%,1120px)"
     : `${Math.round(width * Number(zoom) / 100)}px`;
 
@@ -416,6 +422,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
           </div>
           <svg viewBox={`0 0 ${width} ${height}`}
             style={{ aspectRatio: `${width} / ${height}` }}
+            data-preview-screen-fill-state={screenFillUnknown ? "unknown" : undefined}
             role="img" aria-label={`${screen.name} canvas preview`}>
             <defs>
               {items.map((item, index) => (
@@ -426,6 +433,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
               ))}
             </defs>
             <rect width={width} height={height} fill={fill} />
+            {screenFillUnknown && <title>Screen Fill requires runtime state or is unsupported; white is a preview fallback, not a verified background</title>}
             {visibleItems.map(item => {
               const index = indexById.get(item.control.id) ?? 0;
               const selected = selectedId === item.control.id;
@@ -557,6 +565,11 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
       <div className="preview-note">
         <span>{mode === "visual" ? "Static visual approximation" : "Control structure"}</span>
         <span>{visibleItems.length} drawn nodes · {unresolved} unresolved layouts</span>
+        {mode === "visual" && screenFillUnknown && (
+          <span className="preview-unknown-state" role="status">
+            Screen Fill unknown — background color is a preview fallback
+          </span>
+        )}
         {runtimeVisibilityUnknown > 0 && (
           <span className="preview-unknown-state" role="status"
             title="Visible depends on runtime values unavailable from the Canvas source. These nodes are illustrative and may be hidden in the actual app.">
