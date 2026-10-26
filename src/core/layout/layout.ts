@@ -144,6 +144,15 @@ function resolvedNumber(
   return staticNumber(value, symbols);
 }
 
+/** Negative sizes are not verified Canvas geometry; never feed them to Self or siblings. */
+function resolvedDimension(
+  value: unknown,
+  symbols: Record<string, StaticPowerFxValue> | undefined
+): number | null {
+  const number = resolvedNumber(value, symbols);
+  return number !== null && Number.isFinite(number) && number >= 0 ? number : null;
+}
+
 function clamp(
   value: number,
   min: number | null,
@@ -175,8 +184,8 @@ export function buildSiblingGeometrySymbols(
       };
       const baseSymbols = layoutSymbols(baseContext) ?? {};
 
-      const width = staticNumber(control.properties.Width, baseSymbols);
-      const height = staticNumber(control.properties.Height, baseSymbols);
+      const width = resolvedDimension(control.properties.Width, baseSymbols);
+      const height = resolvedDimension(control.properties.Height, baseSymbols);
       const autoHeightUnverified = hasUnverifiedAutoHeight(control, baseSymbols);
       const setNumber = (key: string, value: number | null): void => {
         if (value === null || resolved[key] === value) return;
@@ -202,8 +211,8 @@ export function buildSiblingGeometrySymbols(
         ...(earlyX !== null ? { "Self.X": earlyX } : {}),
         ...(earlyY !== null ? { "Self.Y": earlyY } : {})
       };
-      const finalWidth = staticNumber(control.properties.Width, positionedSymbols) ?? width;
-      const finalHeight = staticNumber(control.properties.Height, positionedSymbols) ?? height;
+      const finalWidth = resolvedDimension(control.properties.Width, positionedSymbols) ?? width;
+      const finalHeight = resolvedDimension(control.properties.Height, positionedSymbols) ?? height;
       const finalSymbols: Record<string, StaticPowerFxValue> = {
         ...positionedSymbols,
         ...(finalWidth !== null ? { "Self.Width": finalWidth } : {}),
@@ -238,8 +247,8 @@ export function controlRect(
   const defaults = defaultControlSize(control.controlType);
   const baseSymbols = layoutSymbols(context);
 
-  const width = resolvedNumber(control.properties.Width, baseSymbols);
-  const height = resolvedNumber(control.properties.Height, baseSymbols);
+  const width = resolvedDimension(control.properties.Width, baseSymbols);
+  const height = resolvedDimension(control.properties.Height, baseSymbols);
   const autoHeightUnverified = hasUnverifiedAutoHeight(control, baseSymbols);
 
   // Family defaults are paint fallbacks, not verified values of an
@@ -269,8 +278,8 @@ export function controlRect(
     ...(initialX !== null ? { "Self.X": initialX } : {}),
     ...(initialY !== null ? { "Self.Y": initialY } : {})
   };
-  const resolvedWidth = resolvedNumber(control.properties.Width, positionedSymbols) ?? width;
-  const resolvedHeight = resolvedNumber(control.properties.Height, positionedSymbols) ?? height;
+  const resolvedWidth = resolvedDimension(control.properties.Width, positionedSymbols) ?? width;
+  const resolvedHeight = resolvedDimension(control.properties.Height, positionedSymbols) ?? height;
   const effectiveWidth = Math.max(0, resolvedWidth ?? defaults.width);
   const effectiveHeight = Math.max(0, resolvedHeight ?? defaults.height);
   const finalSelfWidth = resolvedWidth !== null
@@ -430,7 +439,11 @@ export function autoLayoutChildren(
     const maxWidth = staticNumber(props.LayoutMaxWidth, symbols);
     const minHeight = staticNumber(props.LayoutMinHeight, symbols);
     const maxHeight = staticNumber(props.LayoutMaxHeight, symbols);
-    return (fill !== null && fill < 0) ||
+    const width = staticNumber(props.Width, symbols);
+    const height = staticNumber(props.Height, symbols);
+    return (width !== null && width < 0) ||
+      (height !== null && height < 0) ||
+      (fill !== null && fill < 0) ||
       [minWidth, maxWidth, minHeight, maxHeight]
         .some(value => value !== null && value < 0) ||
       (minWidth !== null && maxWidth !== null && minWidth > maxWidth) ||
