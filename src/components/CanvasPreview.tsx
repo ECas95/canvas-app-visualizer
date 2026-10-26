@@ -15,7 +15,7 @@ import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/lay
 import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScopedState, type PreviewVariables } from "../core/powerfx/previewBehavior";
 import { CanvasVisualControl } from "./CanvasVisualControl";
 import { previewChildClipPath } from "../core/layout/previewCorners";
-import { previewClampScroll, previewScrollRanges, previewScrollOverlayAnchors, previewScrolledPosition, previewWheelScroll,
+import { previewClampScroll, previewOverflowMode, previewScrollRanges, previewScrollOverlayAnchors, previewScrolledPosition, previewWheelScroll,
   type PreviewScrollOffset, type PreviewScrollRange } from "../core/layout/previewOverflow";
 import { Icon } from "./Icon";
 
@@ -298,6 +298,15 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
       : items,
     [items, focusSelection, target]
   );
+  // An unresolved Overflow formula is not evidence of Hide or Scroll. The
+  // preview conservatively withholds scroll interaction, but must disclose
+  // that the absence of a scrollbar is not verified Canvas behavior.
+  const unknownOverflowHosts = visibleItems.filter(item =>
+    isAutoLayout(item.control) && !item.visibilityUnknown && (
+      previewOverflowMode(item.control.properties.LayoutOverflowX, item.renderSymbols) === "unknown" ||
+      previewOverflowMode(item.control.properties.LayoutOverflowY, item.renderSymbols) === "unknown"
+    )
+  ).length;
   // An overlay belongs to its source control's stacking context, not to a
   // global SVG layer. Scrollbars must follow the host's last descendant so
   // they remain above its content but below later sibling controls.
@@ -420,8 +429,14 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
             {visibleItems.map(item => {
               const index = indexById.get(item.control.id) ?? 0;
               const selected = selectedId === item.control.id;
+              const overflowXUnknown = isAutoLayout(item.control) && !item.visibilityUnknown &&
+                previewOverflowMode(item.control.properties.LayoutOverflowX, item.renderSymbols) === "unknown";
+              const overflowYUnknown = isAutoLayout(item.control) && !item.visibilityUnknown &&
+                previewOverflowMode(item.control.properties.LayoutOverflowY, item.renderSymbols) === "unknown";
               const draw = (
                 <g className="visual-control" key={item.control.id}
+                  data-preview-overflow-x-state={overflowXUnknown ? "unknown" : undefined}
+                  data-preview-overflow-y-state={overflowYUnknown ? "unknown" : undefined}
                   role="button" tabIndex={0}
                   aria-label={`Inspect ${item.control.name} (${item.control.controlType})`}
                   onClick={event => { event.stopPropagation(); selectControl(item); }}
@@ -482,7 +497,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                     item.control.controlType,
                     item.dynamic ? "unresolved layout" : null,
                     item.visibilityUnknown ? "runtime visibility not verified" : null,
-                    item.runtimeGalleryStateUnknown ? "AllItems unavailable; content intentionally withheld" : null
+                    item.runtimeGalleryStateUnknown ? "AllItems unavailable; content intentionally withheld" : null,
+                    overflowXUnknown ? "horizontal overflow unknown; scrolling not verified" : null,
+                    overflowYUnknown ? "vertical overflow unknown; scrolling not verified" : null
                   ].filter(Boolean).join(" · ")}</title>
                 </g>
               );
@@ -544,6 +561,12 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
           <span className="preview-unknown-state" role="status"
             title="Visible depends on runtime values unavailable from the Canvas source. These nodes are illustrative and may be hidden in the actual app.">
             {runtimeVisibilityUnknown} nodes with unknown runtime visibility — NOT verified as visible
+          </span>
+        )}
+        {unknownOverflowHosts > 0 && (
+          <span className="preview-unknown-state" role="status"
+            title="A Canvas auto-layout overflow formula depends on unavailable runtime state. No scrollbar is simulated for that unresolved axis.">
+            {unknownOverflowHosts} containers with unknown overflow — scrolling NOT verified
           </span>
         )}
         {interactive && <span className="simulation-status" aria-live="polite">
