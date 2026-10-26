@@ -138,7 +138,8 @@ class Parser {
         // locale-dependent Unicode comparisons require runtime semantics.
         // https://learn.microsoft.com/en-us/power-platform/power-fx/operators
         if (typeof left !== "string" || typeof right !== "string") return null;
-        if (!/^[\\x00-\\x7F]*$/.test(left) || !/^[\\x00-\\x7F]*$/.test(right)) return null;
+        if (![left, right].every(value =>
+          Array.from(value).every(char => char.charCodeAt(0) <= 0x7f))) return null;
         return op === "in" ? right.toLowerCase().includes(left.toLowerCase()) : right.includes(left);
       }
       case "=":
