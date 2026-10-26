@@ -116,6 +116,27 @@ export function defaultControlSize(
   return key ? DEFAULTS[key] : { width: 180, height: 56 };
 }
 
+/**
+ * Canvas Label, HTML text and ModernText can grow their rendered Height when
+ * AutoHeight is enabled. The resulting height depends on browser font metrics,
+ * wrapping and potentially runtime Text; a serialized Height is only a preview
+ * fallback, not proof of the output Height. Unresolved AutoHeight is equally
+ * unverified. Do not apply this rule to TextInput/Button or other controls.
+ *
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-text-box
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-text
+ */
+function hasUnverifiedAutoHeight(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): boolean {
+  const type = control.controlType.toLowerCase();
+  const textControl = /(?:^|\/)(?:label|htmltext)(?:@|$)/.test(type) ||
+    /^moderntext(?:@|$)/.test(type);
+  if (!textControl || control.properties.AutoHeight === undefined) return false;
+  return staticBoolean(control.properties.AutoHeight, symbols) !== false;
+}
+
 function resolvedNumber(
   value: unknown,
   symbols: Record<string, StaticPowerFxValue> | undefined
@@ -156,6 +177,7 @@ export function buildSiblingGeometrySymbols(
 
       const width = staticNumber(control.properties.Width, baseSymbols);
       const height = staticNumber(control.properties.Height, baseSymbols);
+      const autoHeightUnverified = hasUnverifiedAutoHeight(control, baseSymbols);
       const setNumber = (key: string, value: number | null): void => {
         if (value === null || resolved[key] === value) return;
         resolved[key] = value;
@@ -169,7 +191,7 @@ export function buildSiblingGeometrySymbols(
       const firstSymbols: Record<string, StaticPowerFxValue> = {
         ...baseSymbols,
         ...(width !== null ? { "Self.Width": width } : {}),
-        ...(height !== null ? { "Self.Height": height } : {})
+        ...(height !== null && !autoHeightUnverified ? { "Self.Height": height } : {})
       };
       const earlyX = control.properties.X === undefined
         ? 0 : staticNumber(control.properties.X, firstSymbols);
@@ -185,10 +207,13 @@ export function buildSiblingGeometrySymbols(
       const finalSymbols: Record<string, StaticPowerFxValue> = {
         ...positionedSymbols,
         ...(finalWidth !== null ? { "Self.Width": finalWidth } : {}),
-        ...(finalHeight !== null ? { "Self.Height": finalHeight } : {})
+        ...(finalHeight !== null && !autoHeightUnverified
+          ? { "Self.Height": finalHeight } : {})
       };
       setNumber(control.name + ".Width", finalWidth);
-      setNumber(control.name + ".Height", finalHeight);
+      // AutoHeight is an output measurement. Never certify its source Height
+      // for sibling formulas, even when a numeric Height was serialized.
+      setNumber(control.name + ".Height", autoHeightUnverified ? null : finalHeight);
       setNumber(
         control.name + ".X",
         control.properties.X === undefined ? 0 : staticNumber(control.properties.X, finalSymbols)
@@ -215,6 +240,7 @@ export function controlRect(
 
   const width = resolvedNumber(control.properties.Width, baseSymbols);
   const height = resolvedNumber(control.properties.Height, baseSymbols);
+  const autoHeightUnverified = hasUnverifiedAutoHeight(control, baseSymbols);
 
   // Zero is a valid resolved Canvas dimension; do not invent an 8px control.
   // Keep fallback defaults only for dimensions that are genuinely unresolved.
@@ -224,7 +250,7 @@ export function controlRect(
   const selfSymbols = layoutSymbols(
     context,
     finalWidth,
-    finalHeight
+    autoHeightUnverified ? undefined : finalHeight
   );
 
   const initialX = resolvedNumber(control.properties.X, selfSymbols);
@@ -242,10 +268,11 @@ export function controlRect(
   const effectiveWidth = Math.max(0, resolvedWidth ?? defaults.width);
   const effectiveHeight = Math.max(0, resolvedHeight ?? defaults.height);
   const finalSymbols = {
-    ...(layoutSymbols(context, effectiveWidth, effectiveHeight) ?? {}),
+    ...(layoutSymbols(context, effectiveWidth,
+      autoHeightUnverified ? undefined : effectiveHeight) ?? {}),
     ...positionedSymbols,
     "Self.Width": effectiveWidth,
-    "Self.Height": effectiveHeight
+    ...(!autoHeightUnverified ? { "Self.Height": effectiveHeight } : {})
   };
   const x = resolvedNumber(control.properties.X, finalSymbols) ?? initialX;
   const y = resolvedNumber(control.properties.Y, finalSymbols) ?? initialY;
@@ -256,6 +283,7 @@ export function controlRect(
     width: effectiveWidth,
     height: effectiveHeight,
     dynamic:
+      autoHeightUnverified ||
       (control.properties.X !== undefined && x === null) ||
       (control.properties.Y !== undefined && y === null) ||
       (control.properties.Width !== undefined && resolvedWidth === null) ||
@@ -358,7 +386,10 @@ export function autoLayoutChildren(
   ].every(numericKnown) &&
     gap >= 0 && paddingLeft >= 0 && paddingRight >= 0 &&
     paddingTop >= 0 && paddingBottom >= 0;
+  const autoHeightUnverified = !horizontal && children.some(control =>
+    hasUnverifiedAutoHeight(control, symbols));
   const fixedChildren = sizing.every(item =>
+    (horizontal || !hasUnverifiedAutoHeight(item.control, symbols)) &&
     item.fill === 0 && item.width !== null && item.height !== null &&
     [
       item.control.properties.FillPortions,
@@ -376,7 +407,7 @@ export function autoLayoutChildren(
   // when their own dimensions are literal. Keep fallback geometry inspectable
   // but mark the entire sibling layout approximate. Omitted .pa.yaml
   // properties are defaults, not unresolved formulas.
-  const sizingUnknown = children.some(control => [
+  const sizingUnknown = autoHeightUnverified || children.some(control => [
     control.properties.Width, control.properties.Height,
     control.properties.FillPortions,
     control.properties.LayoutMinWidth, control.properties.LayoutMinHeight,
