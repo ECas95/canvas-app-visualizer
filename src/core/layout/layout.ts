@@ -660,16 +660,28 @@ export function galleryTemplateLayout(
 
   const variant = (control.variant ?? "").toLowerCase();
   const horizontal = variant.includes("horizontal");
-  // Gallery formulas such as WrapCount = If(Self.Width < 600, 1, 3)
-  // refer to the gallery control, not its parent. Only expose Self geometry
-  // when the preview rect is source-verified: a fallback Width/Height must
-  // never turn a runtime-dependent template into a certified layout.
-  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/create-responsive-layout
-  const symbols = layoutSymbols(
-    context,
-    rect.dynamic ? undefined : rect.width,
-    rect.dynamic ? undefined : rect.height
-  );
+  // A dynamic rect can have an unknown X/Y but independently verified
+  // Width/Height. Allow Self dimensions only when their own source formulas
+  // resolve and agree with the painted rect. Never certify family defaults,
+  // SQL-dependent dimensions, or container-managed sizes as Self geometry.
+  // Keep the overall template dynamic if its position remains unknown.
+  // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/operators
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-gallery
+  const containerManagedSize = [
+    "FillPortions", "AlignInContainer",
+    "LayoutMinWidth", "LayoutMaxWidth",
+    "LayoutMinHeight", "LayoutMaxHeight"
+  ].some(key => control.properties[key] !== undefined);
+  const sourceSymbols = layoutSymbols(context);
+  const sourceWidth = containerManagedSize
+    ? null : resolvedDimension(control.properties.Width, sourceSymbols);
+  const sourceHeight = containerManagedSize
+    ? null : resolvedDimension(control.properties.Height, sourceSymbols);
+  const selfWidth = !rect.dynamic ? rect.width
+    : sourceWidth !== null && sourceWidth === rect.width ? sourceWidth : undefined;
+  const selfHeight = !rect.dynamic ? rect.height
+    : sourceHeight !== null && sourceHeight === rect.height ? sourceHeight : undefined;
+  const symbols = layoutSymbols(context, selfWidth, selfHeight);
   const resolvedWrap = staticNumber(control.properties.WrapCount, symbols);
   // WrapCount counts whole gallery slots. Fractional, non-positive, or
   // renderer-limit-exceeding values cannot establish verified columns/rows.
