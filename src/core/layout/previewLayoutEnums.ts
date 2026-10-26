@@ -1,4 +1,4 @@
-import { staticBoolean, type StaticPowerFxValue } from "../powerfx/staticEval";
+import { evaluateStaticPowerFx, staticBoolean, type StaticPowerFxValue } from "../powerfx/staticEval";
 import { lexPowerFx, significantTokens, type PowerFxToken } from "../powerfx/lexer";
 
 /**
@@ -44,7 +44,8 @@ export function previewLayoutEnum(
     return (MEMBERS[namespace] as readonly string[]).includes(member) ? member : null;
   }
 
-  if (tokens[0]?.value.toLowerCase() !== "if" ||
+  const functionName = tokens[0]?.value.toLowerCase();
+  if ((functionName !== "if" && functionName !== "switch") ||
       tokens[1]?.value !== "(" ||
       tokens[tokens.length - 1]?.value !== ")") return null;
   const inner = tokens.slice(2, -1);
@@ -63,6 +64,30 @@ export function previewLayoutEnum(
   }
   if (nesting !== 0 || start >= inner.length) return null;
   args.push(inner.slice(start));
+  if (functionName === "switch") {
+    // Switch compares one scalar selector against ordered match/result pairs.
+    // Preserve enum type identity by resolving only Boolean/numeric selectors:
+    // the scalar evaluator represents typed enums and strings alike as text.
+    // A runtime-dependent selector or preceding match cannot be skipped.
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+    if (args.length < 3) return null;
+    const selector = evaluateStaticPowerFx(branchSource(source, args[0]), { symbols });
+    if (selector === null || (typeof selector !== "boolean" &&
+        typeof selector !== "number")) return null;
+    for (let index = 1; index + 1 < args.length; index += 2) {
+      const match = evaluateStaticPowerFx(branchSource(source, args[index]), { symbols });
+      if (match === null || typeof match !== typeof selector) return null;
+      if (selector === match) {
+        return previewLayoutEnum(branchSource(source, args[index + 1]),
+          namespace, symbols, depth + 1);
+      }
+    }
+    return args.length % 2 === 0
+      ? previewLayoutEnum(branchSource(source, args[args.length - 1]),
+        namespace, symbols, depth + 1)
+      : null;
+  }
+
   if (args.length < 2) return null;
 
   for (let index = 0; index + 1 < args.length; index += 2) {

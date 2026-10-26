@@ -141,6 +141,45 @@ describe("Canvas typed layout enums", () => {
     expect(positions(parent, 1366)).toEqual([[0, 0, false], [80, 0, false]]);
   });
 
+  it.each([
+    [390, [[0, 0, false], [0, 30, false]]],
+    [768, [[40, 0, false], [120, 0, false]]],
+    [1366, [[80, 0, false], [160, 0, false]]]
+  ])("resolves typed Switch layout and justification at %i px", (viewport, expected) => {
+    const parent = host({
+      LayoutDirection: "=Switch(true, App.Width < 600, LayoutDirection.Vertical, LayoutDirection.Horizontal)",
+      LayoutJustifyContent: "=Switch(true, App.Width < 600, LayoutJustifyContent.Start, App.Width < 1024, LayoutJustifyContent.Center, LayoutJustifyContent.End)"
+    });
+    expect(positions(parent, viewport)).toEqual(expected);
+  });
+
+  it("keeps Switch enum results unknown for SQL values and text impostors", () => {
+    expect(previewLayoutEnum(
+      "=Switch(true, true, LayoutDirection.Horizontal, LayoutDirection.Vertical)",
+      "LayoutDirection")).toBe("horizontal");
+    expect(previewLayoutEnum(
+      "=Switch(true, false, LayoutDirection.Horizontal, LayoutDirection.Vertical)",
+      "LayoutDirection")).toBe("vertical");
+    expect(previewLayoutEnum(
+      "=Switch(varSqlRole, 1, LayoutDirection.Horizontal, LayoutDirection.Vertical)",
+      "LayoutDirection")).toBeNull();
+    expect(previewLayoutEnum(
+      "=Switch(true, varSqlPermission, LayoutDirection.Horizontal, LayoutDirection.Vertical)",
+      "LayoutDirection")).toBeNull();
+    expect(previewLayoutEnum(
+      '=Switch(true, true, "LayoutDirection.Horizontal", LayoutDirection.Vertical)',
+      "LayoutDirection")).toBeNull();
+    expect(previewLayoutEnum(
+      '=Switch("LayoutDirection.Horizontal", "LayoutDirection.Horizontal", LayoutDirection.Horizontal)',
+      "LayoutDirection")).toBeNull();
+    expect(previewLayoutEnum(
+      "=Switch(true, false, LayoutDirection.Horizontal)",
+      "LayoutDirection")).toBeNull();
+    expect(positions(host({
+      LayoutDirection: "=Switch(varSqlPermission, true, LayoutDirection.Horizontal, LayoutDirection.Vertical)"
+    })).every(([, , dynamic]) => dynamic)).toBe(true);
+  });
+
   it("does not use a text enum to certify wrapped positions", () => {
     const parent = host({
       LayoutDirection: '="LayoutDirection.Horizontal"',
