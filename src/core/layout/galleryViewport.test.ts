@@ -209,3 +209,60 @@ describe("gallery TemplateSize precedence and unverifiable source geometry", () 
       .toMatchObject({ height: 292, padding: 16, dynamic: false });
   });
 });
+
+describe("gallery Self geometry formula scope", () => {
+  const selfGallery: CanvasControl = {
+    ...gallery,
+    properties: {
+      ...gallery.properties,
+      WrapCount: "=If(Self.Width < 600, 1, Self.Width < 1000, 2, 3)",
+      TemplateSize: "=Max(1, Self.Height / 4)",
+      TemplatePadding: "=If(Self.Width < 600, 8, Self.Width < 1000, 12, 16)"
+    }
+  };
+
+  it.each([
+    { viewport: 390, wrapCount: 1, padding: 8 },
+    { viewport: 768, wrapCount: 2, padding: 12 },
+    { viewport: 1366, wrapCount: 3, padding: 16 }
+  ])("resolves gallery Self.Width and Self.Height at $viewport px", ({
+    viewport, wrapCount, padding
+  }) => {
+    const galleryWidth = viewport - 40;
+    const template = galleryTemplateLayout(selfGallery,
+      { x: 0, y: 0, width: galleryWidth, height: 600, dynamic: false },
+      { parentWidth: viewport, parentHeight: 768, appWidth: viewport, appHeight: 768 });
+    expect(template).toMatchObject({
+      wrapCount, padding, height: 150,
+      width: galleryWidth / wrapCount, dynamic: false
+    });
+    expect(galleryRecordsUnknown(selfGallery)).toBe(true);
+  });
+
+  it("keeps Parent.Width separate from the gallery's Self.Width", () => {
+    const source: CanvasControl = {
+      ...selfGallery,
+      properties: {
+        ...selfGallery.properties,
+        WrapCount: "=If(Parent.Width > Self.Width, 2, 1)"
+      }
+    };
+    const template = galleryTemplateLayout(source,
+      { x: 0, y: 0, width: 400, height: 600, dynamic: false },
+      { parentWidth: 768, parentHeight: 768, appWidth: 768, appHeight: 768 });
+    expect(template).toMatchObject({ wrapCount: 2, dynamic: false });
+  });
+
+  it.each([390, 768, 1366])(
+    "does not certify Self-dependent template values from a fallback rect at %i px",
+    viewport => {
+      const template = galleryTemplateLayout(selfGallery,
+        { x: 0, y: 0, width: viewport - 40, height: 600, dynamic: true },
+        { parentWidth: viewport, parentHeight: 768, appWidth: viewport, appHeight: 768 });
+      expect(template).toMatchObject({
+        wrapCount: 1, height: 72, padding: 0, dynamic: true
+      });
+      expect(galleryRecordsUnknown(selfGallery)).toBe(true);
+    }
+  );
+});

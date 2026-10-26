@@ -635,7 +635,16 @@ export function galleryTemplateLayout(
 
   const variant = (control.variant ?? "").toLowerCase();
   const horizontal = variant.includes("horizontal");
-  const symbols = layoutSymbols(context);
+  // Gallery formulas such as WrapCount = If(Self.Width < 600, 1, 3)
+  // refer to the gallery control, not its parent. Only expose Self geometry
+  // when the preview rect is source-verified: a fallback Width/Height must
+  // never turn a runtime-dependent template into a certified layout.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/create-responsive-layout
+  const symbols = layoutSymbols(
+    context,
+    rect.dynamic ? undefined : rect.width,
+    rect.dynamic ? undefined : rect.height
+  );
   const resolvedWrap = staticNumber(control.properties.WrapCount, symbols);
   // WrapCount counts whole gallery slots. Fractional, non-positive, or
   // renderer-limit-exceeding values cannot establish verified columns/rows.
