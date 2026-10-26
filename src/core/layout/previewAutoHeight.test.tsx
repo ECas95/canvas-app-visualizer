@@ -132,7 +132,7 @@ describe("Canvas AutoHeight source-only geometry", () => {
       .toBe(true);
   });
 
-  it("does not apply AutoHeight to unsupported horizontal container layout", () => {
+  it("keeps horizontal AutoHeight layout approximate until text height is measured", () => {
     const first = control("Title", "Classic/Label@2.5.1", {
       Width: "=200", Height: "=24", AutoHeight: "=true"
     });
@@ -145,6 +145,9 @@ describe("Canvas AutoHeight source-only geometry", () => {
     });
     host.variant = "AutoLayout";
     host.children = [first, second];
+    expect(autoLayoutChildren(host, context(1366)).every(item => item.rect.dynamic))
+      .toBe(true);
+    first.properties.AutoHeight = "=false";
     expect(autoLayoutChildren(host, context(1366)).every(item => !item.rect.dynamic))
       .toBe(true);
   });
