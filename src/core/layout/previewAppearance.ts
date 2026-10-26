@@ -437,7 +437,7 @@ export type PreviewDisplayMode = "edit" | "disabled" | "view" | "unresolved";
  * staticString deliberately represents both as strings for general preview
  * expressions, so using it here would allow ="DisplayMode.Edit" (or a local
  * string variable) to enable simulated OnSelect. Resolve only source enum
- * tokens, optionally through a statically verified If branch.
+ * tokens, optionally through a statically verified If or Switch branch.
  *
  * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-card
  * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
@@ -457,11 +457,46 @@ export function previewDisplayMode(
   if (lexed.diagnostics.length) return "unresolved";
   const tokens = significantTokens(lexed.tokens);
   if (tokens[0]?.value === "=") tokens.shift();
-  if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
+  const functionName = tokens[0]?.kind === "identifier"
+    ? tokens[0].value.toLowerCase() : null;
+  if ((functionName !== "if" && functionName !== "switch") ||
+      tokens[1]?.value !== "(" ||
       tokens[tokens.length - 1]?.value !== ")") return "unresolved";
   const branches = splitIfArguments(tokens.slice(2, -1));
-  if (!branches || branches.length < 2) return "unresolved";
+  if (!branches) return "unresolved";
 
+  if (functionName === "switch") {
+    // The scalar evaluator represents text and enum values alike as strings.
+    // Permit only numeric/Boolean selectors so a string that merely looks
+    // like DisplayMode.Edit can never authorize an OnSelect simulation.
+    // Unknown earlier matches may win; never skip them to infer permissions.
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+    if (branches.length < 3) return "unresolved";
+    const selector = evaluateStaticPowerFx(
+      "=" + expressionText(source, branches[0]), { symbols }
+    );
+    if (typeof selector !== "number" && typeof selector !== "boolean") {
+      return "unresolved";
+    }
+    for (let i = 1; i + 1 < branches.length; i += 2) {
+      const match = evaluateStaticPowerFx(
+        "=" + expressionText(source, branches[i]), { symbols }
+      );
+      if (match === null || typeof match !== typeof selector) return "unresolved";
+      if (match === selector) {
+        return previewDisplayMode(
+          "=" + expressionText(source, branches[i + 1]), symbols, depth + 1
+        );
+      }
+    }
+    return branches.length % 2 === 0
+      ? previewDisplayMode(
+          "=" + expressionText(source, branches[branches.length - 1]), symbols, depth + 1
+        )
+      : "unresolved";
+  }
+
+  if (branches.length < 2) return "unresolved";
   for (let i = 0; i + 1 < branches.length; i += 2) {
     const condition = staticBoolean("=" + expressionText(source, branches[i]), symbols);
     if (condition === null) return "unresolved";
