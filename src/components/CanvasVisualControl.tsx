@@ -6,7 +6,7 @@ import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, previewImageFlipTransform, previewImagePosition, previewImageRotationTransform, previewImageSourceState, previewRasterCssImage, resolvePreviewImage } from "../core/layout/previewMedia";
 import { PREVIEW_ICON_PATHS, previewIconName, previewIconRotation } from "../core/layout/previewIcon";
 import {
-  previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewDropShadowFilter, previewIsOpaqueColor, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
+  previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewDropShadow, previewDropShadowFilter, previewIsOpaqueColor, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
   previewCheckedState, previewFontFamilyIsKnown, previewFontSizeIsKnown, previewInputContent, previewSelectContent, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration,
   previewVerticalAlign
 } from "../core/layout/previewAppearance";
@@ -208,12 +208,21 @@ export function CanvasVisualControl({
   // or arbitrary controls. Apply the approximate SVG filter to the host
   // outline only (never its children), and only with a known opaque fill.
   // Runtime-dependent shadow formulas and transparent backgrounds stay unset.
-  const shadowFilter =
-    kind === "container" &&
-    control.controlType.toLowerCase().includes("groupcontainer") &&
-    previewIsOpaqueColor(explicitFill)
-      ? previewDropShadowFilter(props.DropShadow, simulationSymbols)
-      : undefined;
+  const isShadowHost = kind === "container" &&
+    control.controlType.toLowerCase().includes("groupcontainer");
+  const shadowLevel = isShadowHost && props.DropShadow != null
+    ? previewDropShadow(props.DropShadow, simulationSymbols) : null;
+  // An unresolved DropShadow formula is not proof of DropShadow.None.
+  // Conversely, a known non-None enum may still be omitted by our
+  // conservative SVG fallback when the source fill is not provably opaque.
+  const shadowState = isShadowHost && props.DropShadow != null
+    ? shadowLevel === null ? "unknown"
+      : shadowLevel !== "none" && !previewIsOpaqueColor(explicitFill)
+        ? "not-rendered" : undefined
+    : undefined;
+  const shadowFilter = isShadowHost && previewIsOpaqueColor(explicitFill)
+    ? previewDropShadowFilter(props.DropShadow, simulationSymbols)
+    : undefined;
 
   const basicRect = (
     <path d={outline}
@@ -270,10 +279,13 @@ export function CanvasVisualControl({
       data-preview-text-state={buttonTextUnknown ? "unknown" : undefined}
       data-preview-fill-state={fillUnknown ? "unknown" : undefined}
       data-preview-border-state={borderUnknown ? "unknown" : undefined}
-      data-preview-radius-state={radiusUnverified ? "unknown" : undefined}>
+      data-preview-radius-state={radiusUnverified ? "unknown" : undefined}
+      data-preview-shadow-state={shadowState}>
       {fillUnknown && <title>Fill cannot be verified from source; the displayed background is a preview fallback</title>}
       {borderUnknown && <title>Border appearance cannot be verified from source; the displayed border is a preview fallback</title>}
       {radiusUnverified && <title>Corner radius requires runtime state or is invalid; the outline is approximate and clipping uses only known corners</title>}
+      {shadowState === "unknown" && <title>DropShadow requires runtime state or is unsupported; the absence of a shadow is not verified</title>}
+      {shadowState === "not-rendered" && <title>DropShadow is known but cannot be faithfully rendered with an unverified or non-opaque Fill; shadow is omitted in this preview</title>}
       {displayMode === "unresolved" && (
         <title>DisplayMode requires runtime state; appearance and interaction permissions are not verified</title>
       )}
