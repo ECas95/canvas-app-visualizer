@@ -49,7 +49,8 @@ export function previewOverflowMode(
   depth = 0
 ): PreviewOverflowMode {
   if (raw === undefined || raw === null) return "hide";
-  return previewLayoutEnum(raw, "LayoutOverflow", symbols, depth) ?? "unknown";
+  const resolved = previewLayoutEnum(raw, "LayoutOverflow", symbols, depth);
+  return resolved === "scroll" || resolved === "hide" ? resolved : "unknown";
 }
 
 /**
