@@ -88,6 +88,34 @@ describe("static Power Fx evaluator", () => {
     ).toBe(true);
   });
 
+  it("evaluates documented Not, And and Or functions without guessing runtime state", () => {
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-logicals
+    expect(staticBoolean("=Not(false)")).toBe(true);
+    expect(staticBoolean("=Not(true)")).toBe(false);
+    expect(staticBoolean("=And(true, true, false)")).toBe(false);
+    expect(staticBoolean("=Or(false, false, true)")).toBe(true);
+    expect(staticBoolean("=And(false, varSqlPermission)")).toBe(false);
+    expect(staticBoolean("=Or(true, varSqlPermission)")).toBe(true);
+    expect(staticBoolean("=And(true, varSqlPermission)")).toBeNull();
+    expect(staticBoolean("=Or(false, varSqlPermission)")).toBeNull();
+    expect(staticBoolean("=Not(varSqlPermission)")).toBeNull();
+    expect(staticNumber("=If(And(App.Width > 700, Not(false)), 40, 20)", symbols)).toBe(40);
+  });
+
+  it("rejects invalid logical function types, arity and extra Abs arguments", () => {
+    expect(staticBoolean("=Not()")).toBeNull();
+    expect(staticBoolean("=Not(true, false)")).toBeNull();
+    expect(staticBoolean("=Not(1)")).toBeNull();
+    expect(staticBoolean("=And(true)")).toBeNull();
+    expect(staticBoolean("=Or(false)")).toBeNull();
+    expect(staticBoolean("=And(false, 1)")).toBeNull();
+    expect(staticBoolean('=Or(true, "yes")')).toBeNull();
+    expect(staticBoolean("=SQL.Not(false)")).toBeNull();
+    expect(staticNumber("=Abs(-4)")).toBe(4);
+    expect(staticNumber("=Abs(4, 5)")).toBeNull();
+    expect(staticNumber("=Abs()")).toBeNull();
+  });
+
   it("implements Power Fx postfix percent semantics", () => {
     expect(staticNumber("=20%")).toBeCloseTo(0.2);
     expect(staticNumber("=-15%")).toBeCloseTo(-0.15);

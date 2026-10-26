@@ -57,6 +57,18 @@ describe("AutoLayout geometry certainty and inherited alignment", () => {
     }
   });
 
+  it("resolves logical functions responsively but keeps unknown SQL branches approximate", () => {
+    const direction = "=If(And(App.Width < 720, Not(false)), LayoutDirection.Vertical, LayoutDirection.Horizontal)";
+    for (const viewport of [390, 768, 1366]) {
+      expect(layout({ LayoutDirection: direction }, undefined, viewport).dynamic, String(viewport))
+        .toBe(false);
+    }
+    const gap = "=If(Or(App.Width < 600, varSqlAccess), 8, 4)";
+    expect(layout({ LayoutGap: gap }, undefined, 390).dynamic).toBe(false);
+    expect(layout({ LayoutGap: gap }, undefined, 768).dynamic).toBe(true);
+    expect(layout({ LayoutGap: gap }, undefined, 1366).dynamic).toBe(true);
+  });
+
   it("does not assert exact positions for unknown runtime direction", () => {
     const rect = layout({ LayoutDirection: "=If(varHorizontal, LayoutDirection.Horizontal, LayoutDirection.Vertical)" });
     expect(rect.dynamic).toBe(true);

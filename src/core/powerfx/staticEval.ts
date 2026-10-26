@@ -373,6 +373,28 @@ class Parser {
       return known.find(value => value !== "") ?? null;
     }
 
+    // Microsoft documents these as pure Boolean functions. Resolve only
+    // type-safe local values; unknown SQL/permission conditions remain unknown.
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-logicals
+    if (name === "not") {
+      if (args.length !== 1 ||
+          (args[0] !== null && typeof args[0] !== "boolean")) return null;
+      return args[0] === null ? null : !args[0];
+    }
+
+    if (name === "and" || name === "or") {
+      if (args.length < 2 ||
+          args.some(value => value !== null && typeof value !== "boolean")) return null;
+      // A proven false dominates And; a proven true dominates Or.
+      // Neither case requires assuming an unknown runtime value.
+      if (name === "and") {
+        return args.includes(false) ? false :
+          args.includes(null) ? null : true;
+      }
+      return args.includes(true) ? true :
+        args.includes(null) ? null : false;
+    }
+
     if (args.some(value => value === null)) return null;
 
     const values = args as StaticPowerFxValue[];
@@ -385,7 +407,9 @@ class Parser {
       return this.finite(name === "min" ? Math.min(...numbers) : Math.max(...numbers));
     }
 
-    if (name === "abs" && typeof values[0] === "number") {
+    // Abs accepts exactly one number; extra arguments must not certify
+    // geometry or visibility. https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-numericals
+    if (name === "abs" && values.length === 1 && typeof values[0] === "number") {
       return this.finite(Math.abs(values[0]));
     }
 

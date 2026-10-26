@@ -43,6 +43,19 @@ describe("semantic preview classification", () => {
     expect(previewFontSize(control("ModernText@1.0.0", { Size: "=varRuntimeSize" }))).toBe(15);
   });
 
+  it("uses logical functions for verified visibility and checkbox defaults", () => {
+    expect(previewVisibility(control("Classic/Button@2.2.0", { Visible: "=Not(false)" })))
+      .toBe("visible");
+    expect(previewVisibility(control("Classic/Button@2.2.0", { Visible: "=And(false, varSqlAccess)" })))
+      .toBe("hidden");
+    expect(previewVisibility(control("Classic/Button@2.2.0", { Visible: "=Or(false, varSqlAccess)" })))
+      .toBe("unknown");
+    expect(previewVisibility(control("Classic/Button@2.2.0", { Visible: "=Not(true, false)" })))
+      .toBe("unknown");
+    expect(previewCheckedState(control("Classic/CheckBox@2.1.0", { Default: "=Not(false)" })))
+      .toBe("checked");
+  });
+
   it("only paints statically known colors", () => {
     expect(previewColor("=Color.White")).toBe("#ffffff");
     expect(previewColor("=Color.Transparent")).toBe("transparent");
