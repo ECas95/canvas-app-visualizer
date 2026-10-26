@@ -66,6 +66,40 @@ describe("static Power Fx evaluator", () => {
     }
   });
 
+  it("resolves verified StartsWith and EndsWith in Canvas conditions", () => {
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-startswith
+    expect(staticBoolean('=StartsWith("Hello World", "hello")')).toBe(true);
+    expect(staticBoolean('=EndsWith("Hello World", "WORLD")')).toBe(true);
+    expect(staticBoolean('=StartsWith("Hello World", "world")')).toBe(false);
+    expect(staticBoolean('=EndsWith("Hello World", "hello")')).toBe(false);
+    expect(staticBoolean('=StartsWith("Ready", "")')).toBe(true);
+    expect(staticBoolean('=EndsWith("Ready", "")')).toBe(true);
+    expect(staticBoolean('=StartsWith("Ready", "RE")')).toBe(true);
+    expect(staticBoolean('=StartsWith("Ready", "re")', {})).toBe(true);
+    expect(staticBoolean('=StartsWith(varLabel, "adm")', { varLabel: "Admin" })).toBe(true);
+    const responsive = '=If(StartsWith("Phone", "ph") && App.Width < 600, 24, 48)';
+    expect(staticNumber(responsive, { "App.Width": 390 })).toBe(24);
+    expect(staticNumber(responsive, { "App.Width": 768 })).toBe(48);
+    expect(staticNumber(responsive, { "App.Width": 1366 })).toBe(48);
+    expect(staticNumber(responsive)).toBeNull();
+  });
+
+  it("keeps SQL, invalid and locale-dependent text predicates unknown", () => {
+    for (const formula of [
+      '=StartsWith(ThisItem.Title, "Admin")',
+      '=EndsWith(varSqlTitle, "active")',
+      '=StartsWith("Ready", varSqlPrefix)',
+      '=StartsWith("Ready", 2)',
+      '=EndsWith(false, "e")',
+      '=StartsWith("Ready")',
+      '=EndsWith("Ready", "y", "extra")',
+      '=Connector.StartsWith("Ready", "R")',
+      '=StartsWith("İstanbul", "i")',
+      '=EndsWith("Café", "é")'
+    ]) expect(staticBoolean(formula)).toBeNull();
+    expect(staticBoolean('=StartsWith("Ready", "R")')).toBe(true);
+  });
+
   it("evaluates common numeric pure functions", () => {
     expect(staticNumber("=Max(120, Parent.Width / 3)", symbols)).toBe(300);
     expect(staticNumber("=RoundDown(19.99, 0)", symbols)).toBe(19);

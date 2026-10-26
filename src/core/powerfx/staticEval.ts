@@ -428,6 +428,22 @@ class Parser {
       return Array.from(args[0]).length;
     }
 
+    // StartsWith/EndsWith are case-insensitive for scalar text in Power Fx.
+    // Only verified ASCII input is evaluated: Unicode case folding can depend
+    // on the app/data-source locale, which this source-only preview lacks.
+    // SQL/ThisItem text and unverified inputs must remain unknown.
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-startswith
+    if (name === "startswith" || name === "endswith") {
+      if (args.length !== 2 || args.some(value => typeof value !== "string")) return null;
+      const [text, search] = args as string[];
+      if (![text, search].every(value =>
+        Array.from(value).every(char => char.charCodeAt(0) <= 0x7f))) return null;
+      const haystack = text.toLowerCase();
+      const needle = search.toLowerCase();
+      return name === "startswith" ? haystack.startsWith(needle) :
+        haystack.endsWith(needle);
+    }
+
     if (args.some(value => value === null)) return null;
 
     const values = args as StaticPowerFxValue[];
