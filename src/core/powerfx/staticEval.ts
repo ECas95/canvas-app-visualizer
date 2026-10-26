@@ -12,6 +12,8 @@ const ENUM_PREFIXES = new Set([
   "layoutjustifycontent",
   "alignincontainer",
   "layoutoverflow",
+  "imageposition",
+  "imagerotation",
   "displaymode",
   "sortorder"
 ]);
@@ -354,6 +356,21 @@ class Parser {
       return args.length % 2 === 1 ? args[args.length - 1] ?? null : null;
     }
 
+    if (name === "coalesce") {
+      // Power Fx skips both Blank and the empty string. Returning "" for
+      // Coalesce("", "fallback") is incorrect and hides verified labels.
+      // A null here may be an unknown SQL/runtime value, not proven Blank:
+      // fail closed rather than selecting a later argument.
+      // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-isblank-isempty
+      if (args.length === 0) return this.fail();
+      if (args.some(value => value === null)) return null;
+      const known = args as StaticPowerFxValue[];
+      // Microsoft requires a common argument type. Do not coerce a mixed
+      // expression into a misleading source-verified preview value.
+      if (new Set(known.map(value => typeof value)).size !== 1) return null;
+      return known.find(value => value !== "") ?? null;
+    }
+
     if (args.some(value => value === null)) return null;
 
     const values = args as StaticPowerFxValue[];
@@ -395,10 +412,6 @@ class Parser {
         name === "roundup" ? Math.ceil(magnitude) : Math.floor(magnitude);
       const result = shift(Math.sign(scaled) * roundedMagnitude, -digits);
       return Number.isFinite(result) ? result : null;
-    }
-
-    if (name === "coalesce") {
-      return values.find(value => value !== null) ?? null;
     }
 
     // Unsupported pure/runtime function: preserve uncertainty, not a syntax error.

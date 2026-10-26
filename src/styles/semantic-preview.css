@@ -45,3 +45,6 @@
 .simulation-vars-panel dt{min-width:0;overflow-wrap:anywhere}
 .simulation-vars-panel dd{margin:0;font-weight:700;overflow-wrap:anywhere;text-align:right}
 .simulation-vars-panel p,.simulation-vars-panel small{display:block;margin:5px 0;font-size:10px;color:#748395}
+
+/* Runtime-unknown visibility must never be presented as confirmed state. */
+.preview-unknown-state{display:inline-flex;align-items:center;gap:5px;border:1px solid #e6d5ac;border-radius:4px;padding:4px 7px;background:#fff9ed;color:#77531b;font-weight:600}

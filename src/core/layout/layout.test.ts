@@ -3,12 +3,45 @@ import {
   autoLayoutChildren,
   buildSiblingGeometrySymbols,
   controlRect,
+  defaultControlSize,
   galleryTemplateLayout,
+  galleryTemplateGuideRect,
   literalNumber,
   literalText,
   rgba
 } from "./layout";
 import type { CanvasControl } from "../../types/canvas";
+
+describe("Canvas fallback geometry by control family", () => {
+  const fixture = (type: string, properties: Record<string, unknown> = {}): CanvasControl => ({
+    id: "SyntheticInput", name: "SyntheticInput", controlType: type,
+    properties, children: [], sourceFile: "Src/Synthetic.pa.yaml",
+    sourcePath: "Screens/Synthetic/SyntheticInput", sourceFormat: "pa-yaml-v3", zIndex: 1
+  });
+
+  it("prefers TextInput over the shorter Text substring in classic and modern controls", () => {
+    expect(defaultControlSize("Classic/TextInput@2.3.2")).toEqual({ width: 240, height: 44 });
+    expect(defaultControlSize("ModernTextInput@1.0.0")).toEqual({ width: 240, height: 44 });
+    expect(defaultControlSize("ModernText@1.0.0")).toEqual({ width: 220, height: 40 });
+    expect(defaultControlSize("Classic/HtmlText@1.0.0")).toEqual({ width: 220, height: 40 });
+  });
+
+  it("uses the input-family fallback consistently across phone, tablet and desktop", () => {
+    for (const [appWidth, appHeight] of [[390, 844], [768, 1024], [1366, 768]]) {
+      const rect = controlRect(fixture("Classic/TextInput@2.3.2", {
+        X: "=Parent.Width - Self.Width", Y: "=20"
+      }), 0, { appWidth, appHeight, parentWidth: appWidth, parentHeight: appHeight });
+      expect(rect).toEqual({ x: appWidth - 240, y: 20, width: 240, height: 44, dynamic: false });
+    }
+  });
+
+  it("does not replace explicitly resolved dimensions with approximate family defaults", () => {
+    const rect = controlRect(fixture("ModernTextInput@1.0.0", {
+      X: "=Parent.Width - Self.Width", Width: "=120", Height: "=36"
+    }), 0, { appWidth: 390, appHeight: 844, parentWidth: 390, parentHeight: 844 });
+    expect(rect).toEqual({ x: 270, y: 0, width: 120, height: 36, dynamic: false });
+  });
+});
 
 describe("layout literal helpers", () => {
   it("parses numeric formulas", () => {
@@ -23,6 +56,26 @@ describe("layout literal helpers", () => {
 
   it("parses RGBA formulas", () => {
     expect(rgba("=RGBA(1, 2, 3, 0.5)")).toBe("rgba(1,2,3,0.5)");
+  });
+
+  it("resolves documented percentage alpha without browser coercion", () => {
+    expect(rgba("=RGBA(255, 128, 0, 50%)")).toBe("rgba(255,128,0,0.5)");
+    expect(rgba("=RGBA(0, 0, 0, 0%)")).toBe("rgba(0,0,0,0)");
+    expect(rgba("=RGBA(255, 255, 255, 100%)")).toBe("rgba(255,255,255,1)");
+    expect(rgba("=RGBA(10.5, 20, 30, .25)")).toBe("rgba(10.5,20,30,0.25)");
+  });
+
+  it("rejects out-of-range RGBA channels and alpha instead of CSS clamping", () => {
+    for (const source of [
+      "=RGBA(256, 0, 0, 1)", "=RGBA(0, 999, 0, 1)",
+      "=RGBA(0, 0, 256, 1)", "=RGBA(0, 0, 0, 1.1)",
+      "=RGBA(0, 0, 0, 101%)", "=RGBA(0, 0, 0, 1000%)",
+      "=RGBA(-1, 0, 0, 1)", "=RGBA(0, 0, 0, -0.1)",
+      "=RGBA(0, 0, 0, 1/2)", "=RGBA(0, 0, 0, varAlpha)",
+      "=Connector.RGBA(1, 2, 3, 1)"
+    ]) {
+      expect(rgba(source)).toBeNull();
+    }
   });
 
   it("resolves common Parent and Self geometry expressions", () => {
@@ -383,6 +436,76 @@ describe("layout literal helpers", () => {
     expect(rect.dynamic).toBe(false);
   });
 
+  it("resolves dependent sibling Y, Self.Y Height and zero-height layout hosts", () => {
+    const child = (name: string, properties: Record<string, unknown>): CanvasControl => ({
+      id: name, name, controlType: "GroupContainer",
+      properties, children: [], zIndex: 1, sourceFormat: "pa-yaml-v3",
+      sourceFile: "Src/Fixture.pa.yaml", sourcePath: "Screens/Fixture/" + name
+    });
+    const header = child("Header", {
+      X: "=24", Y: "=80", Width: "=App.Width - 48", Height: "=140"
+    });
+    const toolbar = child("Toolbar", {
+      X: "=Header.X", Y: "=Header.Y + Header.Height + 16",
+      Width: "=Header.Width", Height: "=0// responsive toolbar omitted in design",
+      Visible: "=false//hidden by source"
+    });
+    const gallery = child("Catalogue", {
+      X: "=Header.X",
+      Y: "=Toolbar.Y + Toolbar.Height + 16 + If(App.Width < 720 && varAdmin, 48, 0)",
+      Width: "=Header.Width",
+      Height: "=Max(180, App.Height - Self.Y - 20)",
+      WrapCount: "=If(App.Width < 720, 1, If(App.Width < 1180, 2, 3))",
+      TemplateSize: "=292",
+      TemplatePadding: "=8"
+    });
+    gallery.controlType = "Gallery";
+    gallery.variant = "Vertical";
+    // Intentionally order the gallery before the toolbar to check fixed
+    // point resolution rather than accidental ordering of serialized nodes.
+    const items = [gallery, toolbar, header];
+    const context = {
+      appWidth: 1366, appHeight: 768, parentWidth: 1366, parentHeight: 768
+    };
+    const symbols = buildSiblingGeometrySymbols(items, context);
+    expect(symbols["Header.Y"]).toBe(80);
+    expect(symbols["Toolbar.Y"]).toBe(236);
+    expect(symbols["Toolbar.Height"]).toBe(0);
+    expect(symbols["Catalogue.Y"]).toBe(252);
+    expect(symbols["Catalogue.Height"]).toBe(496);
+    const rect = controlRect(gallery, 0, { ...context, symbols });
+    expect(rect).toMatchObject({ x: 24, y: 252, width: 1318, height: 496, dynamic: false });
+    const template = galleryTemplateLayout(gallery, rect, { ...context, symbols });
+    expect(template?.wrapCount).toBe(3);
+    expect(template?.width).toBeCloseTo(1318 / 3);
+    expect(template?.height).toBe(292);
+    expect(template?.padding).toBe(8);
+  });
+
+  it("evaluates viewport-dependent gallery template sizes against App dimensions", () => {
+    const gallery: CanvasControl = {
+      id: "gallery", name: "ResponsiveGallery", controlType: "Gallery",
+      variant: "Vertical",
+      properties: {
+        TemplateSize: "=If(App.Width < 720, 140, 292)",
+        TemplatePadding: "=If(App.Width < 720, 4, 8)",
+        WrapCount: "=If(App.Width < 720, 1, 3)"
+      },
+      children: [], sourceFile: "Src/Fixture.pa.yaml",
+      sourcePath: "Screens/Fixture/ResponsiveGallery",
+      sourceFormat: "pa-yaml-v3", zIndex: 1
+    };
+    const rect = { x: 0, y: 0, width: 900, height: 500, dynamic: false };
+    const narrow = galleryTemplateLayout(gallery, rect, {
+      appWidth: 390, appHeight: 844, parentWidth: 900, parentHeight: 500
+    });
+    const desktop = galleryTemplateLayout(gallery, rect, {
+      appWidth: 1366, appHeight: 768, parentWidth: 900, parentHeight: 500
+    });
+    expect(narrow).toMatchObject({ wrapCount: 1, width: 900, height: 140, padding: 4 });
+    expect(desktop).toMatchObject({ wrapCount: 3, width: 300, height: 292, padding: 8 });
+  });
+
   it("resolves responsive Gallery.WrapCount from app viewport without inventing records", () => {
     const gallery: CanvasControl = {
       id: "g", name: "Catalog", controlType: "Gallery", variant: "Vertical",
@@ -422,4 +545,145 @@ describe("layout literal helpers", () => {
   });
 
 
+  it("uses the documented one-pixel Gallery.TemplateSize minimum", () => {
+    const makeGallery = (size: string): CanvasControl => ({
+      id: "g", name: "Gallery", controlType: "Gallery", variant: "Vertical",
+      properties: { TemplateSize: size, WrapCount: "=2", TemplatePadding: "=0" },
+      children: [], sourceFile: "Src/Synthetic.pa.yaml",
+      sourcePath: "Screens/Synthetic/Gallery", zIndex: 1, sourceFormat: "pa-yaml-v3"
+    });
+    const rect = { x: 0, y: 0, width: 300, height: 200, dynamic: false };
+    expect(galleryTemplateLayout(makeGallery("=0"), rect)?.height).toBe(1);
+    expect(galleryTemplateLayout(makeGallery("=-10"), rect)?.height).toBe(1);
+    expect(galleryTemplateLayout(makeGallery("=1"), rect)?.height).toBe(1);
+  });
+
+  it("marks unresolved TemplatePadding as dynamic rather than verified zero", () => {
+    const gallery: CanvasControl = {
+      id: "g", name: "Gallery", controlType: "Gallery", variant: "Vertical",
+      properties: {
+        TemplateSize: "=292", WrapCount: "=2", TemplatePadding: "=varRuntimePadding"
+      },
+      children: [], sourceFile: "Src/Synthetic.pa.yaml",
+      sourcePath: "Screens/Synthetic/Gallery", zIndex: 1, sourceFormat: "pa-yaml-v3"
+    };
+    const template = galleryTemplateLayout(gallery,
+      { x: 0, y: 0, width: 600, height: 400, dynamic: false },
+      { parentWidth: 600, parentHeight: 400, appWidth: 900, appHeight: 768 });
+    expect(template).toMatchObject({ wrapCount: 2, height: 292, padding: 0, dynamic: true });
+  });
+
+  it("resolves TemplatePadding for known viewport branches without marking dynamic", () => {
+    const gallery: CanvasControl = {
+      id: "g", name: "Gallery", controlType: "Gallery", variant: "Vertical",
+      properties: {
+        TemplateSize: "=292",
+        WrapCount: "=If(App.Width < 720, 1, 3)",
+        TemplatePadding: "=If(App.Width < 720, 4, 8)"
+      },
+      children: [], sourceFile: "Src/Synthetic.pa.yaml",
+      sourcePath: "Screens/Synthetic/Gallery", zIndex: 1, sourceFormat: "pa-yaml-v3"
+    };
+    const rect = { x: 0, y: 0, width: 600, height: 400, dynamic: false };
+    const at = (appWidth: number) => galleryTemplateLayout(gallery, rect, {
+      parentWidth: 600, parentHeight: 400, appWidth, appHeight: 768
+    });
+    expect(at(390)).toMatchObject({ wrapCount: 1, padding: 4, dynamic: false });
+    expect(at(1366)).toMatchObject({ wrapCount: 3, padding: 8, dynamic: false });
+  });
+
+  it("propagates unresolved host geometry to the gallery template", () => {
+    const gallery: CanvasControl = {
+      id: "g", name: "Gallery", controlType: "Gallery", variant: "Vertical",
+      properties: { TemplateSize: "=292", TemplatePadding: "=8", WrapCount: "=3" },
+      children: [], sourceFile: "Src/Synthetic.pa.yaml",
+      sourcePath: "Screens/Synthetic/Gallery", zIndex: 1, sourceFormat: "pa-yaml-v3"
+    };
+    const template = galleryTemplateLayout(gallery, {
+      x: 0, y: 0, width: 600, height: 400, dynamic: true
+    });
+    expect(template).toMatchObject({ width: 200, height: 292, padding: 8, dynamic: true });
+  });
+
+
+});
+
+
+describe("source-only gallery guide geometry", () => {
+  const gallery = (variant: string, properties: Record<string, unknown>): CanvasControl => ({
+    id: "fixture", name: "Fixture", controlType: "Gallery", variant,
+    properties, children: [], sourceFile: "Src/Fixture.pa.yaml",
+    sourcePath: "Screens/Fixture/Gallery", sourceFormat: "pa-yaml-v3", zIndex: 1
+  });
+
+  it("places responsive vertical WrapCount slots in columns", () => {
+    const control = gallery("Vertical", {
+      WrapCount: "=If(App.Width < 720, 1, If(App.Width < 1180, 2, 3))",
+      TemplateSize: "=292", TemplatePadding: "=8"
+    });
+    for (const [appWidth, expectedColumns] of [[390, 1], [900, 2], [1366, 3]]) {
+      const template = galleryTemplateLayout(control,
+        { x: 0, y: 0, width: 600, height: 320, dynamic: false },
+        { appWidth, appHeight: 768, parentWidth: 600, parentHeight: 320 });
+      expect(template?.wrapCount).toBe(expectedColumns);
+      const guide = galleryTemplateGuideRect(template!, 1, 20, 30);
+      expect(guide.x).toBeCloseTo(20 + 600 / expectedColumns + 8);
+      expect(guide.y).toBe(38);
+      expect(guide.width).toBeCloseTo(600 / expectedColumns - 16);
+      expect(guide.height).toBe(276);
+    }
+  });
+
+  it("places horizontal WrapCount slots in rows rather than columns", () => {
+    const template = galleryTemplateLayout(gallery("Horizontal", {
+      WrapCount: "=3", TemplateSize: "=292", TemplatePadding: "=8"
+    }), { x: 0, y: 0, width: 620, height: 300, dynamic: false });
+    expect(template?.orientation).toBe("horizontal");
+    expect(galleryTemplateGuideRect(template!, 1, 20, 30))
+      .toEqual({ x: 28, y: 138, width: 276, height: 84 });
+    expect(galleryTemplateGuideRect(template!, 2, 20, 30))
+      .toEqual({ x: 28, y: 238, width: 276, height: 84 });
+  });
+
+  it("does not generate negative guide dimensions for excessive padding", () => {
+    const template = galleryTemplateLayout(gallery("Vertical", {
+      WrapCount: "=2", TemplateSize: "=24", TemplatePadding: "=50"
+    }), { x: 0, y: 0, width: 100, height: 80, dynamic: false });
+    expect(galleryTemplateGuideRect(template!, 1, 0, 0))
+      .toEqual({ x: 100, y: 50, width: 0, height: 0 });
+  });
+});
+
+describe("Canvas zero-size dimensions and responsive viewports", () => {
+  const control: CanvasControl = {
+    id: "ZeroSized", name: "ZeroSized", controlType: "Classic/Label@2.5.1",
+    properties: {
+      Width: "=If(App.Width < 720, 0, 180)", Height: "=0",
+      X: "=Parent.Width - Self.Width", Y: "=20"
+    },
+    children: [], sourceFile: "Src/SyntheticZero.pa.yaml",
+    sourcePath: "Screens/SyntheticZero/ZeroSized",
+    sourceFormat: "pa-yaml-v3", zIndex: 1
+  };
+
+  it("preserves a known zero width and height without marking the layout unknown", () => {
+    const phone = controlRect(control, 0, {
+      appWidth: 390, appHeight: 844, parentWidth: 390, parentHeight: 844
+    });
+    expect(phone).toEqual({ x: 390, y: 20, width: 0, height: 0, dynamic: false });
+
+    const desktop = controlRect(control, 0, {
+      appWidth: 1366, appHeight: 768, parentWidth: 1366, parentHeight: 768
+    });
+    expect(desktop).toEqual({ x: 1186, y: 20, width: 180, height: 0, dynamic: false });
+  });
+
+  it("does not mistake unresolved dimensions for known zero", () => {
+    const unresolved = { ...control, properties: { ...control.properties, Width: "=varRuntimeWidth" } };
+    const rect = controlRect(unresolved, 0, {
+      appWidth: 390, appHeight: 844, parentWidth: 390, parentHeight: 844
+    });
+    expect(rect.width).toBe(220);
+    expect(rect.dynamic).toBe(true);
+  });
 });

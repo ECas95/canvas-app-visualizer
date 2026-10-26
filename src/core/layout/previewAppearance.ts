@@ -1,6 +1,6 @@
 import type { CanvasControl } from "../../types/canvas";
-import { literalNumber, literalText, rgba } from "./layout";
-import { staticBoolean, staticString, type StaticPowerFxValue } from "../powerfx/staticEval";
+import { literalText, rgba } from "./layout";
+import { staticBoolean, staticNumber, staticString, type StaticPowerFxValue } from "../powerfx/staticEval";
 import { lexPowerFx, significantTokens, type PowerFxToken } from "../powerfx/lexer";
 
 export type PreviewKind =
@@ -10,6 +10,11 @@ export type PreviewKind =
 
 export function previewKind(controlType: string): PreviewKind {
   const type = controlType.toLowerCase();
+  // Microsoft serializes its modern display-only Text control as
+  // ModernText@1.0.0, not as a Label. Match the exact control family so
+  // ModernTextInput and other text-bearing controls retain their own kind.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-text
+  if (/^moderntext(?:@|$)/.test(type)) return "label";
   if (type.includes("gallery")) return "gallery";
   if (type.includes("datacard") || type.includes("form")) return "form";
   if (type.includes("container") || type.includes("group")) return "container";
@@ -41,6 +46,12 @@ const NAMED_COLORS: Record<string, string> = {
   darkgray: "#a9a9a9"
 };
 
+// Browser CSS and the Canvas ColorValue documentation do not define five- or
+// seven-digit hex colors. Keep supported shorthand CSS forms for existing
+// source previews, but never emit malformed lengths as verified colors.
+// https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-colors
+const HEX_COLOR_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+
 export function previewColor(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const value = raw.trim();
@@ -48,10 +59,30 @@ export function previewColor(raw: unknown): string | null {
   if (rgb) return rgb;
   const named = value.match(/^=?\s*Color\.([A-Za-z]+)\s*$/i);
   if (named) return NAMED_COLORS[named[1].toLowerCase()] ?? null;
-  const hex = value.match(/^=?\s*ColorValue\(\s*["'](#[a-fA-F0-9]{3,8})["']\s*\)\s*$/i);
-  if (hex) return hex[1];
+  const hex = value.match(/^=?\s*ColorValue\(\s*"(#[a-fA-F0-9]+)"\s*\)\s*$/i);
+  if (hex && HEX_COLOR_RE.test(hex[1])) return hex[1];
+
+  // Power Fx comments and whitespace are trivia, including around the dot
+  // in Color.Red and around a ColorValue argument. Tokenize the complete
+  // expression before accepting it: a string or a longer formula must never
+  // masquerade as a typed Color enum or literal ColorValue.
+  // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-colors
+  const member = sourceEnumMember(value, "Color", Object.keys(NAMED_COLORS));
+  if (member) return NAMED_COLORS[member];
+  const lexed = lexPowerFx(value);
+  if (!lexed.diagnostics.length) {
+    const tokens = significantTokens(lexed.tokens);
+    if (tokens[0]?.value === "=") tokens.shift();
+    if (tokens.length === 4 && tokens[0].kind === "identifier" &&
+        tokens[0].value.toLowerCase() === "colorvalue" &&
+        tokens[1].value === "(" && tokens[2].kind === "string" &&
+        tokens[3].value === ")") {
+      const literalHex = tokens[2].value.slice(1, -1).replaceAll('""', '"');
+      if (HEX_COLOR_RE.test(literalHex)) return literalHex;
+    }
+  }
   const literal = literalText(value);
-  if (literal && /^#[a-fA-F0-9]{3,8}$/.test(literal)) return literal;
+  if (literal && HEX_COLOR_RE.test(literal)) return literal;
   return null;
 }
 
@@ -83,6 +114,31 @@ function expressionText(source: string, tokens: PowerFxToken[]): string {
   return tokens.length ? source.slice(tokens[0].start, tokens[tokens.length - 1].end) : "";
 }
 
+/**
+ * Read a complete Power Fx enum literal using lexer tokens. Canvas formulas
+ * may contain whitespace and comments around an enum member; those trivia
+ * must not turn a known state into an approximation. Strings, identifiers,
+ * operators and malformed expressions must never masquerade as enums.
+ * This remains source-only analysis, not a Power Fx runtime evaluator.
+ */
+function sourceEnumMember(
+  raw: string,
+  namespace: string,
+  members: readonly string[]
+): string | null {
+  const lexed = lexPowerFx(raw);
+  if (lexed.diagnostics.length) return null;
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+  if (tokens.length !== 3 ||
+      tokens[0].kind !== "identifier" ||
+      tokens[0].value.toLowerCase() !== namespace.toLowerCase() ||
+      tokens[1].value !== "." ||
+      tokens[2].kind !== "identifier") return null;
+  const member = tokens[2].value.toLowerCase();
+  return members.includes(member) ? member : null;
+}
+
 export function previewColorWithSymbols(
   raw: unknown,
   symbols?: Record<string, StaticPowerFxValue>,
@@ -90,7 +146,9 @@ export function previewColorWithSymbols(
 ): string | null {
   const known = previewColor(raw);
   if (known) return known;
-  if (!symbols || typeof raw !== "string" || depth > 6) return null;
+  // Constant If branches are resolvable without runtime symbols. Preserve
+  // unknown for variables/connectors rather than inventing a fill color.
+  if (typeof raw !== "string" || depth > 6) return null;
   const value = raw.trim();
 
   // Literal text variables and ColorValue(variable) are only accepted as
@@ -98,10 +156,10 @@ export function previewColorWithSymbols(
   const colorValue = /^=?\s*ColorValue\(\s*([A-Za-z_][\w]*)\s*\)\s*$/i.exec(value);
   if (colorValue) {
     const resolved = staticString("=" + colorValue[1], symbols);
-    return resolved && /^#[a-fA-F0-9]{3,8}$/.test(resolved) ? resolved : null;
+    return resolved && HEX_COLOR_RE.test(resolved) ? resolved : null;
   }
   const scalar = staticString(value, symbols);
-  if (scalar && /^#[a-fA-F0-9]{3,8}$/.test(scalar)) return scalar;
+  if (scalar && HEX_COLOR_RE.test(scalar)) return scalar;
 
   const lexed = lexPowerFx(value);
   if (lexed.diagnostics.length) return null;
@@ -123,103 +181,620 @@ export function previewColorWithSymbols(
   return fallback ? previewColorWithSymbols("=" + expressionText(value, fallback), symbols, depth + 1) : null;
 }
 
-export type PreviewDisplayMode = "edit" | "disabled" | "view" | "unresolved";
+/**
+ * A container shadow must not imply an opaque surface when the source fill
+ * resolves to an alpha color. Power Fx ColorValue uses #RRGGBBAA and RGBA
+ * uses a 0..1 alpha channel; only a proven fully opaque color qualifies.
+ * Unrecognized or runtime-dependent colors fail closed.
+ *
+ * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-colors
+ */
+export function previewIsOpaqueColor(color: string | null): boolean {
+  if (!color) return false;
+  if (/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(color)) return true;
+  const alphaHex = /^#(?:[0-9a-f]{3}([0-9a-f])|[0-9a-f]{6}([0-9a-f]{2}))$/i.exec(color);
+  if (alphaHex) return (alphaHex[1] ?? alphaHex[2]).toLowerCase() ===
+    (alphaHex[1] ? "f" : "ff");
+  const rgbaColor = /^rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*(\d+(?:\.\d*)?|\.\d+)\s*\)$/i.exec(color);
+  return rgbaColor !== null && Number(rgbaColor[1]) === 1;
+}
 
-export function previewDisplayMode(
+/**
+ * Canvas container DropShadow is a Power Fx enum. Accept only explicit enum
+ * literals from source; unknown runtime formulas must not be interpreted as
+ * a confirmed shadow level. CSS values below are visual approximations.
+ */
+export type PreviewDropShadow =
+  | "none" | "light" | "semilight" | "regular" | "semibold" | "bold" | "extrabold";
+
+export function previewDropShadow(
+  raw: unknown,
+  symbols?: Record<string, StaticPowerFxValue>,
+  depth = 0
+): PreviewDropShadow | null {
+  if (typeof raw !== "string" || depth > 6) return null;
+  const source = raw.trim();
+  const literal = sourceEnumMember(source, "DropShadow",
+    ["none", "light", "semilight", "regular", "semibold", "bold", "extrabold"]);
+  if (literal) return literal as PreviewDropShadow;
+  // Constant If conditions are provable even without App/Parent/local symbols.
+  // Runtime-dependent conditions still return null via staticBoolean.
+
+  // Resolve only a proven Power Fx If branch. Unavailable runtime conditions,
+  // unsupported enum names, strings and arbitrary calls remain unknown.
+  // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+  const lexed = lexPowerFx(source);
+  if (lexed.diagnostics.length) return null;
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+  if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
+      tokens[tokens.length - 1]?.value !== ")") return null;
+  const branches = splitIfArguments(tokens.slice(2, -1));
+  if (!branches || branches.length < 2) return null;
+
+  for (let i = 0; i + 1 < branches.length; i += 2) {
+    const condition = staticBoolean("=" + expressionText(source, branches[i]), symbols);
+    if (condition === null) return null;
+    if (condition) {
+      return previewDropShadow("=" + expressionText(source, branches[i + 1]), symbols, depth + 1);
+    }
+  }
+  const fallback = branches.length % 2 === 1 ? branches[branches.length - 1] : undefined;
+  return fallback ? previewDropShadow("=" + expressionText(source, fallback), symbols, depth + 1) : null;
+}
+
+const PREVIEW_SHADOW_FILTERS: Record<Exclude<PreviewDropShadow, "none">, string> = {
+  light: "drop-shadow(0px 1px 2px rgba(0,0,0,0.12))",
+  semilight: "drop-shadow(0px 2px 3px rgba(0,0,0,0.16))",
+  regular: "drop-shadow(0px 3px 6px rgba(0,0,0,0.18))",
+  semibold: "drop-shadow(0px 4px 8px rgba(0,0,0,0.22))",
+  bold: "drop-shadow(0px 6px 12px rgba(0,0,0,0.26))",
+  extrabold: "drop-shadow(0px 8px 16px rgba(0,0,0,0.30))"
+};
+
+/** Deterministic SVG-compatible CSS; never interpolates imported formulas. */
+export function previewDropShadowFilter(
   raw: unknown,
   symbols?: Record<string, StaticPowerFxValue>
+): string | undefined {
+  const level = previewDropShadow(raw, symbols);
+  return level && level !== "none" ? PREVIEW_SHADOW_FILTERS[level] : undefined;
+}
+
+export type PreviewBorderStyle = "solid" | "dashed" | "dotted" | "none";
+
+/**
+ * Resolve a Canvas BorderStyle only from an explicit enum or a provably
+ * selected Power Fx If branch. Unknown runtime conditions, text that merely
+ * resembles an enum and unsupported expressions remain unresolved.
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/properties-color-border
+ * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+ */
+export function previewBorderStyle(
+  raw: unknown,
+  symbols?: Record<string, StaticPowerFxValue>,
+  depth = 0
+): PreviewBorderStyle | null {
+  if (typeof raw !== "string" || depth > 6) return null;
+  const source = raw.trim();
+  const literal = sourceEnumMember(source, "BorderStyle", ["solid", "dashed", "dotted", "none"]);
+  if (literal) return literal as PreviewBorderStyle;
+  // Resolve constant If branches without requiring viewport symbols; keep
+  // SQL, identity, and other runtime-dependent branches unresolved.
+
+  const lexed = lexPowerFx(source);
+  if (lexed.diagnostics.length) return null;
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+  if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
+      tokens[tokens.length - 1]?.value !== ")") return null;
+  const branches = splitIfArguments(tokens.slice(2, -1));
+  if (!branches || branches.length < 2) return null;
+
+  for (let i = 0; i + 1 < branches.length; i += 2) {
+    const condition = staticBoolean("=" + expressionText(source, branches[i]), symbols);
+    if (condition === null) return null;
+    if (condition) {
+      return previewBorderStyle("=" + expressionText(source, branches[i + 1]), symbols, depth + 1);
+    }
+  }
+  const fallback = branches.length % 2 === 1 ? branches[branches.length - 1] : undefined;
+  return fallback ? previewBorderStyle("=" + expressionText(source, fallback), symbols, depth + 1) : null;
+}
+
+export type PreviewDisplayMode = "edit" | "disabled" | "view" | "unresolved";
+
+/**
+ * A DisplayMode enum is not interchangeable with a Power Fx text value.
+ * staticString deliberately represents both as strings for general preview
+ * expressions, so using it here would allow ="DisplayMode.Edit" (or a local
+ * string variable) to enable simulated OnSelect. Resolve only source enum
+ * tokens, optionally through a statically verified If branch.
+ *
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-card
+ * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+ */
+export function previewDisplayMode(
+  raw: unknown,
+  symbols?: Record<string, StaticPowerFxValue>,
+  depth = 0
 ): PreviewDisplayMode {
   if (raw === undefined || raw === null) return "edit";
-  const resolved = staticString(raw, symbols);
-  if (resolved === null) return "unresolved";
-  const mode = resolved.toLowerCase();
-  if (mode === "displaymode.edit") return "edit";
-  if (mode === "displaymode.disabled") return "disabled";
-  if (mode === "displaymode.view") return "view";
-  return "unresolved";
+  if (typeof raw !== "string" || depth > 6) return "unresolved";
+  const source = raw.trim();
+  const literal = sourceEnumMember(source, "DisplayMode", ["edit", "disabled", "view"]);
+  if (literal) return literal as "edit" | "disabled" | "view";
+
+  const lexed = lexPowerFx(source);
+  if (lexed.diagnostics.length) return "unresolved";
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+  if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
+      tokens[tokens.length - 1]?.value !== ")") return "unresolved";
+  const branches = splitIfArguments(tokens.slice(2, -1));
+  if (!branches || branches.length < 2) return "unresolved";
+
+  for (let i = 0; i + 1 < branches.length; i += 2) {
+    const condition = staticBoolean("=" + expressionText(source, branches[i]), symbols);
+    if (condition === null) return "unresolved";
+    if (condition) {
+      return previewDisplayMode("=" + expressionText(source, branches[i + 1]), symbols, depth + 1);
+    }
+  }
+  const fallback = branches.length % 2 === 1 ? branches[branches.length - 1] : undefined;
+  return fallback
+    ? previewDisplayMode("=" + expressionText(source, fallback), symbols, depth + 1)
+    : "unresolved";
 }
 
-export function previewText(control: CanvasControl): string | null {
+/**
+ * A Power Fx Blank() or a proven If branch returning Blank is not the same
+ * as an unavailable runtime value. Restrict this to exact lexical forms:
+ * a variable named Blank, a quoted string, or a SQL-backed condition must
+ * never be interpreted as a known empty input.
+ *
+ * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-isblank-isempty
+ * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+ */
+function previewKnownBlank(
+  raw: unknown,
+  symbols?: Record<string, StaticPowerFxValue>,
+  depth = 0
+): boolean {
+  if (typeof raw !== "string" || depth > 6) return false;
+  const source = raw.trim();
+  const lexed = lexPowerFx(source);
+  if (lexed.diagnostics.length) return false;
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+
+  if (tokens.length === 3 &&
+      tokens[0].kind === "identifier" &&
+      tokens[0].value.toLowerCase() === "blank" &&
+      tokens[1].value === "(" && tokens[2].value === ")") return true;
+
+  if (tokens[0]?.kind !== "identifier" ||
+      tokens[0].value.toLowerCase() !== "if" ||
+      tokens[1]?.value !== "(" || tokens[tokens.length - 1]?.value !== ")") return false;
+  const branches = splitIfArguments(tokens.slice(2, -1));
+  if (!branches || branches.length < 2) return false;
+
+  for (let i = 0; i + 1 < branches.length; i += 2) {
+    const condition = staticBoolean("=" + expressionText(source, branches[i]), symbols);
+    if (condition === null) return false;
+    if (condition) {
+      return previewKnownBlank("=" + expressionText(source, branches[i + 1]), symbols, depth + 1);
+    }
+  }
+  // If with no matching condition and no ElseResult returns Blank().
+  return branches.length % 2 === 0 ||
+    previewKnownBlank("=" + expressionText(source, branches[branches.length - 1]), symbols, depth + 1);
+}
+
+export type PreviewInputState = "value" | "hint" | "empty" | "unknown";
+
+/**
+ * Distinguish a verified empty field from an unresolved runtime value.
+ * Classic TextInput uses HintText; ModernTextInput@1.0.0 uses Placeholder.
+ * A local, statically resolved empty Default permits the hint to appear;
+ * SQL/connector-dependent values never imply an empty field or access.
+ *
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-text-input
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-text-input
+ */
+export function previewInputContent(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): { text: string | null; state: PreviewInputState } {
+  const props = control.properties;
+  const modern = /^modern\/?textinput(?:@|$)/i.test(control.controlType);
+  const hint = modern ? props.Placeholder ?? props.HintText : props.HintText;
+  // Text (classic/modern) and Value are live output properties, not
+  // serialized initial input. Even a literal-looking output cannot prove
+  // what a user has typed or whether a placeholder is currently visible.
+  // Only Default establishes the source-defined initial text.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-text-input
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-text-input
+  const source = props.Default;
+  if (source === undefined && (props.Text !== undefined || props.Value !== undefined)) {
+    return { text: null, state: "unknown" };
+  }
+  if (source !== undefined && source !== null) {
+    const initial = staticString(source, symbols);
+    if (initial === null) {
+      if (!previewKnownBlank(source, symbols)) return { text: null, state: "unknown" };
+    } else if (initial !== "") {
+      return { text: initial, state: "value" };
+    }
+  }
+  if (hint === undefined || hint === null) return { text: "", state: "empty" };
+  const placeholder = staticString(hint, symbols);
+  if (placeholder === null) {
+    return previewKnownBlank(hint, symbols)
+      ? { text: "", state: "empty" } : { text: null, state: "unknown" };
+  }
+  return { text: placeholder, state: placeholder === "" ? "empty" : "hint" };
+}
+
+/**
+ * A ComboBox DefaultSelectedItems formula yields a table of records, not
+ * display text. Without a verified Items snapshot and ItemDisplayText scope,
+ * its selected caption is unknown even when a fallback placeholder is known.
+ * A Dropdown may implicitly select its first Items row, also unavailable in
+ * source-only previews. Do not fabricate either selection from SQL.
+ *
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-combo-box
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-drop-down
+ */
+export type PreviewSelectState = "value" | "hint" | "empty" | "unknown";
+export function previewSelectContent(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): { text: string | null; state: PreviewSelectState } {
+  const props = control.properties;
+  const combo = /combobox/i.test(control.controlType);
+  if (combo && props.DefaultSelectedItems !== undefined &&
+      props.DefaultSelectedItems !== null) {
+    return { text: null, state: "unknown" };
+  }
+  if (props.Default !== undefined && props.Default !== null) {
+    const value = staticString(props.Default, symbols);
+    if (value === null) return { text: null, state: "unknown" };
+    if (value !== "") return { text: value, state: "value" };
+  }
+  if (props.InputTextPlaceholder !== undefined &&
+      props.InputTextPlaceholder !== null) {
+    const hint = staticString(props.InputTextPlaceholder, symbols);
+    if (hint === null) return { text: null, state: "unknown" };
+    return { text: hint, state: hint === "" ? "empty" : "hint" };
+  }
+  // A dropdown with Items but no serialized Default may select the first
+  // record at runtime. ComboBox without DefaultSelectedItems does not.
+  return !combo && props.Items !== undefined
+    ? { text: null, state: "unknown" }
+    : { text: "", state: "empty" };
+}
+
+export function previewText(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): string | null {
   const props = control.properties;
   const kind = previewKind(control.controlType);
-  if (kind === "input") {
-    return literalText(props.Default) ?? literalText(props.Value) ??
-      literalText(props.HintText);
-  }
-  if (kind === "select") {
-    return literalText(props.DefaultSelectedItems) ??
-      literalText(props.Default) ??
-      literalText(props.InputTextPlaceholder);
-  }
-  return literalText(props.Text) ?? literalText(props.Label);
+  if (kind === "input") return previewInputContent(control, symbols).text;
+  if (kind === "select") return previewSelectContent(control, symbols).text;
+  // A serialized Text expression takes precedence over legacy Label, even
+  // when it depends on SQL/runtime. Falling back to Label in that case would
+  // invent visible content. A proven Blank() or If-without-else is different:
+  // its verified visual result is empty text, not an unknown value.
+  // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+  const source = props.Text ?? props.Label;
+  const known = staticString(source, symbols);
+  return known ?? (previewKnownBlank(source, symbols) ? "" : null);
 }
 
-export function previewFontSize(control: CanvasControl): number {
-  const resolved = literalNumber(control.properties.Size) ??
-    literalNumber(control.properties.FontSize);
-  return resolved !== null && resolved > 0 ? Math.min(256, resolved) : 14;
+
+// Explicit Canvas Font enums are stable source values; runtime formulas are not.
+// Limit the CSS output to known font families to avoid treating imported
+// Power Fx expressions as arbitrary CSS or inventing an unavailable font.
+const PREVIEW_FONT_FAMILIES: Record<string, string> = {
+  "segoe ui": '"Segoe UI",system-ui,sans-serif',
+  "arial": 'Arial,sans-serif',
+  "verdana": 'Verdana,sans-serif',
+  "tahoma": 'Tahoma,sans-serif',
+  "calibri": 'Calibri,"Segoe UI",sans-serif',
+  "open sans": '"Open Sans","Segoe UI",sans-serif',
+  "georgia": 'Georgia,serif',
+  "times new roman": '"Times New Roman",serif',
+  "courier new": '"Courier New",monospace'
+};
+
+export const PREVIEW_DEFAULT_FONT = '"Segoe UI",system-ui,sans-serif';
+
+/**
+ * Select a Font family only from a known literal or a verified Power Fx If
+ * branch. Unresolved runtime conditions, unknown fonts and CSS-like strings
+ * retain the local fallback; no arbitrary source expression reaches CSS.
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-text-box
+ * https://github.com/microsoft/PowerApps-Tooling/tree/master/schemas/pa-yaml/v3.0
+ */
+function sourceFontFamily(
+  raw: unknown,
+  symbols?: Record<string, StaticPowerFxValue>,
+  depth = 0
+): string | null {
+  if (typeof raw !== "string" || depth > 6) return null;
+  const source = raw.trim();
+  // Power Fx permits whitespace and comments around member access.
+  // Parse complete tokens: neither text nor partial expressions are enums.
+  // Only the allowlisted family below is ever emitted as browser CSS.
+  const lexed = lexPowerFx(source);
+  if (lexed.diagnostics.length) return null;
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+  const fontMember = tokens.length === 3 &&
+    tokens[0].kind === "identifier" &&
+    tokens[0].value.toLowerCase() === "font" &&
+    tokens[1].value === "." &&
+    (tokens[2].kind === "identifier" || tokens[2].kind === "quotedIdentifier")
+      ? tokens[2].kind === "quotedIdentifier"
+        ? tokens[2].value.slice(1, -1).replaceAll("''", "'")
+        : tokens[2].value
+      : null;
+  const family = fontMember ?? staticString(raw);
+  if (family) return PREVIEW_FONT_FAMILIES[family.trim().toLowerCase()] ?? null;
+  // Literal If branches are resolvable without any App/Parent/runtime symbols.
+  // staticBoolean still fails closed for unknown variables and connectors.
+  if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
+      tokens[tokens.length - 1]?.value !== ")") return null;
+  const branches = splitIfArguments(tokens.slice(2, -1));
+  if (!branches || branches.length < 2) return null;
+
+  for (let i = 0; i + 1 < branches.length; i += 2) {
+    const condition = staticBoolean("=" + expressionText(source, branches[i]), symbols);
+    if (condition === null) return null;
+    if (condition) {
+      return sourceFontFamily("=" + expressionText(source, branches[i + 1]), symbols, depth + 1);
+    }
+  }
+  const fallback = branches.length % 2 === 1 ? branches[branches.length - 1] : undefined;
+  return fallback ? sourceFontFamily("=" + expressionText(source, fallback), symbols, depth + 1) : null;
+}
+
+export function previewFontFamily(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): string {
+  return sourceFontFamily(control.properties.Font, symbols) ?? PREVIEW_DEFAULT_FONT;
+}
+
+/** An explicit unresolved Font is not proof that the fallback matches Canvas. */
+export function previewFontFamilyIsKnown(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): boolean {
+  return control.properties.Font == null ||
+    sourceFontFamily(control.properties.Font, symbols) !== null;
+}
+
+/** An explicit Size wins over legacy FontSize even when it needs runtime state. */
+function sourceFontSize(control: CanvasControl): unknown {
+  return control.properties.Size ?? control.properties.FontSize;
+}
+
+export function previewFontSizeIsKnown(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): boolean {
+  const raw = sourceFontSize(control);
+  if (raw == null) return true;
+  const resolved = staticNumber(raw, symbols);
+  // The renderer caps sizes at 256px; beyond that, its geometry is illustrative.
+  return resolved !== null && resolved > 0 && resolved <= 256;
+}
+
+export function previewFontSize(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): number {
+  const resolved = staticNumber(sourceFontSize(control), symbols);
+  // ModernText defaults to 15 points; classic labels retain an approximate 14px.
+  // An unresolved explicit Size must not be replaced by a known legacy FontSize.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/properties-text
+  return resolved !== null && resolved > 0 ? Math.min(256, resolved) :
+    /^moderntext(?:@|$)/i.test(control.controlType) ? 15 : 14;
+}
+
+export type PreviewVisibility = "visible" | "hidden" | "unknown";
+
+/** Unknown runtime conditions are not interpreted as true or false. */
+export function previewVisibility(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): PreviewVisibility {
+  if (control.properties.Visible === undefined) return "visible";
+  const visible = staticBoolean(control.properties.Visible, symbols);
+  return visible === true ? "visible" : visible === false ? "hidden" : "unknown";
+}
+
+/** Only a provably true Canvas Wrap formula enables browser-measured label wrapping.
+ * Unknown runtime values keep the existing conservative SVG text fallback.
+ */
+export function previewLabelWrap(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): boolean {
+  return previewKind(control.controlType) === "label" &&
+    staticBoolean(control.properties.Wrap, symbols) === true;
 }
 
 export function isDefinitelyHidden(
   control: CanvasControl,
   symbols?: Record<string, StaticPowerFxValue>
 ): boolean {
-  return staticBoolean(control.properties.Visible, symbols) === false;
+  return previewVisibility(control, symbols) === "hidden";
 }
 
+/**
+ * Source-only initial checked state, not the live user-edited Value.
+ * Modern checkbox/toggle controls serialize Checked; classic controls
+ * serialize Default. A runtime formula must not be painted as false.
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-check-box
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-checkbox
+ */
+export type PreviewCheckedState = "checked" | "unchecked" | "unknown";
+
+export function previewCheckedState(
+  control: CanvasControl,
+  symbols?: Record<string, StaticPowerFxValue>
+): PreviewCheckedState {
+  const props = control.properties;
+  // Prefer the source-controlled property over Value, which may be a runtime
+  // output. Never OR contradictory properties into an invented true state.
+  // Modern Checked and classic Default configure the initial state.
+  // Classic Value is a runtime output; never treat it as an initial check.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-toggle
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-checkbox
+  const raw = props.Checked !== undefined ? props.Checked : props.Default;
+  if (raw === undefined && props.Value !== undefined) return "unknown";
+  if (raw === undefined || raw === null) return "unchecked";
+  const resolved = staticBoolean(raw, symbols);
+  return resolved === null ? "unknown" : resolved ? "checked" : "unchecked";
+}
+
+/** Legacy boolean convenience; visual callers should use the tri-state API. */
 export function previewIsChecked(control: CanvasControl): boolean {
-  return staticBoolean(control.properties.Default) === true ||
-    staticBoolean(control.properties.Checked) === true ||
-    staticBoolean(control.properties.Value) === true;
+  return previewCheckedState(control) === "checked";
 }
 
 /**
  * Only serialized styling may override approximate defaults. Unknown or
  * runtime-dependent values stay undefined rather than being guessed.
  */
-function enumValue(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
-  const value = raw.trim().replace(/^=\s*/, "");
-  const match = value.match(/^(?:[A-Za-z]+\.)?([A-Za-z]+)$/);
-  return match ? match[1].toLowerCase() : null;
+function enumValue(
+  raw: unknown, namespace: "Align" | "VerticalAlign" | "FontWeight",
+  symbols?: Record<string, StaticPowerFxValue>, depth = 0
+): string | null {
+  if (typeof raw !== "string" || depth > 6) return null;
+  const source = raw.trim();
+  // Typography enums share the same Power Fx token semantics as
+  // DisplayMode/BorderStyle: comments and whitespace are trivia, while a
+  // quoted string, extra operator or unknown member is not a valid enum.
+  // Restrict recognized members rather than treating arbitrary identifiers
+  // as verified formatting.
+  const allowed: Record<typeof namespace, readonly string[]> = {
+    Align: ["left", "right", "center", "middle", "start", "end", "justify"],
+    VerticalAlign: ["top", "middle", "center", "bottom"],
+    FontWeight: ["bold", "semibold", "normal", "regular", "light", "lighter"]
+  };
+  const literal = sourceEnumMember(source, namespace, allowed[namespace]);
+  if (literal) return literal;
+
+  // Constant If conditions do not require a viewport or simulation context.
+  // Unknown runtime conditions remain unresolved via staticBoolean.
+  // Power Fx If supports condition/result pairs and an optional default,
+  // including nested If expressions. Only evaluate a selected branch when
+  // every preceding condition is statically proven false. No connectors or
+  // runtime-only variables are evaluated.
+  // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+  const lexed = lexPowerFx(source);
+  if (lexed.diagnostics.length) return null;
+  const tokens = significantTokens(lexed.tokens);
+  if (tokens[0]?.value === "=") tokens.shift();
+  if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
+      tokens[tokens.length - 1]?.value !== ")") return null;
+  const branches = splitIfArguments(tokens.slice(2, -1));
+  if (!branches || branches.length < 2) return null;
+  for (let i = 0; i + 1 < branches.length; i += 2) {
+    const condition = staticBoolean("=" + expressionText(source, branches[i]), symbols);
+    if (condition === null) return null;
+    if (condition) {
+      return enumValue("=" + expressionText(source, branches[i + 1]), namespace, symbols, depth + 1);
+    }
+  }
+  const fallback = branches.length % 2 === 1 ? branches[branches.length - 1] : undefined;
+  return fallback
+    ? enumValue("=" + expressionText(source, fallback), namespace, symbols, depth + 1)
+    : null;
 }
 
-export type PreviewHorizontalAlign = "start" | "middle" | "end";
+export type PreviewHorizontalAlign = "start" | "middle" | "end" | "justify";
 export type PreviewVerticalAlign = "top" | "middle" | "bottom";
 
-export function previewHorizontalAlign(control: CanvasControl): PreviewHorizontalAlign | null {
-  const value = enumValue(control.properties.Align ?? control.properties.TextAlign);
+export function previewHorizontalAlign(
+  control: CanvasControl, symbols?: Record<string, StaticPowerFxValue>
+): PreviewHorizontalAlign | null {
+  const value = enumValue(control.properties.Align ?? control.properties.TextAlign, "Align", symbols);
   if (value === "center" || value === "middle") return "middle";
+  if (value === "justify") return "justify";
   if (value === "right" || value === "end") return "end";
   if (value === "left" || value === "start") return "start";
   return null;
 }
 
-export function previewVerticalAlign(control: CanvasControl): PreviewVerticalAlign | null {
-  const value = enumValue(control.properties.VerticalAlign ?? control.properties.TextVerticalAlignment);
+export function previewVerticalAlign(
+  control: CanvasControl, symbols?: Record<string, StaticPowerFxValue>
+): PreviewVerticalAlign | null {
+  const value = enumValue(control.properties.VerticalAlign ?? control.properties.TextVerticalAlignment, "VerticalAlign", symbols);
   if (value === "top") return "top";
   if (value === "bottom") return "bottom";
   if (value === "middle" || value === "center") return "middle";
   return null;
 }
 
-export function previewFontWeight(control: CanvasControl): number | undefined {
-  const value = enumValue(control.properties.FontWeight);
+// ModernText's older serialized property names remain valid in imported
+// .pa.yaml sources. The current property always wins, even when its formula
+// cannot be resolved; a legacy alias must not silently override it.
+// https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-text
+// https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-updates
+const MODERN_TEXT_LEGACY_STYLES = {
+  FontWeight: "Weight",
+  Italic: "FontItalic",
+  Underline: "FontUnderline",
+  Strikethrough: "FontStrikethrough"
+} as const;
+
+export function previewTextStyleSource(
+  control: CanvasControl, property: keyof typeof MODERN_TEXT_LEGACY_STYLES
+): unknown {
+  return control.properties[property] ??
+    (/^moderntext(?:@|$)/i.test(control.controlType)
+      ? control.properties[MODERN_TEXT_LEGACY_STYLES[property]] : undefined);
+}
+
+export function previewFontWeight(
+  control: CanvasControl, symbols?: Record<string, StaticPowerFxValue>
+): number | undefined {
+  const source = previewTextStyleSource(control, "FontWeight");
+  let value = enumValue(source, "FontWeight", symbols);
+  // Older ModernText.Weight accepted plain text names. Accept only exact
+  // allowlisted names from a statically verified string, not arbitrary CSS.
+  if (value === null && control.properties.FontWeight == null &&
+      /^moderntext(?:@|$)/i.test(control.controlType)) {
+    const legacy = staticString(source, symbols)?.trim().toLowerCase();
+    if (legacy && ["bold", "semibold", "normal", "regular", "light", "lighter"].includes(legacy)) {
+      value = legacy;
+    }
+  }
   if (value === "bold") return 700;
   if (value === "semibold") return 600;
   if (value === "normal" || value === "regular") return 400;
-  if (value === "light") return 300;
+  if (value === "light" || value === "lighter") return 300;
   return undefined;
 }
 
-export function previewItalic(control: CanvasControl): boolean {
-  return staticBoolean(control.properties.Italic) === true;
+export function previewItalic(
+  control: CanvasControl, symbols?: Record<string, StaticPowerFxValue>
+): boolean {
+  return staticBoolean(previewTextStyleSource(control, "Italic"), symbols) === true;
 }
 
-export function previewTextDecoration(control: CanvasControl): string | undefined {
+export function previewTextDecoration(
+  control: CanvasControl, symbols?: Record<string, StaticPowerFxValue>
+): string | undefined {
   const decorations: string[] = [];
-  if (staticBoolean(control.properties.Underline) === true) decorations.push("underline");
-  if (staticBoolean(control.properties.Strikethrough) === true) decorations.push("line-through");
+  if (staticBoolean(previewTextStyleSource(control, "Underline"), symbols) === true) decorations.push("underline");
+  if (staticBoolean(previewTextStyleSource(control, "Strikethrough"), symbols) === true) decorations.push("line-through");
   return decorations.length ? decorations.join(" ") : undefined;
 }
 
@@ -234,4 +809,28 @@ export function previewCanRunOnSelect(
   symbols?: Record<string, StaticPowerFxValue>
 ): boolean {
   return previewDisplayMode(control.properties.DisplayMode, symbols) === "edit";
+}
+
+/**
+ * Source-only preview must not execute local OnSelect behavior from controls
+ * that might be hidden, including descendants of unresolved Visible hosts.
+ * Inspecting a node remains allowed; only behavior simulation is gated.
+ * Gallery templates with Items are not evidence of actual loaded records.
+ */
+export function previewSelectionBehaviorGate(
+  control: CanvasControl,
+  symbols: Record<string, StaticPowerFxValue>,
+  options: {
+    ancestorVisibilityUnknown?: boolean;
+    runtimeGalleryStateUnknown?: boolean;
+    galleryRecordsUnknown?: boolean;
+  } = {}
+): "allowed" | "visibility-unverified" | "gallery-unverified" | "display-mode-unverified" {
+  if (options.ancestorVisibilityUnknown || previewVisibility(control, symbols) !== "visible") {
+    return "visibility-unverified";
+  }
+  if (options.runtimeGalleryStateUnknown || options.galleryRecordsUnknown) {
+    return "gallery-unverified";
+  }
+  return previewCanRunOnSelect(control, symbols) ? "allowed" : "display-mode-unverified";
 }
