@@ -282,8 +282,17 @@ export function previewIsOpaqueColor(color: string | null): boolean {
   const alphaHex = /^#(?:[0-9a-f]{3}([0-9a-f])|[0-9a-f]{6}([0-9a-f]{2}))$/i.exec(color);
   if (alphaHex) return (alphaHex[1] ?? alphaHex[2]).toLowerCase() ===
     (alphaHex[1] ? "f" : "ff");
-  const rgbaColor = /^rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*(\d+(?:\.\d*)?|\.\d+)\s*\)$/i.exec(color);
-  return rgbaColor !== null && Number(rgbaColor[1]) === 1;
+  // Power Fx RGBA accepts fractional channels (e.g. RGBA(10.5,20,30,1)).
+  // Validate numeric syntax and channel ranges before claiming opacity;
+  // browser CSS clamping is not a verified source-only Canvas result.
+  const rgbaColor = /^rgba\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*\)$/i.exec(color);
+  if (!rgbaColor) return false;
+  const validNumber = /^(?:\d+(?:\.\d*)?|\.\d+)$/;
+  if (!rgbaColor.slice(1).every(part => validNumber.test(part))) return false;
+  const channels = rgbaColor.slice(1, 4).map(Number);
+  return channels.every(channel =>
+    Number.isFinite(channel) && channel >= 0 && channel <= 255
+  ) && Number(rgbaColor[4]) === 1;
 }
 
 /**
