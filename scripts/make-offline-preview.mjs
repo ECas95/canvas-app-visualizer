@@ -42,29 +42,6 @@ export async function createOfflinePreview(
   if (!cssRef) throw new Error("Missing built CSS asset reference");
   const css = await readFile(localAssetPath(root, cssRef), "utf8");
 
-  // A function replacement is essential: compiled JS commonly includes   html = html.replace(styles[0][0],
-    `<style data-offline-preview="css">\n${css.replace(/<\/style/gi, "<\\/style")}\n</style>`);
-  html = html.replace(scripts[0][0],
-    `<script type="module" data-offline-preview="js">\n${js.replace(/<\/script/gi, "<\\/script")}\n</script>`);,
-  // 
-  // The compiled JavaScript can itself contain strings resembling asset
-  // attributes. Validate original HTML tags, not string literals embedded
-  // inside the now-inlined module.
-  html = html.replace("</head>",
-    '  <meta name="canvas-preview-channel" content="unmerged-pr-offline" />\n  </head>');
-
-  await mkdir(dirname(resolve(outputPath)), { recursive: true });
-  await writeFile(outputPath, html, "utf8");
-  console.log(`Offline review preview: ${outputPath} (${Buffer.byteLength(html)} bytes)`);
-  return outputPath;
-}
-
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  await createOfflinePreview();
-}
- and other sequences that String.replace would expand as substitutions.
-  // Literal expansion corrupted the inline module and reintroduced the original
-  // external <script src="./assets/..."> tag on file:// previews.
   html = html.replace(styles[0][0], () =>
     `<style data-offline-preview="css">\n${css.replace(/<\/style/gi, "<\\/style")}\n</style>`);
   html = html.replace(scripts[0][0], () =>
