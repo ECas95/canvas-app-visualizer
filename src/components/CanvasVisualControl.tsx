@@ -8,7 +8,7 @@ import { previewImageFit, previewImageFlipTransform, previewImagePosition, previ
 import { PREVIEW_ICON_PATHS, previewIconName, previewIconRotation } from "../core/layout/previewIcon";
 import {
   previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewDropShadow, previewDropShadowFilter, previewIsOpaqueColor, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
-  previewCheckedState, previewFontFamilyIsKnown, previewFontSizeIsKnown, previewInputContent, previewSelectContent, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration,
+  previewCheckedState, previewFontFamilyIsKnown, previewFontSizeIsKnown, previewInputContent, previewSelectContent, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration, previewTextStyleSource,
   previewVerticalAlign
 } from "../core/layout/previewAppearance";
 
@@ -33,6 +33,7 @@ export function CanvasVisualControl({
   // Microsoft .pa.yaml uses ModernIcon@1.1.0 (not only Modern/Icon).
   // Modern Icon.Icon is a Fluent string and its color is IconColor.
   const isModernIcon = kind === "icon" && /^modern\/?icon(?:@|$)/i.test(control.controlType);
+  const isModernText = kind === "label" && /^moderntext(?:@|$)/i.test(control.controlType);
   const media = kind === "image" ? resolvePreviewImage(props.Image, mediaAssets, simulationSymbols) : undefined;
   const imageSourceState = kind === "image"
     ? previewImageSourceState(props.Image, mediaAssets, simulationSymbols) : null;
@@ -73,7 +74,8 @@ export function CanvasVisualControl({
   // known Disabled mode prefers DisabledColor for classic controls.
   // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-colors
   const foregroundSource = isModernIcon ? props.IconColor ?? props.Color :
-    disabled ? props.DisabledColor ?? props.Color : props.Color;
+    disabled ? props.DisabledColor ?? props.Color :
+    isModernText ? props.Color ?? props.FontColor : props.Color;
   const resolvedForeground = previewColorWithSymbols(foregroundSource, simulationSymbols);
   const foreground = resolvedForeground ?? "#242424";
   const borderColor = previewColorWithSymbols(props.BorderColor, simulationSymbols);
@@ -141,6 +143,23 @@ export function CanvasVisualControl({
   const italic = previewItalic(control, simulationSymbols);
   const textDecoration = previewTextDecoration(control, simulationSymbols);
   const wraps = previewLabelWrap(control, simulationSymbols);
+  // The legacy ModernText aliases and current style properties are source
+  // formulas, not necessarily known values. Keep the existing safe fallback
+  // while marking the exact styling dimensions that cannot be verified.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/properties-text
+  const unknownTextStyleProperties = textBearing ? [
+    ["FontWeight", previewTextStyleSource(control, "FontWeight") != null && fontWeight === undefined],
+    ["Italic", previewTextStyleSource(control, "Italic") != null &&
+      staticBoolean(previewTextStyleSource(control, "Italic"), simulationSymbols) === null],
+    ["Underline", previewTextStyleSource(control, "Underline") != null &&
+      staticBoolean(previewTextStyleSource(control, "Underline"), simulationSymbols) === null],
+    ["Strikethrough", previewTextStyleSource(control, "Strikethrough") != null &&
+      staticBoolean(previewTextStyleSource(control, "Strikethrough"), simulationSymbols) === null],
+    ["Align", (props.Align ?? props.TextAlign) != null && horizontalAlign === null],
+    ["VerticalAlign", (props.VerticalAlign ?? props.TextVerticalAlignment) != null &&
+      verticalAlign === null]
+  ].filter((entry): entry is [string, boolean] => typeof entry[0] === "string" && entry[1] === true)
+    .map(([name]) => name) : [];
   // Classic Canvas labels expose LineHeight as a font-relative multiplier.
   // Evaluate only a source-verifiable number (including known App.Width).
   // An unsupported or runtime-dependent formula must remain explicitly unknown.
@@ -298,6 +317,8 @@ export function CanvasVisualControl({
       data-preview-wrap-state={wrapUnknown ? "unknown" : undefined}
       data-preview-font-state={fontUnknown ? "unknown" : undefined}
       data-preview-font-size-state={fontSizeUnknown ? "unknown" : undefined}
+      data-preview-text-style-state={unknownTextStyleProperties.length ? "unknown" : undefined}
+      data-preview-text-style-properties={unknownTextStyleProperties.length ? unknownTextStyleProperties.join(",") : undefined}
       data-preview-line-height-state={!lineHeightKnown ? "unknown" : undefined}
       data-preview-padding-state={unverifiedPaddingEdges.length ? "unknown" : undefined}
       data-preview-padding-edges={unverifiedPaddingEdges.length ? unverifiedPaddingEdges.join(",") : undefined}
@@ -319,6 +340,9 @@ export function CanvasVisualControl({
       {wrapUnknown && <title>Wrap requires runtime state; single-line text is only a preview fallback</title>}
       {fontUnknown && <title>Font requires runtime state or is unsupported; displayed family is a preview fallback</title>}
       {fontSizeUnknown && <title>Font size requires runtime state or exceeds preview limits; displayed size is approximate</title>}
+      {unknownTextStyleProperties.length > 0 && (
+        <title>{`Text styling cannot be verified for ${unknownTextStyleProperties.join(", ")}; displayed alignment, weight or decoration is a preview fallback`}</title>
+      )}
       {!lineHeightKnown && <title>LineHeight requires runtime state or is outside supported preview bounds; displayed spacing is approximate</title>}
       {unverifiedPaddingEdges.length > 0 && (
         <title>{`Text padding cannot be verified for ${unverifiedPaddingEdges.join(", ")}; displayed spacing is a preview fallback`}</title>
