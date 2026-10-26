@@ -146,6 +146,20 @@ export function CanvasVisualControl({
   // Keep the existing conservative SVG fallback, but expose its uncertainty.
   const wrapUnknown = kind === "label" && props.Wrap != null &&
     staticBoolean(props.Wrap, simulationSymbols) === null;
+  // Canvas text padding can be a responsive Power Fx expression. An explicit
+  // runtime-only or invalid value is not proof of zero/default padding:
+  // retain the current safe visual fallback, but identify the affected edges.
+  // Omitted properties are version-specific defaults, not runtime unknowns.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/properties-size-location
+  const unverifiedPaddingEdges = textBearing
+    ? (["PaddingTop", "PaddingRight", "PaddingBottom", "PaddingLeft"] as const)
+        .filter(edge => {
+          const raw = props[edge];
+          if (raw == null) return false;
+          const resolved = staticNumber(raw, simulationSymbols);
+          return resolved === null || !Number.isFinite(resolved) || resolved < 0;
+        })
+    : [];
   const padding = (raw: unknown) => Math.max(0, staticNumber(raw, simulationSymbols) ?? 0);
 
   // Power Apps aligns text inside the content box after source padding.
@@ -276,6 +290,8 @@ export function CanvasVisualControl({
       data-preview-font-state={fontUnknown ? "unknown" : undefined}
       data-preview-font-size-state={fontSizeUnknown ? "unknown" : undefined}
       data-preview-line-height-state={!lineHeightKnown ? "unknown" : undefined}
+      data-preview-padding-state={unverifiedPaddingEdges.length ? "unknown" : undefined}
+      data-preview-padding-edges={unverifiedPaddingEdges.length ? unverifiedPaddingEdges.join(",") : undefined}
       data-preview-text-state={buttonTextUnknown ? "unknown" : undefined}
       data-preview-fill-state={fillUnknown ? "unknown" : undefined}
       data-preview-border-state={borderUnknown ? "unknown" : undefined}
@@ -293,6 +309,9 @@ export function CanvasVisualControl({
       {fontUnknown && <title>Font requires runtime state or is unsupported; displayed family is a preview fallback</title>}
       {fontSizeUnknown && <title>Font size requires runtime state or exceeds preview limits; displayed size is approximate</title>}
       {!lineHeightKnown && <title>LineHeight requires runtime state or is outside supported preview bounds; displayed spacing is approximate</title>}
+      {unverifiedPaddingEdges.length > 0 && (
+        <title>Text padding cannot be verified for {unverifiedPaddingEdges.join(", ")}; displayed spacing is a preview fallback</title>
+      )}
       {buttonTextUnknown && <title>Button Text requires runtime data or state; the ellipsis is a preview placeholder, not verified content</title>}
       <defs>
         <clipPath id={clipId}>
