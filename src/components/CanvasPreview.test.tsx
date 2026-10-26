@@ -109,21 +109,40 @@ describe("CanvasPreview gallery source vs runtime rows", () => {
   it("does not turn a SQL Items formula into a visible template row", () => {
     const html = renderGalleryItems("=Filter(Modules, IsEnabled)");
     expect(html).toContain("Inspect DataGallery");
-    expect(html).toContain("Template only — runtime records unavailable");
+    expect(html).toContain('data-preview-gallery-records="unknown"');
+    expect(html).toContain("Runtime gallery records unavailable");
+    expect(html).toContain("Loading, emptiness and permissions are not verified");
+    expect(html).not.toContain("Template only — runtime records unavailable");
     expect(html).not.toContain("Inspect TemplateLabel");
     expect(html).not.toContain("Example template, not a verified row");
   });
 
   it("does not treat a source-only Table expression as an explicit verified snapshot", () => {
     const html = renderGalleryItems('=Table({Title: "Demo"})');
-    expect(html).toContain("Template only — runtime records unavailable");
+    expect(html).toContain('data-preview-gallery-records="unknown"');
+    expect(html).toContain("Runtime gallery records unavailable");
+    expect(html).toContain("Loading, emptiness and permissions are not verified");
+    expect(html).not.toContain("Template only — runtime records unavailable");
     expect(html).not.toContain("Inspect TemplateLabel");
+  });
+
+  it("does not paint three phantom record cards for a source-only WrapCount=3", () => {
+    const html = renderGalleryItems("=Filter(SQLModules, IsEnabled)");
+    expect(html).toContain('data-preview-gallery-records="unknown"');
+    expect(html).toContain("Gallery rows unavailable — use Structure for template geometry");
+    expect(html).not.toContain("Template only — runtime records unavailable");
+    expect(html).not.toContain('stroke-dasharray="6 5"');
+    expect(html).not.toContain("Inspect TemplateLabel");
+    expect(html).not.toContain("Example template, not a verified row");
   });
 
   it("does not invent a row when Items was omitted from the serialized source", () => {
     const html = renderGalleryItems();
     expect(html).toContain("Inspect DataGallery");
-    expect(html).toContain("Template only — runtime records unavailable");
+    expect(html).toContain('data-preview-gallery-records="unknown"');
+    expect(html).toContain("Runtime gallery records unavailable");
+    expect(html).toContain("Loading, emptiness and permissions are not verified");
+    expect(html).not.toContain("Template only — runtime records unavailable");
     expect(html).not.toContain("Inspect TemplateLabel");
     expect(html).not.toContain("Example template, not a verified row");
     expect(html).toContain("Cannot determine loading, emptiness or access from source");
@@ -148,7 +167,7 @@ function renderSourceOnlyGalleryGuide(variant: "Vertical" | "Horizontal", laterS
     })] : [gallery],
     sourceFile: "Src/Fixture.pa.yaml", sourceFormat: "pa-yaml-v3"
   };
-  return renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+  return renderToStaticMarkup(<CanvasPreview screen={screen} initialMode="structure" onSelect={() => {}} />);
 }
 
 describe("CanvasPreview source-only gallery guide clipping", () => {
@@ -347,7 +366,7 @@ function renderScopedGallery(parentWidth: number): string {
     children: [parent], sourceFile: "Src/ScopedFixture.pa.yaml",
     sourceFormat: "pa-yaml-v3"
   };
-  return renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+  return renderToStaticMarkup(<CanvasPreview screen={screen} initialMode="structure" onSelect={() => {}} />);
 }
 
 describe("CanvasPreview gallery guide formula scope", () => {
@@ -459,7 +478,7 @@ describe("CanvasPreview unverified gallery template geometry", () => {
       properties: {}, children: [host],
       sourceFile: "Src/Synthetic.pa.yaml", sourceFormat: "pa-yaml-v3"
     };
-    return renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+    return renderToStaticMarkup(<CanvasPreview screen={screen} initialMode="structure" onSelect={() => {}} />);
   }
 
   it.each([320, 768, 1366])(
