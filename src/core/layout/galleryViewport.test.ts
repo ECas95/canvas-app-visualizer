@@ -147,3 +147,65 @@ describe("gallery WrapCount source fidelity and bounded guides", () => {
     }
   });
 });
+
+describe("gallery TemplateSize precedence and unverifiable source geometry", () => {
+  const viewportTemplate = (
+    properties: Record<string, unknown>,
+    viewport: number
+  ) => galleryTemplateLayout(
+    { ...gallery, properties: { ...gallery.properties, ...properties } },
+    { x: 0, y: 0, width: viewport - 40, height: 600, dynamic: false },
+    { parentWidth: viewport - 40, parentHeight: 600,
+      appWidth: viewport, appHeight: 768 }
+  );
+
+  it.each([390, 768, 1366])(
+    "does not replace an unknown TemplateSize with a known TemplateHeight at %s px",
+    viewport => {
+      const template = viewportTemplate({
+        TemplateSize: "=If(varCanRead, 292, 128)",
+        TemplateHeight: "=80"
+      }, viewport);
+      expect(template).toMatchObject({
+        height: 72, dynamic: true, orientation: "vertical"
+      });
+      expect(galleryRecordsUnknown(gallery)).toBe(true);
+    }
+  );
+
+  it("honors a known TemplateSize before TemplateHeight and the legacy fallback when absent", () => {
+    expect(viewportTemplate({
+      TemplateSize: "=292", TemplateHeight: "=128"
+    }, 768)).toMatchObject({ height: 292, dynamic: false });
+
+    expect(viewportTemplate({
+      TemplateSize: undefined, TemplateHeight: "=128"
+    }, 768)).toMatchObject({ height: 128, dynamic: false });
+  });
+
+  it.each(["=0", "=-20"])(
+    "marks out-of-range TemplateSize %s as approximate rather than exact",
+    value => {
+      expect(viewportTemplate({ TemplateSize: value }, 390))
+        .toMatchObject({ height: 1, dynamic: true });
+    }
+  );
+
+  it("marks negative and runtime-dependent TemplatePadding as approximate", () => {
+    expect(viewportTemplate({ TemplatePadding: "=-8" }, 768))
+      .toMatchObject({ padding: 0, dynamic: true });
+    expect(viewportTemplate({ TemplatePadding: "=varPadding" }, 768))
+      .toMatchObject({ padding: 0, dynamic: true });
+  });
+
+  it("verifies only the valid branch of responsive template sizing and padding", () => {
+    const properties = {
+      TemplateSize: "=If(App.Width < 600, 0, 292)",
+      TemplatePadding: "=If(App.Width < 600, 8, 16)"
+    };
+    expect(viewportTemplate(properties, 390))
+      .toMatchObject({ height: 1, padding: 8, dynamic: true });
+    expect(viewportTemplate(properties, 768))
+      .toMatchObject({ height: 292, padding: 16, dynamic: false });
+  });
+});
