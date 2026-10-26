@@ -77,6 +77,12 @@ export function previewIconName(
     const literal = tokens[0].value.slice(1, -1).replaceAll('""', '"');
     if (/^[A-Za-z]+$/.test(literal)) name = literal.toLowerCase();
   }
+  // Blank() is a provably empty Icon value, not an unknown runtime glyph.
+  // Power Fx permits Blank for any data type; this is not Icon.None syntax.
+  // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-isblank-isempty
+  if (tokens.length === 3 && tokens[0].kind === "identifier" &&
+      tokens[0].value.toLowerCase() === "blank" &&
+      tokens[1].value === "(" && tokens[2].value === ")") return "none";
   if (name === "none") return "none";
   if (modern && name === "delete") name = "trash";
   if (name && iconNames.has(name)) return name as PreviewIconName;
@@ -116,9 +122,11 @@ export function previewIconName(
       return previewIconName(expression(args[index + 1]), modern, symbols, depth + 1);
     }
   }
+  // Microsoft Power Fx If returns Blank when no condition matches and no
+  // default was supplied. This is a known empty icon, not runtime unknown.
   return args.length % 2 === 1
     ? previewIconName(expression(args[args.length - 1]), modern, symbols, depth + 1)
-    : null;
+    : "none";
 }
 
 /**

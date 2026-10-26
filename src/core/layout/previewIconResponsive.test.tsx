@@ -41,7 +41,7 @@ describe("responsive Canvas Icon source fidelity", () => {
       .toBe("home");
     expect(previewIconName(formula, false, { "App.Width": 390 }))
       .toBeNull();
-    expect(previewIconName("=If(false, Icon.Add)", false, {})).toBeNull();
+    expect(previewIconName("=If(false, Icon.Add)", false, {})).toBe("none");
   });
 
   it("supports only quoted Fluent names in modern Icon branches", () => {
