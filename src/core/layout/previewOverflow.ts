@@ -1,5 +1,5 @@
-import { staticBoolean, staticNumber, type StaticPowerFxValue } from "../powerfx/staticEval";
-import { lexPowerFx, significantTokens, type PowerFxToken } from "../powerfx/lexer";
+import { staticNumber, type StaticPowerFxValue } from "../powerfx/staticEval";
+import { previewLayoutEnum } from "./previewLayoutEnums";
 
 /**
  * Source-only scroll geometry for Canvas auto-layout containers.
@@ -36,9 +36,11 @@ export interface PreviewScrollItem {
 }
 
 /**
- * Resolve only literal enum members or a selected, statically verified If
- * branch. A Power Fx text value such as "LayoutOverflow.Scroll" is not an
- * enum, even if it appears in an unselected branch or a local variable.
+ * Overflow uses the same typed Canvas enum resolver as auto-layout.
+ * This supports provably selected If/Switch branches while rejecting text
+ * lookalikes, connector state and unverified permissions. Unknown never
+ * authorizes a scroll range. An omitted property retains the legacy
+ * source-only "hide" fallback, without claiming a runtime theme default.
  * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
  */
 export function previewOverflowMode(
@@ -47,61 +49,7 @@ export function previewOverflowMode(
   depth = 0
 ): PreviewOverflowMode {
   if (raw === undefined || raw === null) return "hide";
-  if (typeof raw !== "string" || depth > 6) return "unknown";
-  const source = raw.trim();
-  // The serialized Power Fx expression may contain comments or whitespace
-  // around the enum member. Tokenize instead of matching the raw source, so
-  // valid trivia is accepted but text strings, operators and malformed
-  // members can never authorize scrolling.
-  const lexed = lexPowerFx(source);
-  if (lexed.diagnostics.length) return "unknown";
-  const tokens = significantTokens(lexed.tokens);
-  if (tokens[0]?.value === "=") tokens.shift();
-  if (tokens.length === 3 &&
-      tokens[0].kind === "identifier" &&
-      tokens[0].value.toLowerCase() === "layoutoverflow" &&
-      tokens[1].value === "." &&
-      tokens[2].kind === "identifier") {
-    const member = tokens[2].value.toLowerCase();
-    if (member === "scroll" || member === "hide") return member;
-  }
-  if (tokens[0]?.value.toLowerCase() !== "if" ||
-      tokens[1]?.value !== "(" || tokens[tokens.length - 1]?.value !== ")") {
-    return "unknown";
-  }
-
-  // Split the outer If arguments only; nested If expressions retain their
-  // original token spans and are resolved recursively if selected.
-  const inner = tokens.slice(2, -1);
-  const args: PowerFxToken[][] = [];
-  let nesting = 0;
-  let start = 0;
-  for (let index = 0; index < inner.length; index += 1) {
-    if (inner[index].value === "(") nesting += 1;
-    else if (inner[index].value === ")") nesting -= 1;
-    else if (inner[index].value === "," && nesting === 0) {
-      if (index === start) return "unknown";
-      args.push(inner.slice(start, index));
-      start = index + 1;
-    }
-    if (nesting < 0) return "unknown";
-  }
-  if (nesting !== 0 || start >= inner.length) return "unknown";
-  args.push(inner.slice(start));
-  if (args.length < 2) return "unknown";
-
-  const expression = (part: PowerFxToken[]): string =>
-    "=" + source.slice(part[0].start, part[part.length - 1].end);
-  for (let index = 0; index + 1 < args.length; index += 2) {
-    const condition = staticBoolean(expression(args[index]), symbols);
-    if (condition === null) return "unknown";
-    if (condition) {
-      return previewOverflowMode(expression(args[index + 1]), symbols, depth + 1);
-    }
-  }
-  return args.length % 2 === 1
-    ? previewOverflowMode(expression(args[args.length - 1]), symbols, depth + 1)
-    : "unknown";
+  return previewLayoutEnum(raw, "LayoutOverflow", symbols, depth) ?? "unknown";
 }
 
 /**

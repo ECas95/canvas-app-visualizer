@@ -11,6 +11,7 @@ const MEMBERS = {
   LayoutDirection: ["horizontal", "vertical"],
   LayoutJustifyContent: ["start", "center", "end", "spacebetween"],
   LayoutAlignItems: ["start", "center", "end", "stretch"],
+  LayoutOverflow: ["scroll", "hide"],
   AlignInContainer: ["start", "center", "end", "stretch", "setbycontainer"]
 } as const;
 

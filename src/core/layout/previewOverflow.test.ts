@@ -118,6 +118,49 @@ describe("Canvas overflow semantics", () => {
     expect(previewScrollRanges([host, child])).not.toHaveProperty("Host");
   });
 
+  it.each([
+    [390, "scroll", 80],
+    [768, "hide", 0],
+    [1366, "scroll", 80]
+  ] as const)("resolves typed Switch overflow at %i px without runtime data",
+    (viewport, expected, range) => {
+      const formula = "=Switch(true, App.Width < 600, LayoutOverflow.Scroll, " +
+        "App.Width < 1024, LayoutOverflow.Hide, LayoutOverflow.Scroll)";
+      const symbols = { "App.Width": viewport };
+      expect(previewOverflowMode(formula, symbols)).toBe(expected);
+      const host = item("Host", [], 0, 0, 100, 100, {
+        overflowY: formula, symbols
+      });
+      const child = item("Child", ["Host"], 0, 0, 100, 180);
+      const ranges = previewScrollRanges([host, child]);
+      if (range > 0) expect(ranges).toEqual({ Host: { x: 0, y: range } });
+      else expect(ranges).not.toHaveProperty("Host");
+    });
+
+  it("keeps Switch overflow unknown for SQL, text impostors and missing matches", () => {
+    expect(previewOverflowMode(
+      "=Switch(true, SQL.CanScroll, LayoutOverflow.Scroll, LayoutOverflow.Hide)"
+    )).toBe("unknown");
+    expect(previewOverflowMode(
+      "=Switch(varPermission, true, LayoutOverflow.Scroll, LayoutOverflow.Hide)"
+    )).toBe("unknown");
+    expect(previewOverflowMode(
+      '=Switch(true, true, "LayoutOverflow.Scroll", LayoutOverflow.Hide)'
+    )).toBe("unknown");
+    expect(previewOverflowMode(
+      '=Switch("scroll", "scroll", LayoutOverflow.Scroll, LayoutOverflow.Hide)'
+    )).toBe("unknown");
+    expect(previewOverflowMode(
+      "=Switch(true, false, LayoutOverflow.Scroll)"
+    )).toBe("unknown");
+    expect(previewOverflowMode(
+      "=Switch(true, false, LayoutOverflow.Scroll, LayoutOverflow.Hide)"
+    )).toBe("hide");
+    expect(previewOverflowMode(
+      "=Switch(true, false, LayoutOverflow.Scroll, If(true, LayoutOverflow.Hide, LayoutOverflow.Scroll))"
+    )).toBe("hide");
+  });
+
   it("calculates a vertical scroll range from known child geometry", () => {
     const nodes = [
       item("Host", [], 10, 20, 200, 100, { overflowY: "=LayoutOverflow.Scroll" }),
