@@ -36,6 +36,36 @@ describe("bounded, source-faithful preview text", () => {
     expect(previewBoundedText("🙂", 1)).toEqual({ text: "🙂", truncated: false });
   });
 
+  it("never paints half of a combining-mark grapheme", () => {
+    expect(previewBoundedText("Ae\u0301B", 2)).toEqual({ text: "A", truncated: true });
+    expect(previewBoundedText("Ae\u0301B", 3)).toEqual({ text: "Ae\u0301", truncated: true });
+  });
+
+  it("never paints partial ZWJ emoji, flags or emoji modifiers", () => {
+    expect(previewBoundedText("A👩‍💻B", 2)).toEqual({ text: "A", truncated: true });
+    expect(previewBoundedText("A👩‍💻B", 4)).toEqual({ text: "A👩‍💻", truncated: true });
+    expect(previewBoundedText("A🇵🇪B", 2)).toEqual({ text: "A", truncated: true });
+    expect(previewBoundedText("A👍🏽B", 3)).toEqual({ text: "A👍🏽", truncated: true });
+  });
+
+  it("preserves complete graphemes and exact budgets without truncation", () => {
+    expect(previewBoundedText("e\u0301", 2)).toEqual({ text: "e\u0301", truncated: false });
+    expect(previewBoundedText("👩‍💻", 3)).toEqual({ text: "👩‍💻", truncated: false });
+    expect(previewBoundedText("🇵🇪", 2)).toEqual({ text: "🇵🇪", truncated: false });
+    expect(previewBoundedText("A", 0)).toEqual({ text: "", truncated: true });
+  });
+
+  it("marks a bounded Canvas label without painting a partial complex emoji", () => {
+    const prefix = "C".repeat(4095);
+    const html = render(synthetic({ Text: '="' + prefix + "👩‍💻" + "D" + '"' }));
+    expect(html).toContain('data-preview-text-state="truncated"');
+    expect(html).toContain("Text preview truncated");
+    expect(html).toContain(prefix);
+    expect(html).not.toContain("👩");
+    expect(html).not.toContain("💻");
+    expect(html).not.toContain("👩‍💻");
+  });
+
   it("uses the safe default for an invalid limit", () => {
     const text = "x".repeat(4097);
     expect(previewBoundedText(text, -1)).toEqual({
