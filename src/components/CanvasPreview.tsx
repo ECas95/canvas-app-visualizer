@@ -477,6 +477,28 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                         Visible unknown — runtime condition unavailable
                       </text>
                     </>
+                  ) : mode === "visual" && galleryRecordsUnknown(item.control) ? (
+                    <g data-preview-gallery-records="unknown">
+                      {/* An Items formula is not proof that any runtime row was loaded.
+                          Do not paint repeated empty cards as if they were records. */}
+                      <CanvasVisualControl control={item.control} mediaAssets={mediaAssets}
+                        simulationSymbols={item.renderSymbols}
+                        x={item.x} y={item.y} width={item.width} height={item.height}
+                        clipId={`${instanceId}-text-${index}`} />
+                      <rect x={item.x} y={item.y} width={item.width} height={item.height}
+                        fill="#f6f9fd" fillOpacity={0.96} stroke="#8194ac"
+                        strokeDasharray="5 4" />
+                      <text clipPath={`url(#${instanceId}-bounds-${index})`}
+                        x={item.x + 12} y={item.y + Math.min(30, item.height / 2 + 5)}
+                        fontSize={16} fontWeight={600} fill="#42536b" pointerEvents="none">
+                        Runtime gallery records unavailable
+                      </text>
+                      <text clipPath={`url(#${instanceId}-bounds-${index})`}
+                        x={item.x + 12} y={item.y + Math.min(52, item.height / 2 + 18)}
+                        fontSize={12} fill="#52647c" pointerEvents="none">
+                        Loading, emptiness and permissions are not verified
+                      </text>
+                    </g>
                   ) : mode === "visual" ? (
                     <CanvasVisualControl control={item.control} mediaAssets={mediaAssets}
                       simulationSymbols={item.renderSymbols}
@@ -512,7 +534,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                 </g>
               );
               const clipped = clipToAncestors(draw, item.ancestors);
-              const template = mode === "visual" &&
+              const template = mode === "structure" &&
                 galleryRecordsUnknown(item.control) && !item.visibilityUnknown
                 ? item.galleryTemplate
                 : null;
@@ -565,6 +587,11 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
       <div className="preview-note">
         <span>{mode === "visual" ? "Static visual approximation" : "Control structure"}</span>
         <span>{visibleItems.length} drawn nodes · {unresolved} unresolved layouts</span>
+        {mode === "visual" && visibleItems.some(item => galleryRecordsUnknown(item.control) && !item.visibilityUnknown) && (
+          <span className="preview-unknown-state" role="status">
+            Gallery rows unavailable — use Structure for template geometry
+          </span>
+        )}
         {mode === "visual" && screenFillUnknown && (
           <span className="preview-unknown-state" role="status">
             Screen Fill unknown — background color is a preview fallback
