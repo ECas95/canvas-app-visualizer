@@ -295,8 +295,12 @@ class Parser {
     const first = identifierValue(token);
     const firstLower = first.toLowerCase();
 
-    if (firstLower === "true") return true;
-    if (firstLower === "false") return false;
+    // Single-quoted Power Fx names are identifiers, not Boolean literals.
+    // A quoted 'true'/'false' may reference runtime state; only unquoted
+    // keywords can establish a source-verified visibility/layout condition.
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/operators
+    if (token.kind === "identifier" && firstLower === "true") return true;
+    if (token.kind === "identifier" && firstLower === "false") return false;
 
     const segments = [first];
     while (
@@ -326,7 +330,10 @@ class Parser {
         this.take();
       }
 
-      return this.evaluateFunction(qualified, args);
+      // Quoted names can denote user-defined functions. Even when they
+      // resemble supported built-ins, never execute them as Power Fx If,
+      // Max, Not, etc. without a verified function binding.
+      return token.kind === "identifier" ? this.evaluateFunction(qualified, args) : null;
     }
 
     const symbol = this.symbols.get(qualified.toLowerCase());

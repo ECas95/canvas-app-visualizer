@@ -14,6 +14,29 @@ describe("static Power Fx evaluator", () => {
     "App.Width": 1366
   };
 
+  it("does not treat quoted Power Fx names as Boolean literals or built-ins", () => {
+    // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/power-apps-yaml
+    // Single quotes identify names; double quotes identify text values.
+    // 'true' is not the same token as the literal true.
+    expect(staticBoolean("='true'")).toBeNull();
+    expect(staticBoolean("='false'")).toBeNull();
+    expect(staticBoolean("='true'", { true: false })).toBe(false);
+    expect(staticBoolean("='false'", { false: true })).toBe(true);
+    expect(staticNumber("=If('true', 24, 48)")).toBeNull();
+    expect(staticNumber("=If('true', 24, 48)", { true: false })).toBe(48);
+    expect(staticNumber("='If'(true, 24, 48)")).toBeNull();
+    expect(staticBoolean("='Not'(false)")).toBeNull();
+    expect(staticNumber("='Max'(12, 24)")).toBeNull();
+    expect(staticNumber("=If(true, 24, 48)")).toBe(24);
+
+    for (const width of [390, 768, 1366]) {
+      // An unknown permission-like identifier must never choose a
+      // seemingly exact responsive control dimension.
+      expect(staticNumber("=If('true', App.Width / 2, 0)",
+        { "App.Width": width })).toBeNull();
+    }
+  });
+
   it("evaluates arithmetic using known Canvas geometry symbols", () => {
     expect(
       staticNumber("=(Parent.Width - Self.Width) / 2", symbols)
