@@ -600,7 +600,14 @@ export function galleryTemplateLayout(
   const horizontal = variant.includes("horizontal");
   const symbols = layoutSymbols(context);
   const resolvedWrap = staticNumber(control.properties.WrapCount, symbols);
-  const wrapCount = Math.max(1, Math.min(64, Math.floor(resolvedWrap ?? 1)));
+  // WrapCount counts whole gallery slots. Fractional, non-positive, or
+  // renderer-limit-exceeding values cannot establish verified columns/rows.
+  // Keep a bounded single-slot approximation and mark the guide unknown,
+  // rather than silently flooring or clamping to a seemingly exact layout.
+  // The 64-slot bound is a preview safety limit, not a Canvas product limit.
+  const wrapVerified = resolvedWrap !== null &&
+    Number.isSafeInteger(resolvedWrap) && resolvedWrap >= 1 && resolvedWrap <= 64;
+  const wrapCount = wrapVerified ? resolvedWrap : 1;
   const variableHeight = variant.includes("variableheight");
   const templateSize =
     staticNumber(control.properties.TemplateSize, symbols) ??
@@ -631,7 +638,7 @@ export function galleryTemplateLayout(
     padding,
     wrapCount,
     dynamic: rect.dynamic || templateSize === null || variableHeight ||
-      (control.properties.WrapCount !== undefined && resolvedWrap === null) ||
+      (control.properties.WrapCount !== undefined && !wrapVerified) ||
       (control.properties.TemplatePadding !== undefined && resolvedPadding === null)
   };
 }
