@@ -400,7 +400,11 @@ export function autoLayoutChildren(
   ].every(numericKnown) &&
     gap >= 0 && paddingLeft >= 0 && paddingRight >= 0 &&
     paddingTop >= 0 && paddingBottom >= 0;
-  const autoHeightUnverified = !horizontal && children.some(control =>
+  // AutoHeight can change a horizontal row's cross-axis placement and the
+  // height of a wrapped line, not only the main-axis size of vertical stacks.
+  // Without measured runtime text, neither orientation is source-exact.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-text-box
+  const autoHeightUnverified = children.some(control =>
     hasUnverifiedAutoHeight(control, symbols));
   // Negative FillPortions and contradictory/negative size constraints are
   // outside the renderer's verified layout model. Math.max/clamp can still
@@ -421,7 +425,7 @@ export function autoLayoutChildren(
       (minHeight !== null && maxHeight !== null && minHeight > maxHeight);
   });
   const fixedChildren = !sizingUnsupported && sizing.every(item =>
-    (horizontal || !hasUnverifiedAutoHeight(item.control, symbols)) &&
+    !hasUnverifiedAutoHeight(item.control, symbols) &&
     item.fill === 0 && item.width !== null && item.height !== null &&
     [
       item.control.properties.FillPortions,
