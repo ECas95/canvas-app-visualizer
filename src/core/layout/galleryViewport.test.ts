@@ -92,3 +92,58 @@ describe("synthetic Canvas gallery viewport geometry", () => {
     }
   });
 });
+
+
+describe("gallery WrapCount source fidelity and bounded guides", () => {
+  it.each(["=0", "=-2", "=1.5", "=65", "=1000000000"])(
+    "does not certify %s as a valid whole slot count", raw => {
+      const source: CanvasControl = {
+        ...gallery, properties: { ...gallery.properties, WrapCount: raw }
+      };
+      for (const viewport of [390, 768, 1366]) {
+        const template = galleryTemplateLayout(source,
+          { x: 0, y: 0, width: viewport - 40, height: 600, dynamic: false },
+          { parentWidth: viewport - 40, parentHeight: 600, appWidth: viewport, appHeight: 768 });
+        expect(template).toMatchObject({ wrapCount: 1, dynamic: true });
+        expect(galleryRecordsUnknown(source)).toBe(true);
+      }
+    }
+  );
+
+  it("marks only the unsupported responsive branch as approximate", () => {
+    const source: CanvasControl = {
+      ...gallery,
+      properties: {
+        ...gallery.properties,
+        WrapCount: "=If(App.Width < 600, 1, App.Width < 1000, 2, 65)"
+      }
+    };
+    for (const [viewport, expectedCount, unknown] of [
+      [390, 1, false], [768, 2, false], [1366, 1, true]
+    ] as const) {
+      const template = galleryTemplateLayout(source,
+        { x: 0, y: 0, width: viewport - 40, height: 600, dynamic: false },
+        { parentWidth: viewport - 40, parentHeight: 600, appWidth: viewport, appHeight: 768 });
+      expect(template).toMatchObject({ wrapCount: expectedCount, dynamic: unknown });
+    }
+  });
+
+  it("keeps omitted and supported integer counts verified without loading Items", () => {
+    for (const raw of [undefined, "=1", "=64"]) {
+      const source: CanvasControl = {
+        ...gallery,
+        properties: {
+          ...gallery.properties,
+          ...(raw === undefined ? { WrapCount: undefined } : { WrapCount: raw })
+        }
+      };
+      const template = galleryTemplateLayout(source,
+        { x: 0, y: 0, width: 1280, height: 600, dynamic: false },
+        { parentWidth: 1280, parentHeight: 600, appWidth: 1366, appHeight: 768 });
+      expect(template).toMatchObject({
+        wrapCount: raw === "=64" ? 64 : 1, dynamic: false
+      });
+      expect(galleryRecordsUnknown(source)).toBe(true);
+    }
+  });
+});
