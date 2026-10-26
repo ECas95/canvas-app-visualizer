@@ -25,6 +25,17 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      - name: Test offline preview packaging
+        run: node --test scripts/make-offline-preview.test.mjs
+      - name: Bundle offline web preview
+        run: node scripts/make-offline-preview.mjs
+      - name: Upload reviewable HTML preview (unmerged PR)
+        uses: actions/upload-artifact@v4
+        with:
+          name: canvas-web-preview-offline
+          path: artifacts/preview/canvas-app-visualizer.html
+          if-no-files-found: error
+          retention-days: 14
 
   visual-browser:
     runs-on: ubuntu-latest
@@ -40,6 +51,8 @@ jobs:
         run: npx playwright install chromium --only-shell
       - name: Browser geometry and screenshots
         run: npm run test:visual
+      - name: Verify self-contained preview opens from disk
+        run: npm run build && node scripts/make-offline-preview.mjs && node scripts/offline-preview-smoke.mjs
       - name: Upload synthetic preview screenshots
         if: always()
         uses: actions/upload-artifact@v4
