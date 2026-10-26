@@ -742,10 +742,40 @@ export function previewVerticalAlign(
   return null;
 }
 
+// ModernText's older serialized property names remain valid in imported
+// .pa.yaml sources. The current property always wins, even when its formula
+// cannot be resolved; a legacy alias must not silently override it.
+// https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-text
+// https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-updates
+const MODERN_TEXT_LEGACY_STYLES = {
+  FontWeight: "Weight",
+  Italic: "FontItalic",
+  Underline: "FontUnderline",
+  Strikethrough: "FontStrikethrough"
+} as const;
+
+export function previewTextStyleSource(
+  control: CanvasControl, property: keyof typeof MODERN_TEXT_LEGACY_STYLES
+): unknown {
+  return control.properties[property] ??
+    (/^moderntext(?:@|$)/i.test(control.controlType)
+      ? control.properties[MODERN_TEXT_LEGACY_STYLES[property]] : undefined);
+}
+
 export function previewFontWeight(
   control: CanvasControl, symbols?: Record<string, StaticPowerFxValue>
 ): number | undefined {
-  const value = enumValue(control.properties.FontWeight, "FontWeight", symbols);
+  const source = previewTextStyleSource(control, "FontWeight");
+  let value = enumValue(source, "FontWeight", symbols);
+  // Older ModernText.Weight accepted plain text names. Accept only exact
+  // allowlisted names from a statically verified string, not arbitrary CSS.
+  if (value === null && control.properties.FontWeight == null &&
+      /^moderntext(?:@|$)/i.test(control.controlType)) {
+    const legacy = staticString(source, symbols)?.trim().toLowerCase();
+    if (legacy && ["bold", "semibold", "normal", "regular", "light", "lighter"].includes(legacy)) {
+      value = legacy;
+    }
+  }
   if (value === "bold") return 700;
   if (value === "semibold") return 600;
   if (value === "normal" || value === "regular") return 400;
@@ -756,15 +786,15 @@ export function previewFontWeight(
 export function previewItalic(
   control: CanvasControl, symbols?: Record<string, StaticPowerFxValue>
 ): boolean {
-  return staticBoolean(control.properties.Italic, symbols) === true;
+  return staticBoolean(previewTextStyleSource(control, "Italic"), symbols) === true;
 }
 
 export function previewTextDecoration(
   control: CanvasControl, symbols?: Record<string, StaticPowerFxValue>
 ): string | undefined {
   const decorations: string[] = [];
-  if (staticBoolean(control.properties.Underline, symbols) === true) decorations.push("underline");
-  if (staticBoolean(control.properties.Strikethrough, symbols) === true) decorations.push("line-through");
+  if (staticBoolean(previewTextStyleSource(control, "Underline"), symbols) === true) decorations.push("underline");
+  if (staticBoolean(previewTextStyleSource(control, "Strikethrough"), symbols) === true) decorations.push("line-through");
   return decorations.length ? decorations.join(" ") : undefined;
 }
 
