@@ -20,6 +20,52 @@ describe("static Power Fx evaluator", () => {
     ).toBe(300);
   });
 
+  it("resolves documented IsBlank only for verified scalar values", () => {
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-isblank-isempty
+    expect(staticBoolean('=IsBlank("")')).toBe(true);
+    expect(staticBoolean('=IsBlank(" ")')).toBe(false);
+    expect(staticBoolean('=IsBlank("Canvas")')).toBe(false);
+    expect(staticBoolean("=IsBlank(0)")).toBe(false);
+    expect(staticBoolean("=IsBlank(false)")).toBe(false);
+    expect(staticNumber('=If(IsBlank(""), 24, 48)')).toBe(24);
+    expect(staticNumber('=If(IsBlank("Ready"), 24, 48)')).toBe(48);
+  });
+
+  it("keeps runtime, Blank() and error-dependent IsBlank predicates unknown", () => {
+    for (const formula of [
+      "=IsBlank(varSqlTitle)", "=IsBlank(ThisItem.Title)",
+      "=IsBlank(Blank())", "=IsBlank(1/0)",
+      "=IsBlank()", '=IsBlank("", "extra")',
+      '=Connector.IsBlank("")'
+    ]) {
+      expect(staticBoolean(formula)).toBeNull();
+    }
+    expect(staticNumber('=If(IsBlank(varSqlTitle), 24, 48)')).toBeNull();
+  });
+
+  it("uses documented Len for verified text-dependent preview geometry", () => {
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-len
+    expect(staticNumber('=Len("Canvas")')).toBe(6);
+    expect(staticNumber('=Len("")')).toBe(0);
+    expect(staticNumber('=Len("a" & "b")')).toBe(2);
+    expect(staticNumber('=If(Len("Header") > 5, 120, 80)')).toBe(120);
+    const responsive = '=If(App.Width < 600, Len("Phone") * 8, Len("Desktop") * 8)';
+    expect(staticNumber(responsive, { "App.Width": 390 })).toBe(40);
+    expect(staticNumber(responsive, { "App.Width": 768 })).toBe(56);
+    expect(staticNumber(responsive, { "App.Width": 1366 })).toBe(56);
+    expect(staticNumber(responsive)).toBeNull();
+  });
+
+  it("does not certify unsupported, malformed or SQL-dependent Len calls", () => {
+    for (const formula of [
+      "=Len(varSqlTitle)", "=Len(ThisItem.Title)", "=Len()",
+      '=Len("Canvas", "extra")', "=Len(12)", "=Len(false)",
+      '=SQL.Len("Canvas")'
+    ]) {
+      expect(staticNumber(formula)).toBeNull();
+    }
+  });
+
   it("evaluates common numeric pure functions", () => {
     expect(staticNumber("=Max(120, Parent.Width / 3)", symbols)).toBe(300);
     expect(staticNumber("=RoundDown(19.99, 0)", symbols)).toBe(19);

@@ -411,6 +411,23 @@ class Parser {
         args.includes(null) ? null : false;
     }
 
+    // IsBlank accepts a single scalar and treats only a verified empty string
+    // as blank in this source-only evaluator. null also represents unknown
+    // SQL/runtime state, so it cannot safely be treated as Power Fx Blank().
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-isblank-isempty
+    if (name === "isblank") {
+      if (args.length !== 1 || args[0] === null) return null;
+      return args[0] === "";
+    }
+
+    // Len on a verified text scalar can drive label-dependent geometry.
+    // Tables and unresolved input/control values are intentionally unsupported.
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-len
+    if (name === "len") {
+      if (args.length !== 1 || typeof args[0] !== "string") return null;
+      return Array.from(args[0]).length;
+    }
+
     if (args.some(value => value === null)) return null;
 
     const values = args as StaticPowerFxValue[];
