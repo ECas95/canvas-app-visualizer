@@ -21,7 +21,7 @@ try {
   );
   await page.goto(url, { waitUntil: "load" });
   try {
-    await page.locator('input[type="file"]').first().waitFor({ timeout: 8000 });
+    await page.locator('input[type="file"]').first().waitFor({ state: "attached", timeout: 8000 });
   } catch (error) {
     console.error("Offline preview failed to mount. Browser errors:", errors);
     console.error("Offline document:", (await page.content()).slice(0, 600));
