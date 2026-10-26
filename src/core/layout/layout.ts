@@ -242,15 +242,21 @@ export function controlRect(
   const height = resolvedNumber(control.properties.Height, baseSymbols);
   const autoHeightUnverified = hasUnverifiedAutoHeight(control, baseSymbols);
 
-  // Zero is a valid resolved Canvas dimension; do not invent an 8px control.
-  // Keep fallback defaults only for dimensions that are genuinely unresolved.
-  const finalWidth = Math.max(0, width ?? defaults.width);
-  const finalHeight = Math.max(0, height ?? defaults.height);
+  // Family defaults are paint fallbacks, not verified values of an
+  // explicitly authored Width/Height formula. Feeding them into Self would
+  // incorrectly "solve" circular formulas or SQL-dependent coordinates.
+  // Preserve the existing preview default for properties omitted in source.
+  const initialSelfWidth = width !== null
+    ? Math.max(0, width)
+    : control.properties.Width === undefined ? defaults.width : undefined;
+  const initialSelfHeight = height !== null
+    ? Math.max(0, height)
+    : control.properties.Height === undefined ? defaults.height : undefined;
 
   const selfSymbols = layoutSymbols(
     context,
-    finalWidth,
-    autoHeightUnverified ? undefined : finalHeight
+    initialSelfWidth,
+    autoHeightUnverified ? undefined : initialSelfHeight
   );
 
   const initialX = resolvedNumber(control.properties.X, selfSymbols);
@@ -267,12 +273,18 @@ export function controlRect(
   const resolvedHeight = resolvedNumber(control.properties.Height, positionedSymbols) ?? height;
   const effectiveWidth = Math.max(0, resolvedWidth ?? defaults.width);
   const effectiveHeight = Math.max(0, resolvedHeight ?? defaults.height);
+  const finalSelfWidth = resolvedWidth !== null
+    ? effectiveWidth
+    : control.properties.Width === undefined ? defaults.width : undefined;
+  const finalSelfHeight = !autoHeightUnverified
+    ? resolvedHeight !== null
+      ? effectiveHeight
+      : control.properties.Height === undefined ? defaults.height : undefined
+    : undefined;
   const finalSymbols = {
-    ...(layoutSymbols(context, effectiveWidth,
-      autoHeightUnverified ? undefined : effectiveHeight) ?? {}),
     ...positionedSymbols,
-    "Self.Width": effectiveWidth,
-    ...(!autoHeightUnverified ? { "Self.Height": effectiveHeight } : {})
+    ...(finalSelfWidth !== undefined ? { "Self.Width": finalSelfWidth } : {}),
+    ...(finalSelfHeight !== undefined ? { "Self.Height": finalSelfHeight } : {})
   };
   const x = resolvedNumber(control.properties.X, finalSymbols) ?? initialX;
   const y = resolvedNumber(control.properties.Y, finalSymbols) ?? initialY;
