@@ -14,19 +14,14 @@ function renderSyntheticPreview(controlWidth: number): string {
   const yaml = `Screens:
   Synthetic:
     Children:
-      - DataGallery:
-          Control: Classic/VerticalGallery@2.3.0
+      - GalleryStatus:
+          Control: GroupContainer@1.3.0
           Properties:
             X: =12
             Y: =18
             Width: =${controlWidth}
             Height: =72
-            Items: =SqlSource
-          Children:
-            - TemplateText:
-                Control: Classic/Label@2.5.1
-                Properties:
-                  Text: ="Synthetic template, not a row"
+            Visible: =IsEmpty(DataGallery.AllItems)
       - Guarded:
           Control: GroupContainer@1.3.0
           Properties:
@@ -40,6 +35,19 @@ function renderSyntheticPreview(controlWidth: number): string {
                 Control: Classic/Label@2.5.1
                 Properties:
                   Text: ="Synthetic restricted child"
+      - DataGallery:
+          Control: Classic/VerticalGallery@2.3.0
+          Properties:
+            X: =12
+            Y: =270
+            Width: =320
+            Height: =100
+            Items: =SqlSource
+          Children:
+            - TemplateText:
+                Control: Classic/Label@2.5.1
+                Properties:
+                  Text: ="Synthetic template, not a row"
       - Independent:
           Control: Classic/Label@2.5.1
           Properties:
