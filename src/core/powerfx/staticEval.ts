@@ -120,9 +120,9 @@ class Parser {
 
   private parseComparison(): StaticPowerFxValue | null {
     let left = this.parseConcat();
-    const op = this.peek()?.value;
+    const op = this.peek()?.value.toLowerCase();
 
-    if (!op || !["=", "==", "<>", "<", ">", "<=", ">="].includes(op)) {
+    if (!op || !["=", "==", "<>", "<", ">", "<=", ">=", "in", "exactin"].includes(op)) {
       return left;
     }
 
@@ -131,6 +131,16 @@ class Parser {
     if (left === null || right === null) return null;
 
     switch (op) {
+      case "in":
+      case "exactin": {
+        // Power Fx text membership is case-insensitive for in and
+        // case-sensitive for exactin. Table/record membership and
+        // locale-dependent Unicode comparisons require runtime semantics.
+        // https://learn.microsoft.com/en-us/power-platform/power-fx/operators
+        if (typeof left !== "string" || typeof right !== "string") return null;
+        if (!/^[\\x00-\\x7F]*$/.test(left) || !/^[\\x00-\\x7F]*$/.test(right)) return null;
+        return op === "in" ? right.toLowerCase().includes(left.toLowerCase()) : right.includes(left);
+      }
       case "=":
       case "==":
         return left === right;

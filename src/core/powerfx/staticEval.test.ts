@@ -386,3 +386,39 @@ describe("documented Power Fx Coalesce source-only semantics", () => {
     expect(evaluateStaticPowerFx('=Coalesce("Text", false)')).toBeNull();
   });
 });
+
+
+describe("Power Fx text membership operators in Canvas preview", () => {
+  // https://learn.microsoft.com/en-us/power-platform/power-fx/operators
+  it("distinguishes case-insensitive in from case-sensitive exactin", () => {
+    expect(staticBoolean('="admin" in "ADMINISTRATOR"')).toBe(true);
+    expect(staticBoolean('="admin" exactin "ADMINISTRATOR"')).toBe(false);
+    expect(staticBoolean('="Admin" exactin "Administrator"')).toBe(true);
+    expect(staticBoolean('="missing" in "Administrator"')).toBe(false);
+    expect(staticBoolean('="" in "Administrator"')).toBe(true);
+    expect(staticBoolean('="A" IN "cat"')).toBe(true);
+    expect(staticBoolean('="A" EXACTIN "cat"')).toBe(false);
+  });
+
+  it("resolves viewport-dependent visibility only from verified text", () => {
+    const formula = '=If("phone" in If(App.Width < 600, "Phone", "Desktop"), 24, 48)';
+    expect(staticNumber(formula, { "App.Width": 390 })).toBe(24);
+    expect(staticNumber(formula, { "App.Width": 768 })).toBe(48);
+    expect(staticNumber(formula, { "App.Width": 1366 })).toBe(48);
+    expect(staticNumber(formula)).toBeNull();
+  });
+
+  it("does not invent SQL/table membership or locale-sensitive results", () => {
+    for (const formula of [
+      '="admin" in ThisItem.Name',
+      '="admin" in varSqlRoles',
+      '="admin" exactin varSqlRoles',
+      '=1 in "123"',
+      '="1" in 123',
+      '="é" in "café"',
+      '="é" exactin "café"',
+      '="admin" in SQL.GetRoles()',
+      '="admin" in'
+    ]) expect(staticBoolean(formula)).toBeNull();
+  });
+});
