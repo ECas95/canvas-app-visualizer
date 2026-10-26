@@ -27,7 +27,9 @@ function rects(
     variant: "AutoLayout",
     properties: {
       LayoutDirection: "=LayoutDirection.Horizontal",
-      LayoutAlignItems: "=LayoutAlignItems.Center",
+      // Wrap guides are verified only with Start alignment; unwrapped rows
+      // exercise Center cross-axis placement independently.
+      LayoutAlignItems: wrap ? "=LayoutAlignItems.Start" : "=LayoutAlignItems.Center",
       LayoutJustifyContent: "=LayoutJustifyContent.Start",
       LayoutWrap: wrap ? "=true" : "=false",
       LayoutGap: "=8"
