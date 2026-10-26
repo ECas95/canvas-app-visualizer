@@ -516,6 +516,21 @@ export function autoLayoutChildren(
   const fillTotal = sizing.reduce((sum, item) => sum + item.fill, 0);
   const remainingForFill = Math.max(0, mainAvailable - fixedMain);
 
+  // A minimum/maximum can bind a FillPortions allocation. The simple
+  // proportional preview below clamps that child but does not model how
+  // Power Apps redistributes space among its flexible siblings. Mark every
+  // sibling approximate rather than certifying potentially wrong positions.
+  // The source-only preview still paints finite, inspectable bounds.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-horizontal-container
+  const fillAllocationClamped = fillTotal > 0 && sizing.some(item => {
+    if (item.fill <= 0) return false;
+    const allocated = remainingForFill * (item.fill / fillTotal);
+    const constrained = horizontal
+      ? clamp(allocated, item.minWidth, item.maxWidth)
+      : clamp(allocated, item.minHeight, item.maxHeight);
+    return constrained !== allocated;
+  });
+
   const provisional = sizing.map(item => {
     let width = item.baseWidth;
     let height = item.baseHeight;
@@ -616,7 +631,7 @@ export function autoLayoutChildren(
       width: item.width,
       height: item.height,
       dynamic: item.fallback || wrapUncertain || directionUnknown ||
-        spacingUnknown || justifyUnknown || sizingUnknown
+        spacingUnknown || justifyUnknown || sizingUnknown || fillAllocationClamped
     };
 
     cursor +=
