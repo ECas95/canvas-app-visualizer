@@ -8,7 +8,7 @@
  * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-shapes-icons
  * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-icon
  */
-import { staticBoolean, staticNumber, type StaticPowerFxValue } from "../powerfx/staticEval";
+import { evaluateStaticPowerFx, staticBoolean, staticNumber, type StaticPowerFxValue } from "../powerfx/staticEval";
 import { lexPowerFx, significantTokens, type PowerFxToken } from "../powerfx/lexer";
 
 export const PREVIEW_ICON_PATHS = {
@@ -41,7 +41,7 @@ const iconNames = new Set<string>(Object.keys(PREVIEW_ICON_PATHS));
 /** No substring matching: Icon.AddressBook must never be rendered as Add. */
 /**
  * Resolve a source Icon only from an explicit supported literal or a
- * provably selected Power Fx If branch. Conditions are evaluated locally
+ * provably selected Power Fx If/Switch branch. Conditions are evaluated locally
  * with known App/Parent/Self/simulation symbols; no connector or behavior
  * expression is executed. An unresolved condition or unsupported glyph
  * stays unknown rather than silently choosing a fallback.
@@ -87,12 +87,14 @@ export function previewIconName(
   if (modern && name === "delete") name = "trash";
   if (name && iconNames.has(name)) return name as PreviewIconName;
 
-  // An If with a literal condition is resolvable even without a symbol
-  // context. Runtime-dependent conditions still return null (fail closed).
-  if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
+  // Only typed, provably selected If/Switch branches may produce a glyph.
+  // Runtime-dependent conditions stay unknown (fail closed).
+  const functionName = tokens[0]?.value.toLowerCase();
+  if ((functionName !== "if" && functionName !== "switch") ||
+      tokens[1]?.value !== "(" ||
       tokens[tokens.length - 1]?.value !== ")") return null;
 
-  // Split only at the top-level commas of If(...); nested If and other
+  // Split only at the top-level commas; nested functions and other
   // parentheses remain intact. Malformed or empty arguments fail closed.
   const inner = tokens.slice(2, -1);
   const args: PowerFxToken[][] = [];
@@ -115,6 +117,29 @@ export function previewIconName(
 
   const expression = (part: PowerFxToken[]) =>
     "=" + source.slice(part[0].start, part[part.length - 1].end);
+
+  if (functionName === "switch") {
+    // Switch matches an ordered scalar selector, then returns a typed Icon
+    // result. Avoid text selectors here: the scalar evaluator cannot tell a
+    // text value from an enum member serialized as a string. Unknown earlier
+    // matches cannot be skipped, and no default means a known Blank icon.
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+    if (args.length < 3) return null;
+    const selector = evaluateStaticPowerFx(expression(args[0]), { symbols });
+    if (selector === null || (typeof selector !== "boolean" &&
+        typeof selector !== "number")) return null;
+    for (let index = 1; index + 1 < args.length; index += 2) {
+      const match = evaluateStaticPowerFx(expression(args[index]), { symbols });
+      if (match === null || typeof match !== typeof selector) return null;
+      if (selector === match) {
+        return previewIconName(expression(args[index + 1]), modern, symbols, depth + 1);
+      }
+    }
+    return args.length % 2 === 0
+      ? previewIconName(expression(args[args.length - 1]), modern, symbols, depth + 1)
+      : "none";
+  }
+
   for (let index = 0; index + 1 < args.length; index += 2) {
     const condition = staticBoolean(expression(args[index]), symbols);
     if (condition === null) return null;

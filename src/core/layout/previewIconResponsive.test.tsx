@@ -67,6 +67,45 @@ describe("responsive Canvas Icon source fidelity", () => {
       { "App.Width": 1366 })).toBeNull();
   });
 
+
+  it("selects typed Switch icon branches at 390, 768 and 1366 px", () => {
+    const formula = "=Switch(true, App.Width < 600, Icon.Add, App.Width < 1024, Icon.Search, Icon.Cancel)";
+    const cases = [[390, "add"], [768, "search"], [1366, "cancel"]] as const;
+    for (const [width, name] of cases) {
+      expect(previewIconName(formula, false, { "App.Width": width })).toBe(name);
+      const markup = renderIcon(formula, width);
+      expect(markup).toContain('d="' + PREVIEW_ICON_PATHS[name] + '"');
+      expect(markup).not.toContain(">?</tspan>");
+    }
+    expect(previewIconName(formula)).toBeNull();
+  });
+
+  it("resolves modern Switch Fluent icons without inventing SQL state", () => {
+    const formula = '=Switch(true, App.Width < 600, "Delete", "Check")';
+    expect(renderIcon(formula, 390, "ModernIcon@1.1.0"))
+      .toContain('d="' + PREVIEW_ICON_PATHS.trash + '"');
+    expect(renderIcon(formula, 1366, "ModernIcon@1.1.0"))
+      .toContain('d="' + PREVIEW_ICON_PATHS.check + '"');
+    expect(previewIconName(formula, false, { "App.Width": 390 })).toBeNull();
+    expect(previewIconName("=Switch(true, false, Icon.Add)")).toBe("none");
+    expect(previewIconName("=Switch(2, 1, Icon.Add, 2, Icon.Home)")).toBe("home");
+  });
+
+  it("keeps Switch icons unknown for unverified permissions and type impostors", () => {
+    for (const formula of [
+      "=Switch(varSqlPermission, true, Icon.Add, Icon.Home)",
+      "=Switch(true, varSqlPermission, Icon.Add, Icon.Home)",
+      '=Switch("Icon.Add", "Icon.Add", Icon.Home)',
+      '=Switch(true, true, "Icon.Add", Icon.Home)',
+      "=Switch(true, true, Icon.AddressBook, Icon.Add)",
+      "=Switch(true, true, Icon.Add, )"
+    ]) {
+      expect(previewIconName(formula)).toBeNull();
+    }
+    expect(renderIcon("=Switch(true, varSqlPermission, Icon.Add, Icon.Home)", 390))
+      .toContain(">?</tspan>");
+  });
+
   it("renders a synthetic versioned .pa.yaml Icon without data sources", () => {
     const yaml = [
       "Screens:", "  Synthetic:", "    Children:", "      - ResponsiveIcon:",
