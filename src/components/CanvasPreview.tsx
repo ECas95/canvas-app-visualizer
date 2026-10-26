@@ -89,7 +89,15 @@ function flatten(
       ...siblingSymbols,
       "App.Width": appWidth, "App.Height": appHeight,
       "Parent.Width": parentWidth, "Parent.Height": parentHeight,
-      ...simulationSymbols
+      ...simulationSymbols,
+      // Visible is evaluated in the current control's Self scope. Use only
+      // source-verified geometry: fallback dimensions must not authorize
+      // rendering descendants of a potentially hidden control.
+      // https://learn.microsoft.com/en-us/power-platform/power-fx/operators
+      ...(!rect.dynamic ? {
+        "Self.Width": rect.width, "Self.Height": rect.height,
+        "Self.X": rect.x, "Self.Y": rect.y
+      } : {})
     };
     const visibility = previewVisibility(control, visibilitySymbols);
     if (visibility === "hidden") continue;
