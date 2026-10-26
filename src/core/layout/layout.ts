@@ -385,6 +385,14 @@ export function autoLayoutChildren(
   const justifyRaw = parent.properties.LayoutJustifyContent;
   const justifyStart = justifyRaw === undefined ||
     previewLayoutEnum(justifyRaw, "LayoutJustifyContent", symbols) === "start";
+  // Wrap lays out successive rows/columns. Our verified wrap branch places
+  // every child at the start of its line's cross axis; Center/End/Stretch or
+  // an unresolved parent alignment can change those positions. Preserve the
+  // source geometry as an approximation instead of certifying Start layout.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-vertical-container
+  const alignRaw = parent.properties.LayoutAlignItems;
+  const wrapAlignStart = alignRaw === undefined ||
+    previewLayoutEnum(alignRaw, "LayoutAlignItems", symbols) === "start";
   const knownSpacing = [
     parent.properties.LayoutGap,
     parent.properties.PaddingLeft, parent.properties.PaddingRight,
@@ -438,7 +446,8 @@ export function autoLayoutChildren(
     control.properties.LayoutMaxWidth, control.properties.LayoutMaxHeight
   ].some(value => value !== undefined && staticNumber(value, symbols) === null));
 
-  if (wrap === true && justifyStart && knownSpacing && fixedChildren && knownDirection) {
+  if (wrap === true && justifyStart && wrapAlignStart && knownSpacing &&
+      fixedChildren && knownDirection) {
     const startMain = horizontal ? paddingLeft : paddingTop;
     const maxMain = startMain + (horizontal ? innerWidth : innerHeight);
     let cursorMain = startMain;
