@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { CanvasControl, CanvasScreen } from "../types/canvas";
 import { Icon } from "./Icon";
 
@@ -9,16 +10,56 @@ interface Props {
   selection?: Selection;
 }
 
-function valueText(value: unknown): string {
-  if (typeof value === "string") return value;
-  return JSON.stringify(value);
+export interface InspectorProperty {
+  name: string;
+  value: unknown;
+  formula: boolean;
 }
 
-function isFormula(value: unknown): boolean {
-  return typeof value === "string" && value.trimStart().startsWith("=");
+export function formatSerializedValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value === undefined) return "undefined";
+  try {
+    return JSON.stringify(value, null, 2) ?? String(value);
+  } catch {
+    // An imported YAML alias may be cyclic; the inspector must never crash.
+    return "[Value cannot be serialized]";
+  }
+}
+
+export function inspectProperties(properties: Record<string, unknown>): InspectorProperty[] {
+  return Object.entries(properties)
+    .map(([name, value]) => ({
+      name, value,
+      formula: typeof value === "string" && value.trimStart().startsWith("=")
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Searches only local serialized source. No Power Fx formula is evaluated. */
+export function filterInspectorProperties(
+  entries: InspectorProperty[], query: string, formulasOnly: boolean
+): InspectorProperty[] {
+  const term = query.trim().toLowerCase();
+  return entries.filter(entry =>
+    (!formulasOnly || entry.formula) &&
+    (!term || entry.name.toLowerCase().includes(term) ||
+      formatSerializedValue(entry.value).toLowerCase().includes(term))
+  );
+}
+
+const GEOMETRY_NAMES = ["X", "Y", "Width", "Height"] as const;
+
+/** Only show properties actually present in the source, never inferred defaults. */
+export function serializedGeometry(entries: InspectorProperty[]): InspectorProperty[] {
+  return GEOMETRY_NAMES.flatMap(name => entries.filter(entry => entry.name === name));
 }
 
 export function Inspector({ selection }: Props) {
+  const [query, setQuery] = useState("");
+  const [formulasOnly, setFormulasOnly] = useState(false);
+  const [copiedProperty, setCopiedProperty] = useState<string | null>(null);
+
   if (!selection) {
     return (
       <div className="inspector-empty">
@@ -29,11 +70,11 @@ export function Inspector({ selection }: Props) {
     );
   }
 
-  const properties = selection.value.properties;
-  const propertyEntries = Object.entries(properties).sort(([a], [b]) => a.localeCompare(b));
-  const formulaCount = propertyEntries.filter(([, value]) => isFormula(value)).length;
-  const type =
-    selection.kind === "screen" ? "Screen" : selection.value.controlType;
+  const entries = inspectProperties(selection.value.properties);
+  const formulaCount = entries.filter(entry => entry.formula).length;
+  const filtered = filterInspectorProperties(entries, query, formulasOnly);
+  const geometry = serializedGeometry(entries);
+  const type = selection.kind === "screen" ? "Screen" : selection.value.controlType;
 
   return (
     <div className="inspector">
@@ -41,7 +82,7 @@ export function Inspector({ selection }: Props) {
         <span className="panel-kicker">{type}</span>
         <strong>{selection.value.name}</strong>
         <span className="inspector-subtitle">
-          {propertyEntries.length} serialized properties · {formulaCount} formulas
+          {entries.length} serialized properties · {formulaCount} formulas
         </span>
       </div>
 
@@ -64,17 +105,73 @@ export function Inspector({ selection }: Props) {
         </dl>
       )}
 
+      {geometry.length > 0 && (
+        <section className="inspector-geometry" aria-label="Serialized geometry">
+          <div className="inspector-section-heading">
+            <strong>Serialized geometry</strong>
+            <span>Source values · not evaluated</span>
+          </div>
+          <dl className="inspector-geometry-grid">
+            {geometry.map(entry => (
+              <div className="inspector-geometry-item" key={entry.name}>
+                <dt>{entry.name}{entry.formula && <span title="Power Fx formula">ƒx</span>}</dt>
+                <dd><code>{formatSerializedValue(entry.value)}</code></dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
+
+      <div className="inspector-section-heading">
+        <strong>Properties</strong>
+        <span>{filtered.length} of {entries.length} shown</span>
+      </div>
+      <div className="inspector-property-toolbar">
+        <input
+          type="search"
+          value={query}
+          onChange={event => setQuery(event.target.value)}
+          aria-label="Search serialized properties"
+          placeholder="Search names or source values"
+        />
+        <button
+          type="button"
+          className={formulasOnly ? "active" : ""}
+          aria-pressed={formulasOnly}
+          onClick={() => setFormulasOnly(current => !current)}
+        >
+          Formulas only <span>{formulaCount}</span>
+        </button>
+      </div>
       <div className="property-list">
-        {propertyEntries.length === 0 && (
-          <p className="muted">No serialized properties.</p>
+        {entries.length === 0 && <p className="muted">No serialized properties.</p>}
+        {entries.length > 0 && filtered.length === 0 && (
+          <div className="inspector-no-results">
+            <p>No properties match these filters.</p>
+            <button type="button" onClick={() => {
+              setQuery("");
+              setFormulasOnly(false);
+            }}>Clear filters</button>
+          </div>
         )}
-        {propertyEntries.map(([name, value]) => (
-          <div className={"property-row" + (isFormula(value) ? " formula" : "")} key={name}>
+        {filtered.map(entry => (
+          <div className={"property-row" + (entry.formula ? " formula" : "")} key={entry.name}>
             <div className="property-name-row">
-              <strong>{name}</strong>
-              {isFormula(value) && <span>Power Fx</span>}
+              <strong>{entry.name}</strong>
+              {entry.formula && <span>Power Fx</span>}
             </div>
-            <code>{valueText(value)}</code>
+            <code>{formatSerializedValue(entry.value)}</code>
+            <button
+              type="button"
+              aria-label={`Copy ${entry.name} source value`}
+              title="Copy serialized source value"
+              onClick={() => {
+                if (!navigator.clipboard?.writeText) return;
+                void navigator.clipboard.writeText(formatSerializedValue(entry.value))
+                  .then(() => setCopiedProperty(entry.name))
+                  .catch(() => setCopiedProperty(null));
+              }}
+            >{copiedProperty === entry.name ? "Copied" : "Copy"}</button>
           </div>
         ))}
       </div>
