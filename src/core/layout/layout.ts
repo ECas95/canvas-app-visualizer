@@ -323,7 +323,13 @@ export function autoLayoutChildren(
     parent.properties.LayoutGap,
     parent.properties.PaddingLeft, parent.properties.PaddingRight,
     parent.properties.PaddingTop, parent.properties.PaddingBottom
-  ].some(value => value !== undefined && staticNumber(value, symbols) === null);
+  ].some(value => {
+    if (value === undefined) return false;
+    const resolved = staticNumber(value, symbols);
+    // The source-only layout model does not verify negative spacing.
+    // Keep its approximate position, but never label it source-exact.
+    return resolved === null || !Number.isFinite(resolved) || resolved < 0;
+  });
 
   const innerWidth = Math.max(
     0,
@@ -388,7 +394,25 @@ export function autoLayoutChildren(
     paddingTop >= 0 && paddingBottom >= 0;
   const autoHeightUnverified = !horizontal && children.some(control =>
     hasUnverifiedAutoHeight(control, symbols));
-  const fixedChildren = sizing.every(item =>
+  // Negative FillPortions and contradictory/negative size constraints are
+  // outside the renderer's verified layout model. Math.max/clamp can still
+  // paint a safe approximation, but must not silently certify its geometry.
+  // This is a preview limitation, not an assertion about Canvas validation.
+  const sizingUnsupported = children.some(control => {
+    const props = control.properties;
+    const fill = props.FillPortions === undefined
+      ? null : staticNumber(props.FillPortions, symbols);
+    const minWidth = staticNumber(props.LayoutMinWidth, symbols);
+    const maxWidth = staticNumber(props.LayoutMaxWidth, symbols);
+    const minHeight = staticNumber(props.LayoutMinHeight, symbols);
+    const maxHeight = staticNumber(props.LayoutMaxHeight, symbols);
+    return (fill !== null && fill < 0) ||
+      [minWidth, maxWidth, minHeight, maxHeight]
+        .some(value => value !== null && value < 0) ||
+      (minWidth !== null && maxWidth !== null && minWidth > maxWidth) ||
+      (minHeight !== null && maxHeight !== null && minHeight > maxHeight);
+  });
+  const fixedChildren = !sizingUnsupported && sizing.every(item =>
     (horizontal || !hasUnverifiedAutoHeight(item.control, symbols)) &&
     item.fill === 0 && item.width !== null && item.height !== null &&
     [
@@ -407,7 +431,7 @@ export function autoLayoutChildren(
   // when their own dimensions are literal. Keep fallback geometry inspectable
   // but mark the entire sibling layout approximate. Omitted .pa.yaml
   // properties are defaults, not unresolved formulas.
-  const sizingUnknown = autoHeightUnverified || children.some(control => [
+  const sizingUnknown = autoHeightUnverified || sizingUnsupported || children.some(control => [
     control.properties.Width, control.properties.Height,
     control.properties.FillPortions,
     control.properties.LayoutMinWidth, control.properties.LayoutMinHeight,
