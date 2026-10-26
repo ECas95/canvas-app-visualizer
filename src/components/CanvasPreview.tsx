@@ -500,6 +500,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
                         fontSize={12} fill="#52647c" pointerEvents="none">
                         Loading, emptiness and permissions are not verified
                       </text>
+                      <title>Cannot determine loading, emptiness or access from source</title>
                     </g>
                   ) : mode === "visual" ? (
                     <CanvasVisualControl control={item.control} mediaAssets={mediaAssets}
