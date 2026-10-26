@@ -85,4 +85,55 @@ describe("gallery Self dimensions independent of unknown placement", () => {
     });
     expect(galleryRecordsUnknown(source)).toBe(true);
   });
+  it.each([390, 768, 1366])(
+    "resolves verified Self.Height from Self.Width with unknown X at %i px",
+    viewport => {
+      const source = gallery({
+        X: "=varRuntimeX", Width: "=App.Width - 40",
+        Height: "=Self.Width / 2",
+        WrapCount: "=If(Self.Width < 600, 1, Self.Width < 1000, 2, 3)",
+        TemplateSize: "=Self.Height / 4", TemplatePadding: "=8"
+      });
+      const rect = controlRect(source, 0, ctx(viewport));
+      expect(rect.dynamic).toBe(true);
+      expect(rect.height).toBe((viewport - 40) / 2);
+      const template = galleryTemplateLayout(source, rect, ctx(viewport));
+      expect(template).toMatchObject({
+        wrapCount: viewport < 600 ? 1 : viewport < 1000 ? 2 : 3,
+        height: (viewport - 40) / 8, padding: 8, dynamic: true
+      });
+      expect(galleryRecordsUnknown(source)).toBe(true);
+    }
+  );
+
+  it("resolves Self.Width from a verified Self.Height without trusting fallback geometry", () => {
+    const source = gallery({
+      X: "=varRuntimeX", Height: "=600", Width: "=Self.Height / 2",
+      WrapCount: "=If(Self.Width = 300, 2, 1)",
+      TemplateSize: "=Self.Width / 3"
+    });
+    const rect = controlRect(source, 0, ctx(768));
+    expect(rect).toMatchObject({ width: 300, height: 600, dynamic: true });
+    expect(galleryTemplateLayout(source, rect, ctx(768)))
+      .toMatchObject({ wrapCount: 2, height: 100, dynamic: true });
+    expect(galleryRecordsUnknown(source)).toBe(true);
+  });
+
+  it.each([390, 768, 1366])(
+    "keeps cyclic Self dimensions unknown at %i px", viewport => {
+      const source = gallery({
+        X: "=varRuntimeX",
+        Width: "=Self.Height + 1", Height: "=Self.Width - 1",
+        WrapCount: "=If(Self.Width > 300, 2, 1)",
+        TemplateSize: "=Self.Height / 4"
+      });
+      const rect = controlRect(source, 0, ctx(viewport));
+      const template = galleryTemplateLayout(source, rect, ctx(viewport));
+      expect(template).toMatchObject({
+        wrapCount: 1, height: 72, dynamic: true
+      });
+      expect(galleryRecordsUnknown(source)).toBe(true);
+    }
+  );
+
 });

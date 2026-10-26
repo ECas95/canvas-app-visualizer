@@ -677,10 +677,23 @@ export function galleryTemplateLayout(
     ? null : resolvedDimension(control.properties.Width, sourceSymbols);
   const sourceHeight = containerManagedSize
     ? null : resolvedDimension(control.properties.Height, sourceSymbols);
+  // A source-verified dimension may depend on the other Self dimension.
+  // Resolve one additional pass, but never seed a cyclic expression with a
+  // painted fallback or an unverified runtime/container-managed size.
+  const widthFromHeight = containerManagedSize || sourceHeight === null
+    ? null : resolvedDimension(control.properties.Width, {
+      ...(sourceSymbols ?? {}), "Self.Height": sourceHeight
+    });
+  const heightFromWidth = containerManagedSize || sourceWidth === null
+    ? null : resolvedDimension(control.properties.Height, {
+      ...(sourceSymbols ?? {}), "Self.Width": sourceWidth
+    });
+  const verifiedWidth = sourceWidth ?? widthFromHeight;
+  const verifiedHeight = sourceHeight ?? heightFromWidth;
   const selfWidth = !rect.dynamic ? rect.width
-    : sourceWidth !== null && sourceWidth === rect.width ? sourceWidth : undefined;
+    : verifiedWidth !== null && verifiedWidth === rect.width ? verifiedWidth : undefined;
   const selfHeight = !rect.dynamic ? rect.height
-    : sourceHeight !== null && sourceHeight === rect.height ? sourceHeight : undefined;
+    : verifiedHeight !== null && verifiedHeight === rect.height ? verifiedHeight : undefined;
   const symbols = layoutSymbols(context, selfWidth, selfHeight);
   const resolvedWrap = staticNumber(control.properties.WrapCount, symbols);
   // WrapCount counts whole gallery slots. Fractional, non-positive, or
