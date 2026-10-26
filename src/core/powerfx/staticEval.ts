@@ -358,6 +358,22 @@ class Parser {
       return args.length % 2 === 1 ? args[args.length - 1] ?? null : null;
     }
 
+    if (name === "switch") {
+      // Power Fx Switch compares a single expression with ordered match/result
+      // pairs. A preceding unknown match may win, so it must not be skipped.
+      // With no matching pair and no default, the result is Blank (unknown
+      // to this source-only scalar preview), not a fabricated zero/false.
+      // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+      if (args.length < 3 || args[0] === null) return null;
+      const selector = args[0];
+      for (let i = 1; i + 1 < args.length; i += 2) {
+        const match = args[i];
+        if (match === null || typeof match !== typeof selector) return null;
+        if (selector === match) return args[i + 1] ?? null;
+      }
+      return args.length % 2 === 0 ? args[args.length - 1] ?? null : null;
+    }
+
     if (name === "coalesce") {
       // Power Fx skips both Blank and the empty string. Returning "" for
       // Coalesce("", "fallback") is incorrect and hides verified labels.

@@ -43,6 +43,43 @@ describe("Canvas fallback geometry by control family", () => {
   });
 });
 
+describe("Power Fx Switch in responsive Canvas geometry", () => {
+  const control: CanvasControl = {
+    id: "switch", name: "ResponsiveSwitch", controlType: "Label",
+    properties: {
+      X: "=Switch(true, App.Width < 600, 12, App.Width < 1024, 24, 48)",
+      Y: "=16",
+      Width: "=Switch(true, App.Width < 600, 120, App.Width < 1024, 240, 360)",
+      Height: "=32"
+    },
+    children: [], zIndex: 1, sourceFormat: "pa-yaml-v3",
+    sourceFile: "Src/SyntheticSwitch.pa.yaml",
+    sourcePath: "Screens/Synthetic/ResponsiveSwitch"
+  };
+
+  it.each([
+    [390, 844, 12, 120],
+    [768, 1024, 24, 240],
+    [1366, 768, 48, 360]
+  ])("resolves verified X/Width at %i px", (appWidth, appHeight, x, width) => {
+    const rect = controlRect(control, 0, {
+      parentWidth: appWidth, parentHeight: appHeight, appWidth, appHeight
+    });
+    expect(rect).toEqual({ x, y: 16, width, height: 32, dynamic: false });
+  });
+
+  it("preserves unknown geometry when Switch reads SQL-dependent values", () => {
+    const unknown: CanvasControl = {
+      ...control,
+      properties: { ...control.properties, Width: "=Switch(varSqlRole, 1, 120, 240)" }
+    };
+    const rect = controlRect(unknown, 0, {
+      parentWidth: 768, parentHeight: 1024, appWidth: 768, appHeight: 1024
+    });
+    expect(rect.dynamic).toBe(true);
+  });
+});
+
 describe("verified Power Fx math in responsive Canvas geometry", () => {
   it.each([[390, 844], [768, 1024], [1366, 768]])(
     "positions a centered control using Power/Sqrt at %i px",

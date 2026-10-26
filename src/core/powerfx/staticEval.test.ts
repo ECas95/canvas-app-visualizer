@@ -25,6 +25,45 @@ describe("static Power Fx evaluator", () => {
     expect(staticNumber("=RoundDown(19.99, 0)", symbols)).toBe(19);
   });
 
+  it("resolves ordered Power Fx Switch branches from verified source-only values", () => {
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+    expect(staticNumber("=Switch(2, 1, 10, 2, 20, 30)")).toBe(20);
+    expect(staticNumber("=Switch(2, 2, 20, 2, 99, 30)")).toBe(20);
+    expect(staticNumber("=Switch(3, 1, 10, 2, 20, 30)")).toBe(30);
+    expect(staticNumber("=Switch(2, 2, 20)")).toBe(20);
+    expect(staticBoolean("=Switch(false, true, false, false, true)")).toBe(true);
+    expect(staticString('=Switch("desktop", "phone", "small", "desktop", "wide")'))
+      .toBe("wide");
+  });
+
+  it("uses Switch in responsive Canvas dimensions only when App.Width is known", () => {
+    const formula = "=Switch(true, App.Width < 600, 24, App.Width < 1024, 48, 72)";
+    expect(staticNumber(formula, { "App.Width": 390 })).toBe(24);
+    expect(staticNumber(formula, { "App.Width": 768 })).toBe(48);
+    expect(staticNumber(formula, { "App.Width": 1366 })).toBe(72);
+    expect(staticNumber(formula)).toBeNull();
+  });
+
+  it("does not certify unknown, invalid or qualified Switch expressions", () => {
+    for (const formula of [
+      "=Switch()", "=Switch(1)", "=Switch(1, 1)",
+      "=Switch(1, 2, 20)", "=Switch(1, 2, 20, 3, 30)",
+      "=Switch(varSqlPermission, true, 24, 48)",
+      "=Switch(1, varSqlValue, 24, 1, 48, 72)",
+      "=Switch(1, 2, 24, varSqlValue, 48, 72)",
+      "=Switch(1, 1, varSqlHeight, 72)",
+      '=Switch(1, "1", 24, 72)',
+      "=Connector.Switch(1, 1, 24, 72)"
+    ]) {
+      expect(staticNumber(formula)).toBeNull();
+    }
+    // Once an earlier branch matches, a later runtime-dependent match
+    // cannot affect the selected output.
+    expect(staticNumber("=Switch(1, 1, 24, varSqlValue, 48, 72)")).toBe(24);
+    // A no-match with an explicit default is verified.
+    expect(staticNumber("=Switch(1, 2, 24, 72)")).toBe(72);
+  });
+
   it("resolves documented Power and Sqrt functions in numeric formulas", () => {
     // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-numericals
     expect(staticNumber("=Power(5, 3)")).toBe(125);
