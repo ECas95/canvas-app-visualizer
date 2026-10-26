@@ -20,7 +20,7 @@ async function withFixture(run, indexOverride) {
     await writeFile(join(dist, "index.html"), index);
     await writeFile(join(assets, "index-example.css"), `body { color: red; } /* </style> */`);
     await writeFile(join(assets, "index-example.js"),
-      `document.getElementById("root").textContent = "Canvas App Visualizer"; /* </script> */`);
+      `document.getElementById("root").textContent = "Canvas App Visualizer"; /* </script>       `document.getElementById("root").textContent = "Canvas App Visualizer"; /* </script> */`); */`);
     await run({ dist, output });
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -36,6 +36,7 @@ test("bundles built assets into one offline HTML preview without external asset 
     assert.match(html, /Canvas App Visualizer/);
     assert.match(html, /content="unmerged-pr-offline"/);
     assert.doesNotMatch(html, /src="\.\/assets\//);
+    assert.doesNotMatch(html, /<script[^>]*\bsrc=/);
     assert.doesNotMatch(html, /href="\.\/assets\//);
     assert.match(html, /<\\\/script>/);
     assert.match(html, /<\\\/style>/);
