@@ -24,6 +24,8 @@ interface Props {
   mediaAssets?: PreviewMediaAsset[];
   selectedId?: string;
   onSelect: (control: CanvasControl) => void;
+  /** Optional initial inspection mode; defaults to the no-runtime-records visual view. */
+  initialMode?: "visual" | "structure";
 }
 
 interface DrawItem {
@@ -193,9 +195,9 @@ function wireframeColor(type: string): string {
   return "#657285";
 }
 
-export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }: Props) {
+export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], initialMode = "visual" }: Props) {
   const [profile, setProfile] = useState<Profile>("desktop");
-  const [mode, setMode] = useState<PreviewMode>("visual");
+  const [mode, setMode] = useState<PreviewMode>(initialMode);
   const [zoom, setZoom] = useState<Zoom>("fit");
   const [focusSelection, setFocusSelection] = useState(false);
   const [interactive, setInteractive] = useState(false);
