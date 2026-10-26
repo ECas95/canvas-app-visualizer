@@ -43,7 +43,8 @@ See [release notes](docs/RELEASE_V0.2.0.md) and [Microsoft source references](do
 - display a searchable control hierarchy;
 - render an approximate screen preview with safe evaluation of common `Parent`, `Self`, `App`, gallery-template, sibling-geometry, and AutoLayout formulas;
 - inspect serialized formulas and properties;
-- lex Power Fx with awareness of strings, quoted identifiers, comments, operators, records/tables, and qualified function calls;
+- lex Power Fx with awareness of strings, interpolation islands, quoted identifiers, comments, operators, records/tables, and qualified function calls;
+- load the official Microsoft Power Fx parser locally through browser WebAssembly for syntax diagnostics when available;
 - surface structural, performance, delegation, maintainability, startup, and accessibility review hints;
 - classify analyzer findings by severity and confidence;
 - process files locally with no application upload API;
@@ -156,7 +157,7 @@ The intended product is a web application with a desktop distribution using the 
 
 Planned work includes:
 
-- Microsoft Power Fx Core/Interpreter integration through local browser WebAssembly;
+- local Microsoft Power Fx Core syntax parsing via WebAssembly (included in the Pages build when this branch is deployed);
 - app-aware Power Fx binding and type checking;
 - connector-aware delegation profiles;
 - dependency/call graphs;

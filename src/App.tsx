@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FileDrop } from "./components/FileDrop";
 import { AppTree } from "./components/AppTree";
 import { CanvasPreview } from "./components/CanvasPreview";
@@ -10,6 +10,7 @@ import { importCanvasFiles } from "./core/importers/source";
 import { collectFormulaRefs, countControls } from "./core/model/formulas";
 import { buildFindingLocationIndex, locationForFinding } from "./core/model/findingNavigation";
 import { buildCanvasModel } from "./core/model/normalize";
+import { analyzeOfficialPowerFxSyntax, mergeOfficialPowerFxFindings } from "./core/powerfx/officialEngine";
 import { DEMO_FILES } from "./sample/demo";
 import type {
   CanvasAppModel,
@@ -54,8 +55,42 @@ export default function App() {
   const [selectedScreenId, setSelectedScreenId] = useState<string>();
   const [selectedControl, setSelectedControl] = useState<CanvasControl>();
   const [rightTab, setRightTab] = useState<"inspect" | "diagnostics">("diagnostics");
+  const [officialFindings, setOfficialFindings] = useState<Finding[]>([]);
+  const [powerFxStatus, setPowerFxStatus] = useState<"idle" | "loading" | "ready" | "unavailable">("idle");
 
-  const findings = useMemo(() => (app ? analyzeCanvasApp(app) : []), [app]);
+  const staticFindings = useMemo(() => (app ? analyzeCanvasApp(app) : []), [app]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!app) {
+      setOfficialFindings([]);
+      setPowerFxStatus("idle");
+      return () => { cancelled = true; };
+    }
+    setOfficialFindings([]);
+    setPowerFxStatus("loading");
+    analyzeOfficialPowerFxSyntax(app)
+      .then(result => {
+        if (cancelled) return;
+        setOfficialFindings(result);
+        setPowerFxStatus("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setOfficialFindings([]);
+        setPowerFxStatus("unavailable");
+      });
+    return () => { cancelled = true; };
+  }, [app]);
+
+  const findings = useMemo(
+    () => mergeOfficialPowerFxFindings(
+      staticFindings,
+      officialFindings,
+      powerFxStatus === "ready"
+    ),
+    [officialFindings, powerFxStatus, staticFindings]
+  );
   const formulaCount = useMemo(
     () => (app ? collectFormulaRefs(app).length : 0),
     [app]
@@ -118,6 +153,8 @@ export default function App() {
     setSelectedScreenId(undefined);
     setWarnings([]);
     setError(undefined);
+    setOfficialFindings([]);
+    setPowerFxStatus("idle");
   }
 
   if (!app) {
@@ -294,6 +331,7 @@ export default function App() {
               <Inspector selection={selection} />
             ) : (
               <DiagnosticsPanel findings={findings}
+                powerFxStatus={powerFxStatus}
                 canOpenFinding={finding => Boolean(locationForFinding(findingLocations, finding))}
                 onOpenFinding={openFinding} />
             )}
