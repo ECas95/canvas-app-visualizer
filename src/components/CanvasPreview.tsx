@@ -439,7 +439,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                       <rect x={item.x} y={item.y} width={item.width} height={item.height}
                         fill="#f3f6fa" fillOpacity={0.8} stroke="#8194ac"
                         strokeDasharray="5 4" />
-                      <text x={item.x + 8} y={item.y + Math.min(20, item.height / 2 + 4)}
+                      <text clipPath={`url(#${instanceId}-bounds-${index})`} x={item.x + 8} y={item.y + Math.min(20, item.height / 2 + 4)}
                         fontSize={12} fill="#42536b" pointerEvents="none">
                         Gallery state unknown — not an empty result
                       </text>
@@ -449,7 +449,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                       <rect x={item.x} y={item.y} width={item.width} height={item.height}
                         fill="#fff9ed" fillOpacity={0.92} stroke="#b68c47"
                         strokeDasharray="5 4" />
-                      <text x={item.x + 8} y={item.y + Math.min(20, item.height / 2 + 4)}
+                      <text clipPath={`url(#${instanceId}-bounds-${index})`} x={item.x + 8} y={item.y + Math.min(20, item.height / 2 + 4)}
                         fontSize={12} fill="#77531b" pointerEvents="none">
                         Visible unknown — runtime condition unavailable
                       </text>
@@ -465,7 +465,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [] }
                         rx={3} fill={wireframeColor(item.control.controlType)}
                         fillOpacity={0.07} stroke={wireframeColor(item.control.controlType)}
                         strokeWidth={1.5} strokeDasharray={item.dynamic ? "8 5" : undefined} />
-                      <text x={item.x + 5} y={item.y + Math.min(18, item.height / 2 + 3)}
+                      <text clipPath={`url(#${instanceId}-bounds-${index})`} x={item.x + 5} y={item.y + Math.min(18, item.height / 2 + 3)}
                         fontSize={12} fill="#303846" pointerEvents="none">
                         {item.control.name.slice(0, 36)}
                       </text>
