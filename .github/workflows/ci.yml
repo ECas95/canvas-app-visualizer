@@ -37,7 +37,7 @@ jobs:
       - name: Install
         run: npm install
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium --only-shell
       - name: Browser geometry and screenshots
         run: npm run test:visual
       - name: Upload synthetic preview screenshots
