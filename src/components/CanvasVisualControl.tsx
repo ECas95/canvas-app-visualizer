@@ -67,11 +67,15 @@ export function CanvasVisualControl({
   const explicitFill = previewColorWithSymbols(
     disabled ? props.DisabledFill ?? props.Fill : props.Fill, simulationSymbols
   );
-  const foreground = previewColorWithSymbols(
-    isModernIcon ? props.IconColor ?? props.Color :
-      disabled ? props.DisabledColor ?? props.Color : props.Color,
-    simulationSymbols
-  ) ?? "#242424";
+  // Canvas foreground Color is a Power Fx formula too. A fallback text/icon
+  // color is only illustrative when its explicit source depends on runtime
+  // state or uses an unsupported expression. ModernIcon prefers IconColor;
+  // known Disabled mode prefers DisabledColor for classic controls.
+  // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-colors
+  const foregroundSource = isModernIcon ? props.IconColor ?? props.Color :
+    disabled ? props.DisabledColor ?? props.Color : props.Color;
+  const resolvedForeground = previewColorWithSymbols(foregroundSource, simulationSymbols);
+  const foreground = resolvedForeground ?? "#242424";
   const borderColor = previewColorWithSymbols(props.BorderColor, simulationSymbols);
   // BorderThickness is a Power Fx numeric formula, not necessarily a literal.
   // Resolve only known viewport/local values; never infer a SQL/runtime result.
@@ -106,6 +110,8 @@ export function CanvasVisualControl({
   // appearance. Keep a usable approximation, but label it as unverified.
   const textBearing = kind === "label" || kind === "button" || kind === "input" ||
     kind === "select" || kind === "checkbox" || kind === "toggle";
+  const foregroundUnknown = (textBearing || kind === "icon") &&
+    foregroundSource != null && resolvedForeground === null;
   const fontUnknown = textBearing && !previewFontFamilyIsKnown(control, simulationSymbols);
   const fontSizeUnknown = textBearing && !previewFontSizeIsKnown(control, simulationSymbols);
   // Limit only painted text, not the verified source value. Keep a visible
@@ -296,10 +302,12 @@ export function CanvasVisualControl({
       data-preview-padding-state={unverifiedPaddingEdges.length ? "unknown" : undefined}
       data-preview-padding-edges={unverifiedPaddingEdges.length ? unverifiedPaddingEdges.join(",") : undefined}
       data-preview-text-state={labelTextUnknown || buttonTextUnknown ? "unknown" : textTruncated ? "truncated" : undefined}
+      data-preview-color-state={foregroundUnknown ? "unknown" : undefined}
       data-preview-fill-state={fillUnknown ? "unknown" : undefined}
       data-preview-border-state={borderUnknown ? "unknown" : undefined}
       data-preview-radius-state={radiusUnverified ? "unknown" : undefined}
       data-preview-shadow-state={shadowState}>
+      {foregroundUnknown && <title>Foreground Color cannot be verified from source; the displayed text or icon color is a preview fallback</title>}
       {fillUnknown && <title>Fill cannot be verified from source; the displayed background is a preview fallback</title>}
       {borderUnknown && <title>Border appearance cannot be verified from source; the displayed border is a preview fallback</title>}
       {radiusUnverified && <title>Corner radius requires runtime state or is invalid; the outline is approximate and clipping uses only known corners</title>}
