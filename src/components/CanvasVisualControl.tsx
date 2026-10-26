@@ -1,5 +1,5 @@
 import type { CanvasControl, PreviewMediaAsset } from "../types/canvas";
-import { previewChildClipPath, previewCornerRadii, previewRoundedRectPath } from "../core/layout/previewCorners";
+import { previewChildClipPath, previewCornerRadii, previewCornerRadiusUnverified, previewRoundedRectPath } from "../core/layout/previewCorners";
 import { previewSvgTextWindow } from "../core/layout/previewSvgTextWindow";
 import { staticBoolean, staticNumber } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
@@ -120,6 +120,7 @@ export function CanvasVisualControl({
     rawText !== null && label === null;
   const inset = Math.min(12, Math.max(3, width * 0.04));
   const corners = previewCornerRadii(props, width, height, simulationSymbols);
+  const radiusUnverified = previewCornerRadiusUnverified(props, simulationSymbols);
   const outline = previewRoundedRectPath(x, y, width, height, corners);
   const checkedState = (kind === "checkbox" || kind === "toggle")
     ? previewCheckedState(control, simulationSymbols) : "unchecked";
@@ -268,9 +269,11 @@ export function CanvasVisualControl({
       data-preview-line-height-state={!lineHeightKnown ? "unknown" : undefined}
       data-preview-text-state={buttonTextUnknown ? "unknown" : undefined}
       data-preview-fill-state={fillUnknown ? "unknown" : undefined}
-      data-preview-border-state={borderUnknown ? "unknown" : undefined}>
+      data-preview-border-state={borderUnknown ? "unknown" : undefined}
+      data-preview-radius-state={radiusUnverified ? "unknown" : undefined}>
       {fillUnknown && <title>Fill cannot be verified from source; the displayed background is a preview fallback</title>}
       {borderUnknown && <title>Border appearance cannot be verified from source; the displayed border is a preview fallback</title>}
+      {radiusUnverified && <title>Corner radius requires runtime state or is invalid; the outline is approximate and clipping uses only known corners</title>}
       {displayMode === "unresolved" && (
         <title>DisplayMode requires runtime state; appearance and interaction permissions are not verified</title>
       )}

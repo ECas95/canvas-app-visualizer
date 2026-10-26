@@ -38,6 +38,26 @@ export function previewCornerRadii(
   };
 }
 
+/**
+ * A serialized corner radius is a Power Fx formula, not a verified pixel
+ * value. Missing properties retain preview defaults, but explicit formulas
+ * requiring runtime state or invalid negative values must be disclosed.
+ * Unknown corners also use square child clipping rather than invented curves.
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-button
+ */
+export function previewCornerRadiusUnverified(
+  properties: Record<string, unknown>,
+  symbols?: Record<string, StaticPowerFxValue>
+): boolean {
+  return ["RadiusTopLeft", "RadiusTopRight", "RadiusBottomRight", "RadiusBottomLeft"]
+    .some(key => {
+      const raw = properties[key];
+      if (raw === undefined || raw === null) return false;
+      const value = literalNumber(raw) ?? staticNumber(raw, symbols);
+      return value === null || !Number.isFinite(value) || value < 0;
+    });
+}
+
 /** Generates a bounded SVG path without evaluating any Power Fx formula. */
 export function previewRoundedRectPath(
   x: number,
