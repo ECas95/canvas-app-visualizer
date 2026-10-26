@@ -1,6 +1,7 @@
 import type { CanvasControl, PreviewMediaAsset } from "../types/canvas";
 import { previewChildClipPath, previewCornerRadii, previewCornerRadiusUnverified, previewRoundedRectPath } from "../core/layout/previewCorners";
 import { previewSvgTextWindow } from "../core/layout/previewSvgTextWindow";
+import { previewBoundedText } from "../core/layout/previewTextBounds";
 import { staticBoolean, staticNumber } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, previewImageFlipTransform, previewImagePosition, previewImageRotationTransform, previewImageSourceState, previewRasterCssImage, resolvePreviewImage } from "../core/layout/previewMedia";
@@ -107,8 +108,10 @@ export function CanvasVisualControl({
     kind === "select" || kind === "checkbox" || kind === "toggle";
   const fontUnknown = textBearing && !previewFontFamilyIsKnown(control, simulationSymbols);
   const fontSizeUnknown = textBearing && !previewFontSizeIsKnown(control, simulationSymbols);
-  // Bound pathological imported strings while retaining normal multiline labels.
-  const text = label?.slice(0, 4096);
+  // Limit only painted text, not the verified source value. Keep a visible
+  // truncation state so the preview never presents partial text as complete.
+  // Count Unicode code points to avoid splitting an emoji/surrogate pair.
+  const { text, truncated: textTruncated } = previewBoundedText(label);
   // A serialized Text formula can depend on SQL, user identity, or other
   // runtime state. An unresolved value is not a verified empty string.
   // Keep the uncertainty visible without evaluating external dependencies.
@@ -292,7 +295,7 @@ export function CanvasVisualControl({
       data-preview-line-height-state={!lineHeightKnown ? "unknown" : undefined}
       data-preview-padding-state={unverifiedPaddingEdges.length ? "unknown" : undefined}
       data-preview-padding-edges={unverifiedPaddingEdges.length ? unverifiedPaddingEdges.join(",") : undefined}
-      data-preview-text-state={buttonTextUnknown ? "unknown" : undefined}
+      data-preview-text-state={labelTextUnknown || buttonTextUnknown ? "unknown" : textTruncated ? "truncated" : undefined}
       data-preview-fill-state={fillUnknown ? "unknown" : undefined}
       data-preview-border-state={borderUnknown ? "unknown" : undefined}
       data-preview-radius-state={radiusUnverified ? "unknown" : undefined}
@@ -313,6 +316,7 @@ export function CanvasVisualControl({
         <title>{`Text padding cannot be verified for ${unverifiedPaddingEdges.join(", ")}; displayed spacing is a preview fallback`}</title>
       )}
       {buttonTextUnknown && <title>Button Text requires runtime data or state; the ellipsis is a preview placeholder, not verified content</title>}
+      {textTruncated && <title>Text preview truncated after 4096 Unicode characters; the complete source text is not displayed</title>}
       <defs>
         <clipPath id={clipId}>
           {/* Unknown runtime corner formulas must not clip verified text or
