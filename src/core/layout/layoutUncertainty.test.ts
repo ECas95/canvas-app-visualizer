@@ -49,6 +49,14 @@ function layout(
 }
 
 describe("AutoLayout geometry certainty and inherited alignment", () => {
+  it("does not certify a gap from a numeric-error condition across viewports", () => {
+    for (const viewport of [390, 768, 1366]) {
+      const rect = layout({ LayoutGap: "=If(1/0 > 0, 12, 4)" }, undefined, viewport);
+      expect(rect.dynamic, String(viewport)).toBe(true);
+      expect([rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)).toBe(true);
+    }
+  });
+
   it("does not assert exact positions for unknown runtime direction", () => {
     const rect = layout({ LayoutDirection: "=If(varHorizontal, LayoutDirection.Horizontal, LayoutDirection.Vertical)" });
     expect(rect.dynamic).toBe(true);

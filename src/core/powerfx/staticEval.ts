@@ -57,7 +57,8 @@ class Parser {
     if (this.failed) return null;
     const value = this.parseOr();
     if (this.failed || this.index !== this.tokens.length) return null;
-    return value;
+    // JavaScript's Infinity/NaN are not verified Power Fx numeric values.
+    return typeof value === "number" ? this.finite(value) : value;
   }
 
   private peek(offset = 0): PowerFxToken | undefined {
@@ -178,7 +179,7 @@ class Parser {
         continue;
       }
       if (typeof left !== "number" || typeof right !== "number") return this.fail();
-      left = op === "+" ? left + right : left - right;
+      left = this.finite(op === "+" ? left + right : left - right);
     }
 
     return left;
@@ -199,8 +200,7 @@ class Parser {
       }
       if (typeof left !== "number" || typeof right !== "number") return this.fail();
 
-      if (op === "*") left *= right;
-      else left /= right;
+      left = this.finite(op === "*" ? left * right : left / right);
     }
 
     return left;
@@ -214,7 +214,7 @@ class Parser {
       const right = this.parsePower();
       if (left === null || right === null) return null;
       if (typeof left !== "number" || typeof right !== "number") return this.fail();
-      left = Math.pow(left, right);
+      left = this.finite(Math.pow(left, right));
     }
 
     return left;
@@ -228,7 +228,7 @@ class Parser {
       const value = this.parseUnary();
       if (value === null) return null;
       if (typeof value !== "number") return this.fail();
-      return token.value === "-" ? -value : value;
+      return this.finite(token.value === "-" ? -value : value);
     }
 
     if (token?.value === "!" || token?.value.toLowerCase() === "not") {
@@ -249,7 +249,7 @@ class Parser {
       this.take();
       if (value === null) continue;
       if (typeof value !== "number") return this.fail();
-      value /= 100;
+      value = this.finite(value / 100);
     }
 
     return value;
@@ -319,7 +319,9 @@ class Parser {
     }
 
     const symbol = this.symbols.get(qualified.toLowerCase());
-    if (symbol !== undefined) return symbol;
+    if (symbol !== undefined) {
+      return typeof symbol === "number" ? this.finite(symbol) : symbol;
+    }
 
     if (
       segments.length === 2 &&
@@ -380,11 +382,11 @@ class Parser {
 
     if (["min", "max"].includes(name) && numbers.length === values.length) {
       if (numbers.length === 0) return this.fail();
-      return name === "min" ? Math.min(...numbers) : Math.max(...numbers);
+      return this.finite(name === "min" ? Math.min(...numbers) : Math.max(...numbers));
     }
 
     if (name === "abs" && typeof values[0] === "number") {
-      return Math.abs(values[0]);
+      return this.finite(Math.abs(values[0]));
     }
 
     if (["round", "roundup", "rounddown"].includes(name)) {
@@ -416,6 +418,14 @@ class Parser {
 
     // Unsupported pure/runtime function: preserve uncertainty, not a syntax error.
     return null;
+  }
+
+  // Power Fx raises a numeric error for division by zero; JS instead yields
+  // Infinity/NaN. Never let such a value drive geometry, If conditions,
+  // visibility, colors or a permission-like preview branch.
+  // https://learn.microsoft.com/en-us/power-platform/power-fx/error-handling
+  private finite(value: number): number | null {
+    return Number.isFinite(value) ? value : null;
   }
 
   private fail(): null {

@@ -54,6 +54,25 @@ describe("static Power Fx evaluator", () => {
     expect(staticNumber("=Round(2.5, 20)")).toBeNull();
   });
 
+  it("does not certify division by zero, overflow or nonfinite runtime symbols", () => {
+    // Power Fx propagates numeric errors; JavaScript Infinity is not a
+    // source-verified value or a valid condition for Canvas layout.
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/error-handling
+    expect(evaluateStaticPowerFx("=1/0")).toBeNull();
+    expect(evaluateStaticPowerFx("=0/0")).toBeNull();
+    expect(staticBoolean("=1/0 > 10")).toBeNull();
+    expect(staticNumber("=If(1/0 > 10, 120, 24)")).toBeNull();
+    expect(staticBoolean("=(10^1000) > 0")).toBeNull();
+    expect(staticNumber("=Max(10^1000, 100)")).toBeNull();
+    expect(staticBoolean("=Max(10^1000, 100) > 100")).toBeNull();
+    expect(staticBoolean("=varWidth > 100", { varWidth: Infinity })).toBeNull();
+    // An unselected error branch does not invalidate a known If result.
+    expect(staticNumber("=If(false, 1/0, 32)")).toBe(32);
+    expect(staticNumber("=If(true, 24, 1/0)")).toBe(24);
+    expect(staticNumber("=1/2")).toBe(0.5);
+    expect(staticNumber("=10^2")).toBe(100);
+  });
+
   it("evaluates responsive If formulas when the condition is known", () => {
     expect(
       staticString(
