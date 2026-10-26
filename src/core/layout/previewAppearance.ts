@@ -323,11 +323,43 @@ export function previewDropShadow(
   if (lexed.diagnostics.length) return null;
   const tokens = significantTokens(lexed.tokens);
   if (tokens[0]?.value === "=") tokens.shift();
-  if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
+  const functionName = tokens[0]?.kind === "identifier"
+    ? tokens[0].value.toLowerCase() : null;
+  if ((functionName !== "if" && functionName !== "switch") ||
+      tokens[1]?.value !== "(" ||
       tokens[tokens.length - 1]?.value !== ")") return null;
   const branches = splitIfArguments(tokens.slice(2, -1));
-  if (!branches || branches.length < 2) return null;
+  if (!branches) return null;
 
+  if (functionName === "switch") {
+    // A typed DropShadow result is never interchangeable with a text label.
+    // Only numeric/Boolean selectors and ordered, fully verified comparisons
+    // may choose a branch; unknown SQL/permission matches fail closed.
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+    if (branches.length < 3) return null;
+    const selector = evaluateStaticPowerFx(
+      "=" + expressionText(source, branches[0]), { symbols }
+    );
+    if (typeof selector !== "number" && typeof selector !== "boolean") return null;
+    for (let i = 1; i + 1 < branches.length; i += 2) {
+      const match = evaluateStaticPowerFx(
+        "=" + expressionText(source, branches[i]), { symbols }
+      );
+      if (match === null || typeof match !== typeof selector) return null;
+      if (match === selector) {
+        return previewDropShadow(
+          "=" + expressionText(source, branches[i + 1]), symbols, depth + 1
+        );
+      }
+    }
+    return branches.length % 2 === 0
+      ? previewDropShadow(
+          "=" + expressionText(source, branches[branches.length - 1]), symbols, depth + 1
+        )
+      : null;
+  }
+
+  if (branches.length < 2) return null;
   for (let i = 0; i + 1 < branches.length; i += 2) {
     const condition = staticBoolean("=" + expressionText(source, branches[i]), symbols);
     if (condition === null) return null;

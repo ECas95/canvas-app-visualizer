@@ -54,6 +54,36 @@ describe("Canvas container DropShadow certainty", () => {
     expect(html).not.toContain('data-preview-shadow-state="not-rendered"');
   });
 
+  it.each([
+    { viewport: 390, shadow: "0px 6px 12px" },
+    { viewport: 768, shadow: "0px 1px 2px" },
+    { viewport: 1366, shadow: null }
+  ])("paints verified Switch shadow only at $viewport px", ({ viewport, shadow }) => {
+    const html = render({
+      Fill: "=Color.White",
+      DropShadow: "=Switch(true, App.Width < 600, DropShadow.Bold, " +
+        "App.Width < 1024, DropShadow.Light, DropShadow.None)"
+    }, viewport);
+    expect(html.includes("drop-shadow(")).toBe(shadow !== null);
+    if (shadow) expect(html).toContain(shadow);
+    expect(html).not.toContain('data-preview-shadow-state="unknown"');
+    expect(html).not.toContain('data-preview-shadow-state="not-rendered"');
+  });
+
+  it.each([390, 768, 1366])(
+    "does not invent a shadow from unknown Switch security at %i px",
+    viewport => {
+      const html = render({
+        Fill: "=Color.White",
+        DropShadow: "=Switch(true, varSqlAuthorized, DropShadow.Bold, " +
+          "true, DropShadow.None)"
+      }, viewport);
+      expect(html).toContain('data-preview-shadow-state="unknown"');
+      expect(html).not.toContain("drop-shadow(");
+      expect(html).not.toContain("varSqlAuthorized");
+    }
+  );
+
   it("does not mark omitted or explicitly disabled shadows as uncertain", () => {
     expect(render({ Fill: "=Color.White" })).not.toContain("data-preview-shadow-state=");
     const none = render({ Fill: "=Color.White", DropShadow: "=DropShadow.None" });

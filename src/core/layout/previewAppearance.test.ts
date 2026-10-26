@@ -626,6 +626,32 @@ describe("Canvas container DropShadow source parsing", () => {
     expect(previewDropShadow("= DropShadow.Regular ")).toBe("regular");
   });
 
+  it.each([
+    [390, "bold"], [768, "light"], [1366, "none"]
+  ] as const)("resolves typed DropShadow Switch at %i px", (viewport, level) => {
+    const formula = "=Switch(true, App.Width < 600, DropShadow.Bold, " +
+      "App.Width < 1024, DropShadow.Light, DropShadow.None)";
+    expect(previewDropShadow(formula, { "App.Width": viewport })).toBe(level);
+    expect(previewDropShadowFilter(formula, { "App.Width": viewport })?.includes("drop-shadow("))
+      .toBe(level !== "none" ? true : undefined);
+    expect(previewDropShadow(formula)).toBeNull();
+  });
+
+  it("fails closed for unknown, malformed and text-like Switch shadow branches", () => {
+    for (const formula of [
+      "=Switch(true, varSqlPermission, DropShadow.Bold, true, DropShadow.None)",
+      '=Switch(true, true, "DropShadow.Bold", DropShadow.None)',
+      "=Switch(true, true, DropShadow.Unsupported, DropShadow.None)",
+      "=Switch(true, false, DropShadow.Bold)",
+      '=Switch("true", "true", DropShadow.Bold, DropShadow.None)',
+      "=Connector.Switch(true, true, DropShadow.Bold, DropShadow.None)",
+      "=Switch(true, false, DropShadow.Bold, SQL.Shadow)"
+    ]) {
+      expect(previewDropShadow(formula, { "App.Width": 768 })).toBeNull();
+      expect(previewDropShadowFilter(formula, { "App.Width": 768 })).toBeUndefined();
+    }
+  });
+
   it("does not infer a shadow from runtime-dependent or unsupported formulas", () => {
     expect(previewDropShadow("=varShadow")).toBeNull();
     expect(previewDropShadow("=If(varReady, DropShadow.Bold, DropShadow.None)")).toBeNull();
