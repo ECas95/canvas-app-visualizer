@@ -249,4 +249,38 @@ describe("AutoLayout geometry certainty and inherited alignment", () => {
     }
   });
 
+
+  it.each([
+    "=LayoutAlignItems.Center",
+    "=LayoutAlignItems.End",
+    "=LayoutAlignItems.Stretch",
+    "=varCrossAxisAlignment"
+  ])("does not certify wrapped children with non-start or unknown alignment %s", align => {
+    for (const viewport of [390, 768, 1366]) {
+      const rect = layout({
+        LayoutWrap: "=true", LayoutAlignItems: align
+      }, undefined, viewport);
+      expect(rect.dynamic, `${align} at ${viewport}`).toBe(true);
+      expect([rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)).toBe(true);
+    }
+  });
+
+  it("verifies wrapped Start alignment and only the known responsive Start branch", () => {
+    const responsive = "=If(App.Width < 600, LayoutAlignItems.Center, LayoutAlignItems.Start)";
+    for (const [viewport, unknown] of [
+      [390, true], [768, false], [1366, false]
+    ] as const) {
+      expect(layout({
+        LayoutWrap: "=true", LayoutAlignItems: responsive
+      }, undefined, viewport).dynamic).toBe(unknown);
+      expect(layout({
+        LayoutWrap: "=true", LayoutAlignItems: "=LayoutAlignItems.Start"
+      }, undefined, viewport).dynamic).toBe(false);
+    }
+    // Unwrapped cross-axis alignment already has a supported position model.
+    expect(layout({
+      LayoutWrap: "=false", LayoutAlignItems: "=LayoutAlignItems.Center"
+    }).dynamic).toBe(false);
+  });
+
 });
