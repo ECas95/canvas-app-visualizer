@@ -26,7 +26,11 @@ export const PREVIEW_ICON_PATHS = {
   arrowdown: "M12 4V20 M5 13L12 20L19 13",
   edit: "M4 20L8.5 19L19 8.5L15.5 5L5 15.5L4 20 M13.5 7L17 10.5",
   trash: "M5 7H19 M9 7V4H15V7 M7 7L8 20H16L17 7 M10 10V17 M14 10V17",
-  home: "M3 11L12 4L21 11 M6 10V20H18V10 M10 20V14H14V20"
+  home: "M3 11L12 4L21 11 M6 10V20H18V10 M10 20V14H14V20",
+  // Classic Icon.Lock and Icon.ShoppingCart are documented Microsoft Canvas icons.
+  // These are bounded local SVG approximations, not Power Apps runtime assets.
+  lock: "M6 11V8A6 6 0 0 1 18 8V11 M5 11H19V21H5Z",
+  shoppingcart: "M3 4H5L7.5 16H19L21 7H6 M8.5 20A1 1 0 1 0 10.5 20A1 1 0 1 0 8.5 20 M17.5 20A1 1 0 1 0 19.5 20A1 1 0 1 0 17.5 20"
 } as const;
 
 export type PreviewIconName = keyof typeof PREVIEW_ICON_PATHS;
