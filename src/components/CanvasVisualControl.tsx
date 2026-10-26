@@ -79,6 +79,14 @@ export function CanvasVisualControl({
   const thickness = resolvedThickness !== null && resolvedThickness >= 0
     ? resolvedThickness : null;
   const borderStyle = previewBorderStyle(props.BorderStyle, simulationSymbols);
+  // Explicit runtime-dependent paint is not a verified Canvas default.
+  // Preserve the visual fallback, but expose its uncertainty.
+  const fillSource = disabled ? props.DisabledFill ?? props.Fill : props.Fill;
+  const fillUnknown = fillSource != null && explicitFill === null;
+  const borderUnknown =
+    (props.BorderColor != null && borderColor === null) ||
+    (props.BorderThickness != null && thickness === null) ||
+    (props.BorderStyle != null && borderStyle === null);
   const rawText = kind === "select"
     ? props.Default ?? props.InputTextPlaceholder
     : props.Text ?? props.Label;
@@ -258,7 +266,11 @@ export function CanvasVisualControl({
       data-preview-font-state={fontUnknown ? "unknown" : undefined}
       data-preview-font-size-state={fontSizeUnknown ? "unknown" : undefined}
       data-preview-line-height-state={!lineHeightKnown ? "unknown" : undefined}
-      data-preview-text-state={buttonTextUnknown ? "unknown" : undefined}>
+      data-preview-text-state={buttonTextUnknown ? "unknown" : undefined}
+      data-preview-fill-state={fillUnknown ? "unknown" : undefined}
+      data-preview-border-state={borderUnknown ? "unknown" : undefined}>
+      {fillUnknown && <title>Fill cannot be verified from source; the displayed background is a preview fallback</title>}
+      {borderUnknown && <title>Border appearance cannot be verified from source; the displayed border is a preview fallback</title>}
       {displayMode === "unresolved" && (
         <title>DisplayMode requires runtime state; appearance and interaction permissions are not verified</title>
       )}
