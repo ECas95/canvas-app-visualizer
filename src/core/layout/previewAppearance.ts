@@ -139,6 +139,46 @@ function sourceEnumMember(
   return members.includes(member) ? member : null;
 }
 
+/**
+ * Power Fx ColorFade interpolates RGB toward black (-1) or white (+1),
+ * preserving the source alpha channel. Resolve only a locally verified color
+ * and a numeric amount in [-1, 1]. No browser CSS input or runtime expression
+ * is executed.
+ * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-colors
+ */
+function fadedPreviewColor(base: string, amount: number): string | null {
+  if (!Number.isFinite(amount) || amount < -1 || amount > 1) return null;
+  if (amount === 0) return base;
+
+  let channels: number[];
+  let alpha = 1;
+  if (base === "transparent") {
+    channels = [0, 0, 0];
+    alpha = 0;
+  } else if (base.startsWith("#")) {
+    const source = base.slice(1);
+    const hex = source.length === 3 || source.length === 4
+      ? [...source].map(digit => digit + digit).join("")
+      : source;
+    if (hex.length !== 6 && hex.length !== 8) return null;
+    channels = [0, 2, 4].map(index => Number.parseInt(hex.slice(index, index + 2), 16));
+    if (hex.length === 8) alpha = Number.parseInt(hex.slice(6, 8), 16) / 255;
+  } else {
+    const match = /^rgba\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*\)$/i.exec(base);
+    if (!match) return null;
+    channels = match.slice(1, 4).map(Number);
+    alpha = Number(match[4]);
+  }
+
+  if (channels.some(channel => !Number.isFinite(channel) || channel < 0 || channel > 255) ||
+      !Number.isFinite(alpha) || alpha < 0 || alpha > 1) return null;
+
+  const faded = channels.map(channel => Math.round(
+    amount < 0 ? channel * (1 + amount) : channel + (255 - channel) * amount
+  ));
+  return `rgba(${faded.join(",")},${alpha})`;
+}
+
 export function previewColorWithSymbols(
   raw: unknown,
   symbols?: Record<string, StaticPowerFxValue>,
@@ -165,6 +205,21 @@ export function previewColorWithSymbols(
   if (lexed.diagnostics.length) return null;
   const tokens = significantTokens(lexed.tokens);
   if (tokens[0]?.value === "=") tokens.shift();
+
+  // ColorFade is a pure Power Fx color function. Split its two arguments at
+  // top-level commas so nested RGBA, ColorValue and If remain intact. The
+  // numeric evaluator handles 50%, negative percentages and known symbols;
+  // unknown SQL/security state stays unknown instead of guessing a color.
+  if (tokens[0]?.kind === "identifier" &&
+      tokens[0].value.toLowerCase() === "colorfade" &&
+      tokens[1]?.value === "(" && tokens[tokens.length - 1]?.value === ")") {
+    const args = splitIfArguments(tokens.slice(2, -1));
+    if (!args || args.length !== 2) return null;
+    const color = previewColorWithSymbols("=" + expressionText(value, args[0]), symbols, depth + 1);
+    const amount = staticNumber("=" + expressionText(value, args[1]), symbols);
+    return color !== null && amount !== null ? fadedPreviewColor(color, amount) : null;
+  }
+
   if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
       tokens[tokens.length - 1]?.value !== ")") return null;
   const branches = splitIfArguments(tokens.slice(2, -1));
