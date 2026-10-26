@@ -43,6 +43,51 @@ describe("Canvas fallback geometry by control family", () => {
   });
 });
 
+describe("verified Power Fx math in responsive Canvas geometry", () => {
+  it.each([[390, 844], [768, 1024], [1366, 768]])(
+    "positions a centered control using Power/Sqrt at %i px",
+    (appWidth, appHeight) => {
+      const control: CanvasControl = {
+        id: "math", name: "MathCentered", controlType: "Label",
+        properties: {
+          X: "=(Parent.Width - Self.Width) / 2",
+          Y: "=16", Width: "=Sqrt(Power(App.Width, 2)) / 2",
+          Height: "=32"
+        },
+        children: [], zIndex: 1, sourceFormat: "pa-yaml-v3",
+        sourceFile: "Src/SyntheticMath.pa.yaml",
+        sourcePath: "Screens/Synthetic/MathCentered"
+      };
+      const rect = controlRect(control, 0, {
+        parentWidth: appWidth, parentHeight: appHeight,
+        appWidth, appHeight
+      });
+      expect(rect.width).toBeCloseTo(appWidth / 2);
+      expect(rect.x).toBeCloseTo(appWidth / 4);
+      expect(rect.y).toBe(16);
+      expect(rect.dynamic).toBe(false);
+    }
+  );
+
+  it("does not certify geometry when math depends on unknown SQL state", () => {
+    const control: CanvasControl = {
+      id: "math-unknown", name: "MathUnknown", controlType: "Label",
+      properties: {
+        X: "=0", Y: "=0", Width: "=Sqrt(Power(varSqlWidth, 2))",
+        Height: "=32"
+      },
+      children: [], zIndex: 1, sourceFormat: "pa-yaml-v3",
+      sourceFile: "Src/SyntheticMath.pa.yaml",
+      sourcePath: "Screens/Synthetic/MathUnknown"
+    };
+    const rect = controlRect(control, 0, {
+      parentWidth: 768, parentHeight: 1024,
+      appWidth: 768, appHeight: 1024
+    });
+    expect(rect.dynamic).toBe(true);
+  });
+});
+
 describe("layout literal helpers", () => {
   it("parses numeric formulas", () => {
     expect(literalNumber("=40")).toBe(40);

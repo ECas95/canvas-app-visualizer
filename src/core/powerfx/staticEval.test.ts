@@ -25,6 +25,36 @@ describe("static Power Fx evaluator", () => {
     expect(staticNumber("=RoundDown(19.99, 0)", symbols)).toBe(19);
   });
 
+  it("resolves documented Power and Sqrt functions in numeric formulas", () => {
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-numericals
+    expect(staticNumber("=Power(5, 3)")).toBe(125);
+    expect(staticNumber("=Power(2, -2)")).toBe(0.25);
+    expect(staticNumber("=Sqrt(81)")).toBe(9);
+    expect(staticNumber("=Sqrt(Power(3, 2) + Power(4, 2))")).toBe(5);
+    expect(staticNumber("=Power(2, 3)")).toBe(staticNumber("=2^3"));
+  });
+
+  it("does not certify invalid or runtime-dependent Power/Sqrt geometry", () => {
+    for (const formula of [
+      "=Power(2)", "=Power(2, 3, 4)", "=Power(10, 1000)",
+      "=Power(-8, 0.5)", "=Power(varSqlWidth, 2)",
+      "=Sqrt()", "=Sqrt(9, 2)", "=Sqrt(-4)",
+      '=Sqrt("9")', "=Sqrt(varSqlWidth)",
+      "=Connector.Power(2, 3)", "=SQL.Sqrt(9)"
+    ]) {
+      expect(staticNumber(formula)).toBeNull();
+    }
+  });
+
+  it("resolves Power/Sqrt formulas only with verified viewport dimensions", () => {
+    const formula = "=Sqrt(Power(App.Width, 2)) / 2";
+    for (const width of [390, 768, 1366]) {
+      expect(staticNumber(formula, { "App.Width": width })).toBeCloseTo(width / 2);
+    }
+    expect(staticNumber(formula)).toBeNull();
+    expect(staticNumber(formula, { "App.Width": Infinity })).toBeNull();
+  });
+
   it("resolves documented Int, Trunc and Mod semantics for layout arithmetic", () => {
     // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-round
     // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-mod

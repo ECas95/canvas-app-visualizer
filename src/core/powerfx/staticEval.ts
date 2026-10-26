@@ -413,6 +413,20 @@ class Parser {
       return this.finite(Math.abs(values[0]));
     }
 
+    // Microsoft Power Fx Power(base, exponent) is equivalent to ^, while
+    // Sqrt(number) returns a numeric square root for nonnegative inputs.
+    // Domain errors, overflow, and unresolved runtime inputs must not
+    // certify preview coordinates, sizes, or visibility.
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-numericals
+    if (name === "power") {
+      if (values.length !== 2 || numbers.length !== 2) return null;
+      return this.finite(Math.pow(numbers[0], numbers[1]));
+    }
+    if (name === "sqrt") {
+      if (values.length !== 1 || numbers.length !== 1) return null;
+      return this.finite(Math.sqrt(numbers[0]));
+    }
+
     // Power Fx Int rounds toward negative infinity; Trunc removes the
     // fractional part toward zero. These differ for negative coordinates.
     // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-round
