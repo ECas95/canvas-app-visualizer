@@ -219,6 +219,15 @@ export function buildSiblingGeometrySymbols(
         ...(finalHeight !== null && !autoHeightUnverified
           ? { "Self.Height": finalHeight } : {})
       };
+      // FillPortions delegates a child's actual size and placement to its
+      // AutoLayout parent. A literal authored Width/Height (or X/Y) is not
+      // evidence of the resulting geometry. Without the parent's allocation,
+      // exporting these sibling symbols could certify a dependent control's
+      // position using a value Canvas does not render.
+      // An explicitly zero FillPortions leaves source geometry unaffected.
+      const fillSource = control.properties.FillPortions;
+      const fill = fillSource === undefined ? 0 : staticNumber(fillSource, baseSymbols);
+      if (fill !== 0) continue;
       setNumber(control.name + ".Width", finalWidth);
       // AutoHeight is an output measurement. Never certify its source Height
       // for sibling formulas, even when a numeric Height was serialized.
