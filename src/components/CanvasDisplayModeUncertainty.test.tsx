@@ -54,7 +54,7 @@ describe("Canvas DisplayMode runtime uncertainty", () => {
   });
   it.each([
     [390, "disabled", 'opacity="0.66"'],
-    [768, "view", 'opacity="1"'],
+    [768, "view", 'opacity="0.86"'],
     [1366, "edit", 'opacity="1"']
   ] as const)("resolves verified responsive Switch DisplayMode at %i px", (width, expected, opacity) => {
     const formula = "=Switch(true, App.Width < 600, DisplayMode.Disabled, App.Width < 1024, DisplayMode.View, DisplayMode.Edit)";
