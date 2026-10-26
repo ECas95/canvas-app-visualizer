@@ -1,6 +1,6 @@
 import type { CanvasControl } from "../../types/canvas";
 import { literalText, rgba } from "./layout";
-import { staticBoolean, staticNumber, staticString, type StaticPowerFxValue } from "../powerfx/staticEval";
+import { evaluateStaticPowerFx, staticBoolean, staticNumber, staticString, type StaticPowerFxValue } from "../powerfx/staticEval";
 import { lexPowerFx, significantTokens, type PowerFxToken } from "../powerfx/lexer";
 
 export type PreviewKind =
@@ -218,6 +218,38 @@ export function previewColorWithSymbols(
     const color = previewColorWithSymbols("=" + expressionText(value, args[0]), symbols, depth + 1);
     const amount = staticNumber("=" + expressionText(value, args[1]), symbols);
     return color !== null && amount !== null ? fadedPreviewColor(color, amount) : null;
+  }
+
+  // Switch chooses the first matching result, or the optional default.
+  // Restrict selectors to numeric/Boolean values: the scalar evaluator cannot
+  // distinguish typed Power Fx enums from text. Unknown preceding matches
+  // cannot be skipped; results must recursively resolve as typed colors.
+  // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+  if (tokens[0]?.kind === "identifier" &&
+      tokens[0].value.toLowerCase() === "switch" &&
+      tokens[1]?.value === "(" && tokens[tokens.length - 1]?.value === ")") {
+    const branches = splitIfArguments(tokens.slice(2, -1));
+    if (!branches || branches.length < 3) return null;
+    const selector = evaluateStaticPowerFx(
+      "=" + expressionText(value, branches[0]), { symbols }
+    );
+    if (typeof selector !== "boolean" && typeof selector !== "number") return null;
+    for (let i = 1; i + 1 < branches.length; i += 2) {
+      const match = evaluateStaticPowerFx(
+        "=" + expressionText(value, branches[i]), { symbols }
+      );
+      if (match === null || typeof match !== typeof selector) return null;
+      if (match === selector) {
+        return previewColorWithSymbols(
+          "=" + expressionText(value, branches[i + 1]), symbols, depth + 1
+        );
+      }
+    }
+    return branches.length % 2 === 0
+      ? previewColorWithSymbols(
+          "=" + expressionText(value, branches[branches.length - 1]), symbols, depth + 1
+        )
+      : null;
   }
 
   if (tokens[0]?.value.toLowerCase() !== "if" || tokens[1]?.value !== "(" ||
