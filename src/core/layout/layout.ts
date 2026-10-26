@@ -609,11 +609,17 @@ export function galleryTemplateLayout(
     Number.isSafeInteger(resolvedWrap) && resolvedWrap >= 1 && resolvedWrap <= 64;
   const wrapCount = wrapVerified ? resolvedWrap : 1;
   const variableHeight = variant.includes("variableheight");
-  const templateSize =
-    staticNumber(control.properties.TemplateSize, symbols) ??
-    staticNumber(control.properties.TemplateHeight, symbols) ??
-    null;
+  // A present TemplateSize takes precedence over the legacy TemplateHeight.
+  // If its Power Fx expression is unresolved, do not silently substitute a
+  // known TemplateHeight and claim exact geometry. Missing and unknown are
+  // distinct states in source-only .pa.yaml previews.
+  const templateSizeSource = control.properties.TemplateSize !== undefined
+    ? control.properties.TemplateSize
+    : control.properties.TemplateHeight;
+  const templateSize = staticNumber(templateSizeSource, symbols);
   const resolvedPadding = staticNumber(control.properties.TemplatePadding, symbols);
+  const invalidTemplateSize = templateSize !== null && templateSize < 1;
+  const invalidPadding = resolvedPadding !== null && resolvedPadding < 0;
   // An unresolved Power Fx padding formula is an approximation, not verified
   // template geometry. Never infer its value from SQL or runtime state.
   const padding = Math.max(0, resolvedPadding ?? 0);
@@ -637,9 +643,11 @@ export function galleryTemplateLayout(
     variableHeight,
     padding,
     wrapCount,
-    dynamic: rect.dynamic || templateSize === null || variableHeight ||
+    dynamic: rect.dynamic || templateSize === null || invalidTemplateSize ||
+      variableHeight ||
       (control.properties.WrapCount !== undefined && !wrapVerified) ||
-      (control.properties.TemplatePadding !== undefined && resolvedPadding === null)
+      (control.properties.TemplatePadding !== undefined &&
+        (resolvedPadding === null || invalidPadding))
   };
 }
 
