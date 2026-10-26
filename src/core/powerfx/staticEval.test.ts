@@ -290,6 +290,30 @@ describe("static Power Fx evaluator", () => {
     ).toBe("LayoutDirection.Horizontal");
   });
 
+  it("keeps mixed-type equality unknown instead of selecting a false security or layout branch", () => {
+    // The Canvas binder can reject or coerce unlike types; JS === must not
+    // certify the result without verified Power Fx type information.
+    // Synthetic viewport values only, never SQL rows or permission claims.
+    for (const formula of [
+      '=1 = "1"', '=1 <> "1"', '=false = "false"',
+      '=true <> 1', '=If(1 = "1", 24, 48)',
+      '=If(1 <> "1", true, false)'
+    ]) expect(evaluateStaticPowerFx(formula)).toBeNull();
+
+    expect(staticBoolean("=1 = 1")).toBe(true);
+    expect(staticBoolean("=1 <> 2")).toBe(true);
+    expect(staticBoolean('="ready" = "ready"')).toBe(true);
+    for (const width of [390, 768, 1366]) {
+      const symbols = { "App.Width": width };
+      expect(staticNumber(
+        '=If(App.Width < 600, 24, If(1 = "1", 48, 72))', symbols
+      )).toBe(width === 390 ? 24 : null);
+      expect(staticBoolean(
+        '=If(App.Width < 600, true, 1 <> "1")', symbols
+      )).toBe(width === 390 ? true : null);
+    }
+  });
+
   it("evaluates booleans and comparisons", () => {
     expect(
       staticBoolean("=Parent.Width >= 640 && true", symbols)

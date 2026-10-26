@@ -144,9 +144,14 @@ class Parser {
       }
       case "=":
       case "==":
-        return left === right;
       case "<>":
-        return left !== right;
+        // Power Fx can reject or coerce comparisons between unlike scalar
+        // types depending on its binder and host context. JavaScript strict
+        // inequality would incorrectly certify a permission/Visible branch.
+        // Without official type binding, preserve uncertainty instead.
+        // https://learn.microsoft.com/en-us/power-platform/power-fx/operators
+        if (typeof left !== typeof right) return null;
+        return op === "<>" ? left !== right : left === right;
       case "<":
       case ">":
       case "<=":
