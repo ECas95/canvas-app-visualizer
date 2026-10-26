@@ -130,6 +130,51 @@ export function previewIconName(
 }
 
 /**
+ * Modern Icon has four Power Fx padding properties. Use their verified
+ * values to position the local SVG; runtime-only values remain unknown.
+ * A 4px fallback preserves the previous approximation for omitted padding,
+ * not a claim about the actual runtime theme default.
+ * https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/modern-controls/modern-control-icon
+ */
+export interface PreviewIconBox { x: number; y: number; size: number }
+
+export function previewIconBox(
+  props: Record<string, unknown>,
+  x: number, y: number, width: number, height: number,
+  modern: boolean,
+  symbols?: Record<string, StaticPowerFxValue>
+): PreviewIconBox | null {
+  if (![x, y, width, height].every(Number.isFinite) ||
+      width < 0 || height < 0) return null;
+
+  const inset = (property: string): number | null =>
+    modern && props[property] != null
+      ? staticNumber(props[property], symbols)
+      : 4;
+  const left = inset("PaddingLeft");
+  const right = inset("PaddingRight");
+  const top = inset("PaddingTop");
+  const bottom = inset("PaddingBottom");
+  if (left === null || right === null || top === null || bottom === null ||
+      ![left, right, top, bottom].every(value => Number.isFinite(value) && value >= 0)) {
+    return null;
+  }
+
+  const innerWidth = width - left - right;
+  const innerHeight = height - top - bottom;
+  // Excess known padding collapses the icon content area, not runtime state.
+  if (innerWidth <= 0 || innerHeight <= 0) {
+    return { x: x + width / 2, y: y + height / 2, size: 0 };
+  }
+  const size = Math.min(innerWidth, innerHeight);
+  return {
+    x: x + left + (innerWidth - size) / 2,
+    y: y + top + (innerHeight - size) / 2,
+    size
+  };
+}
+
+/**
  * Classic Canvas Icon.Rotation is measured in degrees. Only a statically
  * provable number may rotate the local preview glyph; unresolved Power Fx
  * leaves the icon unrotated rather than guessing a runtime value.

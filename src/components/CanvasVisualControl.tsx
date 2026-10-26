@@ -5,7 +5,7 @@ import { previewBoundedText } from "../core/layout/previewTextBounds";
 import { staticBoolean, staticNumber } from "../core/powerfx/staticEval";
 import type { PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewImageFit, previewImageFlipTransform, previewImagePosition, previewImageRotationTransform, previewImageSourceState, previewRasterCssImage, resolvePreviewImage } from "../core/layout/previewMedia";
-import { PREVIEW_ICON_PATHS, previewIconName, previewIconRotation } from "../core/layout/previewIcon";
+import { PREVIEW_ICON_PATHS, previewIconBox, previewIconName, previewIconRotation } from "../core/layout/previewIcon";
 import {
   previewBorderStyle, previewColorWithSymbols, previewDisplayMode, previewDropShadow, previewDropShadowFilter, previewIsOpaqueColor, previewFontFamily, previewFontSize, previewFontWeight, previewHorizontalAlign,
   previewCheckedState, previewFontFamilyIsKnown, previewFontSizeIsKnown, previewInputContent, previewSelectContent, previewItalic, previewKind, previewLabelWrap, previewText, previewTextDecoration, previewTextStyleSource,
@@ -487,10 +487,19 @@ export function CanvasVisualControl({
               <title>Icon rotation requires runtime state; orientation is not verified</title>
             </g>
           );
-          const size = Math.max(0, Math.min(width, height) - 8);
+          const box = previewIconBox(
+            props, x, y, width, height, isModernIcon, simulationSymbols
+          );
+          if (box === null) return (
+            <g data-preview-icon-state="unknown" pointerEvents="none">
+              {svgText("?", x + width / 2, "middle", "#7c8794")}
+              <title>Icon padding requires runtime state; glyph bounds are not verified</title>
+            </g>
+          );
+          if (box.size === 0) return null;
           return (
-            <svg x={x + (width - size) / 2} y={y + (height - size) / 2}
-              width={size} height={size} viewBox="0 0 24 24"
+            <svg x={box.x} y={box.y}
+              width={box.size} height={box.size} viewBox="0 0 24 24"
               fill="none" stroke={foreground} strokeWidth={2}
               strokeLinecap="round" strokeLinejoin="round"
               aria-label={icon}>
