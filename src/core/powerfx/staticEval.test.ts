@@ -25,6 +25,42 @@ describe("static Power Fx evaluator", () => {
     expect(staticNumber("=RoundDown(19.99, 0)", symbols)).toBe(19);
   });
 
+  it("resolves documented Int, Trunc and Mod semantics for layout arithmetic", () => {
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-round
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-mod
+    expect(staticNumber("=Int(4.3)")).toBe(4);
+    expect(staticNumber("=Trunc(4.3)")).toBe(4);
+    expect(staticNumber("=Int(-4.3)")).toBe(-5);
+    expect(staticNumber("=Trunc(-4.3)")).toBe(-4);
+    expect(staticNumber("=Mod(25, 4)")).toBe(1);
+    expect(staticNumber("=Mod(25, -4)")).toBe(-3);
+    expect(staticNumber("=Mod(-25, 4)")).toBe(3);
+    expect(staticNumber("=Mod(-25, -4)")).toBe(-1);
+    expect(staticNumber("=Mod(-4, 2)")).toBe(0);
+  });
+
+  it("uses verified Int/Mod values in responsive Canvas formulas", () => {
+    const formula = "=If(Mod(Int(App.Width / 360), 2) = 0, 48, 24)";
+    expect(staticNumber(formula, { "App.Width": 390 })).toBe(24);
+    expect(staticNumber(formula, { "App.Width": 768 })).toBe(48);
+    expect(staticNumber(formula, { "App.Width": 1366 })).toBe(24);
+    expect(staticNumber(formula, { "App.Width": Infinity })).toBeNull();
+    expect(staticNumber(formula)).toBeNull();
+  });
+
+  it("does not guess invalid, SQL-dependent or qualified numeric functions", () => {
+    expect(staticNumber("=Int()")).toBeNull();
+    expect(staticNumber("=Int(2, 3)")).toBeNull();
+    expect(staticNumber('=Trunc("4.3")')).toBeNull();
+    expect(staticNumber("=Trunc(1, 0)")).toBeNull();
+    expect(staticNumber("=Mod(25)")).toBeNull();
+    expect(staticNumber("=Mod(25, 0)")).toBeNull();
+    expect(staticNumber('=Mod(25, "4")')).toBeNull();
+    expect(staticNumber("=Mod(varSqlWidth, 4)")).toBeNull();
+    expect(staticNumber("=SQL.Mod(25, 4)")).toBeNull();
+    expect(staticNumber("=Connector.Int(4.3)")).toBeNull();
+  });
+
   it("matches Microsoft Power Fx rounding for negative numbers and ties", () => {
     // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-round
     expect(staticNumber("=Round(-7.5, 0)")).toBe(-8);

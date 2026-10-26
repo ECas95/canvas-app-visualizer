@@ -413,6 +413,27 @@ class Parser {
       return this.finite(Math.abs(values[0]));
     }
 
+    // Power Fx Int rounds toward negative infinity; Trunc removes the
+    // fractional part toward zero. These differ for negative coordinates.
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-round
+    if (name === "int" || name === "trunc") {
+      if (values.length !== 1 || typeof values[0] !== "number") return null;
+      return this.finite(name === "int" ? Math.floor(values[0]) : Math.trunc(values[0]));
+    }
+
+    // Unlike JavaScript's remainder operator, Power Fx Mod takes the sign
+    // of the divisor. Do not infer a geometry value from division by zero.
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-mod
+    if (name === "mod") {
+      if (values.length !== 2 || numbers.length !== 2 || values[1] === 0) return null;
+      const divisor = values[1] as number;
+      let remainder = (values[0] as number) % divisor;
+      if (remainder !== 0 && Math.sign(remainder) !== Math.sign(divisor)) {
+        remainder += divisor;
+      }
+      return this.finite(remainder === 0 ? 0 : remainder);
+    }
+
     if (["round", "roundup", "rounddown"].includes(name)) {
       // Microsoft Power Fx: Round breaks .5 ties away from zero; RoundUp
       // moves away from zero and RoundDown moves toward zero for both signs.
