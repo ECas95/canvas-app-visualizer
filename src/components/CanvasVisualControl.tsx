@@ -310,7 +310,7 @@ export function CanvasVisualControl({
       {fontSizeUnknown && <title>Font size requires runtime state or exceeds preview limits; displayed size is approximate</title>}
       {!lineHeightKnown && <title>LineHeight requires runtime state or is outside supported preview bounds; displayed spacing is approximate</title>}
       {unverifiedPaddingEdges.length > 0 && (
-        <title>Text padding cannot be verified for {unverifiedPaddingEdges.join(", ")}; displayed spacing is a preview fallback</title>
+        <title>{`Text padding cannot be verified for ${unverifiedPaddingEdges.join(", ")}; displayed spacing is a preview fallback`}</title>
       )}
       {buttonTextUnknown && <title>Button Text requires runtime data or state; the ellipsis is a preview placeholder, not verified content</title>}
       <defs>
