@@ -525,11 +525,11 @@ export function autoLayoutChildren(
   const fillTotal = sizing.reduce((sum, item) => sum + item.fill, 0);
   const remainingForFill = Math.max(0, mainAvailable - fixedMain);
 
-  // A minimum/maximum can bind a FillPortions allocation. The simple
-  // proportional preview below clamps that child but does not model how
-  // Power Apps redistributes space among its flexible siblings. Mark every
-  // sibling approximate rather than certifying potentially wrong positions.
-  // The source-only preview still paints finite, inspectable bounds.
+  // A minimum/maximum can bind a FillPortions allocation. Redistribute
+  // the remaining space among unconstrained flexible siblings for a more
+  // useful source-only approximation. Microsoft documents FillPortions and
+  // minimum sizes, but not an exact host-layout redistribution algorithm;
+  // keep every sibling approximate whenever a constraint binds.
   // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-horizontal-container
   const fillAllocationClamped = fillTotal > 0 && sizing.some(item => {
     if (item.fill <= 0) return false;
@@ -540,13 +540,43 @@ export function autoLayoutChildren(
     return constrained !== allocated;
   });
 
+  // Iterative bounded proportional allocation (preview approximation).
+  // When a child hits a min/max, its unused or additional space is accounted
+  // for before allocating the remaining siblings. Over-constrained minimums
+  // may overflow the parent; never silently shrink them to fit.
+  const fillAllocations = new Map<CanvasControl, number>();
+  let pending = sizing.filter(item => item.fill > 0);
+  let unallocated = remainingForFill;
+  while (pending.length > 0) {
+    const weight = pending.reduce((sum, item) => sum + item.fill, 0);
+    const shares = pending.map(item => {
+      const proposed = Math.max(0, unallocated) * (item.fill / weight);
+      const constrained = horizontal
+        ? clamp(proposed, item.minWidth, item.maxWidth)
+        : clamp(proposed, item.minHeight, item.maxHeight);
+      return { item, proposed, constrained };
+    });
+    const bound = shares.filter(share => share.constrained !== share.proposed);
+    if (bound.length === 0) {
+      for (const share of shares) fillAllocations.set(share.item.control, share.proposed);
+      break;
+    }
+    for (const share of bound) {
+      fillAllocations.set(share.item.control, share.constrained);
+      unallocated -= share.constrained;
+    }
+    const bounded = new Set(bound.map(share => share.item.control));
+    pending = pending.filter(item => !bounded.has(item.control));
+  }
+
   const provisional = sizing.map(item => {
     let width = item.baseWidth;
     let height = item.baseHeight;
     let fallback = false;
 
     if (item.fill > 0 && fillTotal > 0) {
-      const allocated = remainingForFill * (item.fill / fillTotal);
+      const allocated = fillAllocations.get(item.control) ??
+        remainingForFill * (item.fill / fillTotal);
       if (horizontal) {
         width = clamp(allocated, item.minWidth, item.maxWidth);
       } else {
