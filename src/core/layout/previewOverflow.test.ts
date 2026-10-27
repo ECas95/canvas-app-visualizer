@@ -228,6 +228,33 @@ describe("Canvas overflow semantics", () => {
       .not.toHaveProperty("Host");
   });
 
+  it.each([390, 768, 1366])(
+    "keeps verified scrolling on the other axis when a finite extent overflows at %i px",
+    viewport => {
+      const host = item("Host", [], 0, 0, 100, 100, {
+        overflowX: "=LayoutOverflow.Scroll",
+        overflowY: "=LayoutOverflow.Scroll",
+        symbols: { "App.Width": viewport }
+      });
+      const wide = item("Wide", ["Host"], Number.MAX_VALUE, 0,
+        Number.MAX_VALUE, 180);
+      expect(previewScrollRanges([host, wide]))
+        .toEqual({ Host: { x: 0, y: 80 } });
+
+      const tall = item("Tall", ["Host"], 0, Number.MAX_VALUE,
+        180, Number.MAX_VALUE);
+      expect(previewScrollRanges([host, tall]))
+        .toEqual({ Host: { x: 80, y: 0 } });
+
+      // The host's own right edge can also overflow while its Y axis
+      // remains independently known.
+      const hugeHost = { ...host, x: Number.MAX_VALUE,
+        width: Number.MAX_VALUE };
+      expect(previewScrollRanges([hugeHost, wide]))
+        .toEqual({ Host: { x: 0, y: 80 } });
+    }
+  );
+
   it("never creates infinite scroll offsets from finite but overflowing extents", () => {
     const host = item("Host", [], 0, 0, 100, 100, {
       overflowX: "=LayoutOverflow.Scroll"

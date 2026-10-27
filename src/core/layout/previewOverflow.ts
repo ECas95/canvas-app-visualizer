@@ -112,9 +112,9 @@ export function previewScrollRanges(
     // Runtime-unknown padding on one axis must not suppress a separately
     // verified scroll range on the other axis. Unknown never authorizes
     // scrolling on its own axis.
-    const scrollX = horizontal && rightPadding !== null &&
+    let scrollX = horizontal && rightPadding !== null &&
       Number.isFinite(rightPadding) && rightPadding >= 0;
-    const scrollY = vertical && bottomPadding !== null &&
+    let scrollY = vertical && bottomPadding !== null &&
       Number.isFinite(bottomPadding) && bottomPadding >= 0;
     if (!scrollX && !scrollY) continue;
     // Avoid spreading child extents into Math.max: large imported screens can
@@ -125,21 +125,23 @@ export function previewScrollRanges(
     const hostBottom = scrollY ? host.y + host.height : 0;
     let right = hostRight;
     let bottom = hostBottom;
-    let valid = (!scrollX || Number.isFinite(hostRight)) &&
-      (!scrollY || Number.isFinite(hostBottom));
+    // A finite coordinate can still overflow when combined with its size.
+    // Reject only the affected axis, preserving independently verified scroll.
+    if (scrollX && !Number.isFinite(hostRight)) scrollX = false;
+    if (scrollY && !Number.isFinite(hostBottom)) scrollY = false;
     for (const child of children) {
       if (scrollX) {
         const edge = child.x + child.width + (rightPadding ?? 0);
-        if (!Number.isFinite(edge)) { valid = false; break; }
-        right = Math.max(right, edge);
+        if (!Number.isFinite(edge)) scrollX = false;
+        else right = Math.max(right, edge);
       }
       if (scrollY) {
         const edge = child.y + child.height + (bottomPadding ?? 0);
-        if (!Number.isFinite(edge)) { valid = false; break; }
-        bottom = Math.max(bottom, edge);
+        if (!Number.isFinite(edge)) scrollY = false;
+        else bottom = Math.max(bottom, edge);
       }
     }
-    if (!valid) continue;
+    if (!scrollX && !scrollY) continue;
     const x = scrollX ? Math.max(0, right - hostRight) : 0;
     const y = scrollY ? Math.max(0, bottom - hostBottom) : 0;
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
