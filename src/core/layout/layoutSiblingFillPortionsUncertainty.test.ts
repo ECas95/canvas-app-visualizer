@@ -75,4 +75,59 @@ describe("sibling symbols with parent-managed FillPortions", () => {
       expect(symbols["Flexible.Height"]).toBeUndefined();
     }
   );
+  it.each([390, 768, 1366])(
+    "does not export source geometry of a stretched child at %i px",
+    viewport => {
+      const stretched = fixture("Stretched", {
+        X: "=12", Y: "=20", Width: "=100", Height: "=40",
+        AlignInContainer: "=AlignInContainer.Stretch"
+      });
+      const dependent = fixture("Dependent", {
+        X: "=Stretched.Width + 8", Y: "=Stretched.Y + 12",
+        Width: "=100", Height: "=40"
+      });
+      const context = {
+        parentWidth: viewport, parentHeight: 700,
+        appWidth: viewport, appHeight: 800
+      };
+      const symbols = buildSiblingGeometrySymbols([stretched, dependent], context);
+      for (const axis of ["X", "Y", "Width", "Height"]) {
+        expect(symbols[`Stretched.${axis}`]).toBeUndefined();
+      }
+      expect(controlRect(dependent, 1, { ...context, symbols }).dynamic).toBe(true);
+    }
+  );
+
+  it.each([
+    { viewport: 390, unknown: true },
+    { viewport: 768, unknown: false },
+    { viewport: 1366, unknown: false }
+  ])("resolves responsive Stretch only in the verified branch at $viewport px",
+    ({ viewport, unknown }) => {
+      const control = fixture("Responsive", {
+        X: "=12", Y: "=20", Width: "=100", Height: "=40",
+        AlignInContainer: "=If(App.Width < 600, AlignInContainer.Stretch, AlignInContainer.Start)"
+      });
+      const symbols = buildSiblingGeometrySymbols([control], {
+        parentWidth: viewport, parentHeight: 700,
+        appWidth: viewport, appHeight: 800
+      });
+      expect(symbols["Responsive.Width"] === undefined).toBe(unknown);
+      expect(symbols["Responsive.Y"] === undefined).toBe(unknown);
+    }
+  );
+
+  it("keeps runtime-dependent alignment unknown instead of assuming Start", () => {
+    const control = fixture("Unresolved", {
+      X: "=12", Y: "=20", Width: "=100", Height: "=40",
+      AlignInContainer: "=varSqlAlignment"
+    });
+    const symbols = buildSiblingGeometrySymbols([control], {
+      parentWidth: 768, parentHeight: 700,
+      appWidth: 768, appHeight: 800
+    });
+    expect(symbols["Unresolved.Width"]).toBeUndefined();
+    expect(symbols["Unresolved.Y"]).toBeUndefined();
+  });
+
 });

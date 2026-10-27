@@ -227,7 +227,15 @@ export function buildSiblingGeometrySymbols(
       // An explicitly zero FillPortions leaves source geometry unaffected.
       const fillSource = control.properties.FillPortions;
       const fill = fillSource === undefined ? 0 : staticNumber(fillSource, baseSymbols);
-      if (fill !== 0) continue;
+      // Stretch replaces the authored cross-axis size and placement with
+      // AutoLayout output. Without the parent layout direction, none of this
+      // child's source geometry is safe to export to sibling formulas.
+      // An unresolved alignment can also select Stretch at runtime.
+      const alignSource = control.properties.AlignInContainer;
+      const align = alignSource === undefined
+        ? "setbycontainer"
+        : previewLayoutEnum(alignSource, "AlignInContainer", baseSymbols);
+      if (fill !== 0 || align === "stretch" || align === null) continue;
       setNumber(control.name + ".Width", finalWidth);
       // AutoHeight is an output measurement. Never certify its source Height
       // for sibling formulas, even when a numeric Height was serialized.
