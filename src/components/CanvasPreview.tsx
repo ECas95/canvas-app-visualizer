@@ -12,6 +12,7 @@ import {
   type PositionedControl
 } from "../core/layout/layout";
 import { previewVisibility, previewSelectionBehaviorGate, previewColorWithSymbols } from "../core/layout/previewAppearance";
+import { staticBoolean, staticNumber } from "../core/powerfx/staticEval";
 import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/layout/previewDataState";
 import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScopedState, type PreviewVariables } from "../core/powerfx/previewBehavior";
 import { CanvasVisualControl } from "./CanvasVisualControl";
@@ -68,7 +69,9 @@ function flatten(
   parentControl?: CanvasControl,
   simulationSymbols: PreviewVariables = {},
   ancestorVisibilityUnknown = false,
-  parentGeometryVerified = true
+  parentGeometryVerified = true,
+  parentWidthVerified = true,
+  parentHeightVerified = true
 ): DrawItem[] {
   const output: DrawItem[] = [];
   const baseContext = {
@@ -96,6 +99,28 @@ function flatten(
     };
     // A proven-false parent hides its complete subtree; unresolved visibility
     // stays visible instead of guessing runtime state.
+    // Preserve source-proven dimensions independently of the other axis and
+    // of the parent's position. AutoLayout may redistribute explicit sizes,
+    // so its dimensions still require the full layout proof.
+    const dimensionSymbols = {
+      ...simulationSymbols,
+      "App.Width": appWidth, "App.Height": appHeight,
+      ...(parentWidthVerified ? { "Parent.Width": parentWidth } : {}),
+      ...(parentHeightVerified ? { "Parent.Height": parentHeight } : {})
+    };
+    const verifiedDimension = (axis: "Width" | "Height"): number | null => {
+      if (control.properties[axis] === undefined) return null;
+      if (axis === "Height" && control.properties.AutoHeight !== undefined &&
+          staticBoolean(control.properties.AutoHeight, dimensionSymbols) !== false) return null;
+      if (!isAutoLayout(parentControl)) {
+        const sourceValue = staticNumber(control.properties[axis], dimensionSymbols);
+        if (sourceValue !== null) return sourceValue >= 0 ? sourceValue : null;
+      }
+      if (rect.dynamic) return null;
+      return axis === "Width" ? rect.width : rect.height;
+    };
+    const verifiedWidth = verifiedDimension("Width");
+    const verifiedHeight = verifiedDimension("Height");
     const visibilitySymbols = {
       // Sibling geometry and Parent dimensions derived from an unresolved
       // ancestor are paint approximations, not facts for Visible or Text.
@@ -103,9 +128,8 @@ function flatten(
       // the default width of a SQL-dependent parent container.
       ...(parentGeometryVerified ? siblingSymbols : {}),
       "App.Width": appWidth, "App.Height": appHeight,
-      ...(parentGeometryVerified ? {
-        "Parent.Width": parentWidth, "Parent.Height": parentHeight
-      } : {}),
+      ...(parentWidthVerified ? { "Parent.Width": parentWidth } : {}),
+      ...(parentHeightVerified ? { "Parent.Height": parentHeight } : {}),
       ...simulationSymbols,
       // Visible is evaluated in the current control's Self scope. Use only
       // source-verified geometry: fallback dimensions must not authorize
@@ -114,10 +138,8 @@ function flatten(
       // Omitted .pa.yaml properties use control/variant defaults; a generic
       // paint fallback must not certify Self visibility or reveal descendants.
       // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/power-apps-yaml
-      ...(!rect.dynamic && control.properties.Width !== undefined
-        ? { "Self.Width": rect.width } : {}),
-      ...(!rect.dynamic && control.properties.Height !== undefined
-        ? { "Self.Height": rect.height } : {}),
+      ...(verifiedWidth !== null ? { "Self.Width": verifiedWidth } : {}),
+      ...(verifiedHeight !== null ? { "Self.Height": verifiedHeight } : {}),
       ...(!rect.dynamic && control.properties.X !== undefined
         ? { "Self.X": rect.x } : {}),
       ...(!rect.dynamic && control.properties.Y !== undefined
@@ -142,10 +164,8 @@ function flatten(
       // Omitted .pa.yaml properties use control/variant defaults; a generic
       // paint fallback must not certify Self visibility or reveal descendants.
       // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/power-apps-yaml
-      ...(!rect.dynamic && control.properties.Width !== undefined
-        ? { "Self.Width": rect.width } : {}),
-      ...(!rect.dynamic && control.properties.Height !== undefined
-        ? { "Self.Height": rect.height } : {}),
+      ...(verifiedWidth !== null ? { "Self.Width": verifiedWidth } : {}),
+      ...(verifiedHeight !== null ? { "Self.Height": verifiedHeight } : {}),
       ...(!rect.dynamic && control.properties.X !== undefined
         ? { "Self.X": rect.x } : {}),
       ...(!rect.dynamic && control.properties.Y !== undefined
@@ -195,7 +215,9 @@ function flatten(
       // from those fallbacks. Groups retain their enclosing parent scope.
       parentGeometryVerified && !rect.dynamic && (editorGroup ||
         (control.properties.Width !== undefined &&
-         control.properties.Height !== undefined))
+         control.properties.Height !== undefined)),
+      editorGroup ? parentWidthVerified : verifiedWidth !== null,
+      editorGroup ? parentHeightVerified : verifiedHeight !== null
     ));
   }
   return output;

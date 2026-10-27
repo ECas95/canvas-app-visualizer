@@ -173,4 +173,72 @@ describe("CanvasPreview current-control Self scope in Visible", () => {
     }
   );
 
+  it.each([
+    ["Width", "=300", "=varSqlHeight", "=Parent.Width > 200", true],
+    ["Width", "=100", "=varSqlHeight", "=Parent.Width > 200", false],
+    ["Height", "=varSqlWidth", "=300", "=Parent.Height > 200", true],
+    ["Height", "=varSqlWidth", "=100", "=Parent.Height > 200", false]
+  ] as const)(
+    "proves %s independently when the other parent dimension is unknown",
+    (_axis, width, height, condition, shown) => {
+      const leaf = control("AxisLeaf", "Classic/Label@2.5.1", {
+        Text: '="Synthetic axis-independent descendant"', Width: "=80", Height: "=20"
+      });
+      const child = control("AxisConditional", "GroupContainer@1.3.0", {
+        X: "=4", Y: "=4", Width: "=120", Height: "=40", Visible: condition
+      }, [leaf]);
+      const host = control("AxisHost", "GroupContainer@1.3.0", {
+        X: "=0", Y: "=0", Width: width, Height: height
+      }, [child]);
+      const screen: CanvasScreen = {
+        id: "Synthetic", name: "Synthetic", properties: {}, children: [host],
+        sourceFile: "Src/SyntheticVisibility.pa.yaml", sourceFormat: "pa-yaml-v3"
+      };
+      const html = renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+      expect(html.includes("Synthetic axis-independent descendant")).toBe(shown);
+      expect(html.includes("Inspect AxisConditional")).toBe(shown);
+    }
+  );
+
+  it.each([
+    ["Width", "=varSqlWidth", "=300", "=Parent.Width > 200"],
+    ["Height", "=300", "=varSqlHeight", "=Parent.Height > 200"]
+  ] as const)(
+    "never proves %s using its unknown runtime fallback",
+    (_axis, width, height, condition) => {
+      const child = control("UnknownAxisChild", "GroupContainer@1.3.0", {
+        X: "=4", Y: "=4", Width: "=120", Height: "=40", Visible: condition
+      }, [control("UnknownAxisLeaf", "Classic/Label@2.5.1", {
+        Text: '="Synthetic unavailable descendant"', Width: "=80", Height: "=20"
+      })]);
+      const host = control("UnknownAxisHost", "GroupContainer@1.3.0", {
+        X: "=0", Y: "=0", Width: width, Height: height
+      }, [child]);
+      const screen: CanvasScreen = {
+        id: "Synthetic", name: "Synthetic", properties: {}, children: [host],
+        sourceFile: "Src/SyntheticVisibility.pa.yaml", sourceFormat: "pa-yaml-v3"
+      };
+      const html = renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+      expect(html).toContain("Inspect UnknownAxisChild");
+      expect(html).not.toContain("Synthetic unavailable descendant");
+    }
+  );
+
+  it("proves a constant Self.Width even when the ancestor's position is unknown", () => {
+    const child = control("SelfKnownChild", "GroupContainer@1.3.0", {
+      X: "=4", Y: "=4", Width: "=240", Height: "=40", Visible: "=Self.Width > 200"
+    }, [control("SelfKnownLeaf", "Classic/Label@2.5.1", {
+      Text: '="Synthetic verified self width"', Width: "=80", Height: "=20"
+    })]);
+    const host = control("PositionUnknownHost", "GroupContainer@1.3.0", {
+      X: "=varSqlPosition", Y: "=0", Width: "=300", Height: "=300"
+    }, [child]);
+    const screen: CanvasScreen = {
+      id: "Synthetic", name: "Synthetic", properties: {}, children: [host],
+      sourceFile: "Src/SyntheticVisibility.pa.yaml", sourceFormat: "pa-yaml-v3"
+    };
+    const html = renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+    expect(html).toContain("Synthetic verified self width");
+  });
+
 });
