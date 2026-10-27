@@ -433,15 +433,39 @@ export function autoLayoutChildren(
       const authoredSymbols = {
         "App.Width": context.appWidth, "App.Height": context.appHeight
       };
-      if (control.properties.LayoutMinWidth === undefined &&
-          control.properties.LayoutMaxWidth === undefined) {
-        const width = resolvedDimension(control.properties.Width, authoredSymbols);
-        if (width !== null) selfSymbols["Self.Width"] = width;
-      }
-      if (control.properties.LayoutMinHeight === undefined &&
-          control.properties.LayoutMaxHeight === undefined &&
-          !hasUnverifiedAutoHeight(control, authoredSymbols)) {
-        const height = resolvedDimension(control.properties.Height, authoredSymbols);
+      // A present min/max does not necessarily change an authored dimension.
+      // Certify Self only when every present bound is source-resolvable,
+      // nonnegative and nonbinding. Do not use preview Parent dimensions,
+      // runtime variables, or the painted fallback to decide Visible.
+      const verifiedAxis = (
+        source: unknown,
+        minSource: unknown,
+        maxSource: unknown
+      ): number | null => {
+        const dimension = resolvedDimension(source, authoredSymbols);
+        if (dimension === null) return null;
+        const minimum = minSource === undefined
+          ? null : resolvedDimension(minSource, authoredSymbols);
+        const maximum = maxSource === undefined
+          ? null : resolvedDimension(maxSource, authoredSymbols);
+        if ((minSource !== undefined && minimum === null) ||
+            (maxSource !== undefined && maximum === null) ||
+            (minimum !== null && dimension < minimum) ||
+            (maximum !== null && dimension > maximum)) return null;
+        return dimension;
+      };
+      const width = verifiedAxis(
+        control.properties.Width,
+        control.properties.LayoutMinWidth,
+        control.properties.LayoutMaxWidth
+      );
+      if (width !== null) selfSymbols["Self.Width"] = width;
+      if (!hasUnverifiedAutoHeight(control, authoredSymbols)) {
+        const height = verifiedAxis(
+          control.properties.Height,
+          control.properties.LayoutMinHeight,
+          control.properties.LayoutMaxHeight
+        );
         if (height !== null) selfSymbols["Self.Height"] = height;
       }
     }
