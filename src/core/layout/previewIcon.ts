@@ -173,7 +173,9 @@ export function previewIconBox(
       width < 0 || height < 0) return null;
 
   const inset = (property: string): number | null =>
-    modern && props[property] != null
+    // Explicit null/Blank is not an omitted property: it cannot certify
+    // the icon's inset or authorize painting a guessed glyph.
+    modern && props[property] !== undefined
       ? staticNumber(props[property], symbols)
       : 4;
   const left = inset("PaddingLeft");

@@ -59,6 +59,24 @@ describe("ModernIcon source-only padding", () => {
     expect(html).not.toContain('d="' + PREVIEW_ICON_PATHS.add + '"');
   });
 
+  it.each([390, 768, 1366])(
+    "keeps explicit null modern padding unknown at %i px", viewport => {
+      for (const side of [
+        "PaddingLeft", "PaddingRight", "PaddingTop", "PaddingBottom"
+      ]) {
+        const html = render("ModernIcon@1.1.0", { [side]: null }, viewport);
+        expect(html).toContain('data-preview-icon-state="unknown"');
+        expect(html).toContain("Icon padding requires runtime state");
+        expect(html).not.toContain('d="' + PREVIEW_ICON_PATHS.add + '"');
+        expect(previewIconBox({ [side]: null }, 10, 20, 64, 40, true))
+          .toBeNull();
+      }
+      // Classic Icon does not use Modern Icon padding semantics.
+      expect(render("Classic/Icon@2.5.0", { PaddingLeft: null }, viewport))
+        .toContain('d="' + PREVIEW_ICON_PATHS.add + '"');
+    }
+  );
+
   it("does not paint outside a known collapsed content area", () => {
     const html = render("ModernIcon@1.1.0", { PaddingLeft: "=64" });
     expect(html).not.toContain('data-preview-icon-state="unknown"');
