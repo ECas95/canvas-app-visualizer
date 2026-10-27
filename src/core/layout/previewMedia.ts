@@ -1,6 +1,6 @@
 import type { PreviewMediaAsset } from "../../types/canvas";
 import { literalText } from "./layout";
-import { staticBoolean, type StaticPowerFxValue } from "../powerfx/staticEval";
+import { evaluateStaticPowerFx, staticBoolean, type StaticPowerFxValue } from "../powerfx/staticEval";
 import { lexPowerFx, significantTokens, type PowerFxToken } from "../powerfx/lexer";
 
 // Defense in depth: even if an asset did not come from the bounded .msapp
@@ -24,6 +24,65 @@ type SourceMediaCandidate = {
   name: string;
   origin: "identifier" | "media" | "literal" | "blank";
 };
+
+/**
+ * Select a source branch only when Power Fx If/Switch conditions are known.
+ * An empty string means a verified Blank result (no matching branch/default).
+ * Null means an unsupported or runtime-dependent expression. Switch limits
+ * its selector to numeric/Boolean scalars: text/enum equality requires Power
+ * Fx binding and locale semantics that the source-only preview cannot prove.
+ * https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
+ */
+function selectVerifiedImageBranch(
+  source: string, tokens: PowerFxToken[],
+  symbols?: Record<string, StaticPowerFxValue>
+): string | null {
+  if (tokens[0]?.kind !== "identifier") return null;
+  const functionName = tokens[0].value.toLowerCase();
+  if ((functionName !== "if" && functionName !== "switch") ||
+      tokens[1]?.value !== "(" || tokens[tokens.length - 1]?.value !== ")") return null;
+
+  const inner = tokens.slice(2, -1);
+  const args: PowerFxToken[][] = [];
+  let nesting = 0;
+  let begin = 0;
+  for (let index = 0; index < inner.length; index += 1) {
+    if (inner[index].value === "(") nesting += 1;
+    else if (inner[index].value === ")") nesting -= 1;
+    else if (inner[index].value === "," && nesting === 0) {
+      if (index === begin) return null;
+      args.push(inner.slice(begin, index));
+      begin = index + 1;
+    }
+    if (nesting < 0) return null;
+  }
+  if (nesting !== 0 || begin >= inner.length) return null;
+  args.push(inner.slice(begin));
+  if (args.length < (functionName === "switch" ? 3 : 2)) return null;
+
+  const expression = (part: PowerFxToken[]) =>
+    "=" + source.slice(part[0].start, part[part.length - 1].end);
+
+  if (functionName === "switch") {
+    const selector = evaluateStaticPowerFx(expression(args[0]), { symbols });
+    if (selector === null || (typeof selector !== "number" &&
+        typeof selector !== "boolean")) return null;
+    for (let index = 1; index + 1 < args.length; index += 2) {
+      const match = evaluateStaticPowerFx(expression(args[index]), { symbols });
+      // A preceding unknown match could win; never skip it to a later case.
+      if (match === null || typeof match !== typeof selector) return null;
+      if (match === selector) return expression(args[index + 1]);
+    }
+    return args.length % 2 === 0 ? expression(args[args.length - 1]) : "";
+  }
+
+  for (let index = 0; index + 1 < args.length; index += 2) {
+    const condition = staticBoolean(expression(args[index]), symbols);
+    if (condition === null) return null;
+    if (condition) return expression(args[index + 1]);
+  }
+  return args.length % 2 === 1 ? expression(args[args.length - 1]) : "";
+}
 
 function sourceMediaName(
   raw: string,
@@ -64,40 +123,11 @@ function sourceMediaName(
       tokens[0].value.toLowerCase() === "blank" &&
       tokens[1].value === "(" && tokens[2].value === ")") return { name: "", origin: "blank" };
 
-  // Only the selected branch of a provably known If can name an image.
-  // Unknown SQL/identity/security conditions must not select an asset.
-  if (tokens[0]?.kind !== "identifier" ||
-      tokens[0].value.toLowerCase() !== "if" ||
-      tokens[1]?.value !== "(" || tokens[tokens.length - 1]?.value !== ")") return null;
-  const inner = tokens.slice(2, -1);
-  const args: PowerFxToken[][] = [];
-  let nesting = 0;
-  let begin = 0;
-  for (let index = 0; index < inner.length; index += 1) {
-    if (inner[index].value === "(") nesting += 1;
-    else if (inner[index].value === ")") nesting -= 1;
-    else if (inner[index].value === "," && nesting === 0) {
-      if (index === begin) return null;
-      args.push(inner.slice(begin, index));
-      begin = index + 1;
-    }
-    if (nesting < 0) return null;
-  }
-  if (nesting !== 0 || begin >= inner.length) return null;
-  args.push(inner.slice(begin));
-  if (args.length < 2) return null;
-  const expression = (part: PowerFxToken[]) =>
-    "=" + source.slice(part[0].start, part[part.length - 1].end);
-  for (let index = 0; index + 1 < args.length; index += 2) {
-    const condition = staticBoolean(expression(args[index]), symbols);
-    if (condition === null) return null;
-    if (condition) return sourceMediaName(expression(args[index + 1]), symbols, depth + 1);
-  }
-  // Power Fx If without a matching condition or default returns Blank().
-  // An unresolved condition above still returns null (runtime unknown).
-  return args.length % 2 === 1
-    ? sourceMediaName(expression(args[args.length - 1]), symbols, depth + 1)
-    : { name: "", origin: "blank" };
+  const selected = selectVerifiedImageBranch(source, tokens, symbols);
+  if (selected === null) return null;
+  return selected === ""
+    ? { name: "", origin: "blank" }
+    : sourceMediaName(selected, symbols, depth + 1);
 }
 
 export function resolvePreviewImage(
@@ -193,40 +223,8 @@ function sourceImageEnum(
     const member = tokens[2].value.toLowerCase();
     return members.includes(member) ? member : null;
   }
-  if (tokens[0]?.kind !== "identifier" ||
-      tokens[0].value.toLowerCase() !== "if" ||
-      tokens[1]?.value !== "(" || tokens[tokens.length - 1]?.value !== ")") {
-    return null;
-  }
-  const inner = tokens.slice(2, -1);
-  const args: PowerFxToken[][] = [];
-  let nesting = 0;
-  let start = 0;
-  for (let index = 0; index < inner.length; index += 1) {
-    if (inner[index].value === "(") nesting += 1;
-    else if (inner[index].value === ")") nesting -= 1;
-    else if (inner[index].value === "," && nesting === 0) {
-      if (index === start) return null;
-      args.push(inner.slice(start, index));
-      start = index + 1;
-    }
-    if (nesting < 0) return null;
-  }
-  if (nesting !== 0 || start >= inner.length) return null;
-  args.push(inner.slice(start));
-  if (args.length < 2) return null;
-  const expression = (part: PowerFxToken[]) =>
-    "=" + source.slice(part[0].start, part[part.length - 1].end);
-  for (let index = 0; index + 1 < args.length; index += 2) {
-    const condition = staticBoolean(expression(args[index]), symbols);
-    if (condition === null) return null;
-    if (condition) {
-      return sourceImageEnum(expression(args[index + 1]), namespace, members, symbols, depth + 1);
-    }
-  }
-  return args.length % 2 === 1
-    ? sourceImageEnum(expression(args[args.length - 1]), namespace, members, symbols, depth + 1)
-    : null;
+  const selected = selectVerifiedImageBranch(source, tokens, symbols);
+  return selected ? sourceImageEnum(selected, namespace, members, symbols, depth + 1) : null;
 }
 
 export function previewImagePosition(
