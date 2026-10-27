@@ -52,7 +52,12 @@ export function previewCornerRadiusUnverified(
   return ["RadiusTopLeft", "RadiusTopRight", "RadiusBottomRight", "RadiusBottomLeft"]
     .some(key => {
       const raw = properties[key];
-      if (raw === undefined || raw === null) return false;
+      // An omitted property may use the control's default, but an explicit
+      // null/Blank is not a verified zero radius. Keep the outline approximate
+      // and child clipping square instead of claiming a known corner.
+      // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-isblank-isempty
+      if (raw === undefined) return false;
+      if (raw === null) return true;
       const value = literalNumber(raw) ?? staticNumber(raw, symbols);
       return value === null || !Number.isFinite(value) || value < 0;
     });

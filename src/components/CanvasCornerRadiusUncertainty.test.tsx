@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { buildCanvasModel } from "../core/model/normalize";
-import { previewCornerRadiusUnverified } from "../core/layout/previewCorners";
+import { previewChildClipPath, previewCornerRadiusUnverified } from "../core/layout/previewCorners";
 import { CanvasVisualControl } from "./CanvasVisualControl";
 
 /** Synthetic .pa.yaml only: no SQL rows, identity or permission snapshots. */
@@ -68,6 +68,25 @@ describe("Canvas per-corner radius certainty", () => {
     expect(renderRadius({ RadiusTopLeft: "=0" }, 390))
       .not.toContain('data-preview-radius-state="unknown"');
   });
+
+  it.each([390, 768, 1366])(
+    "does not certify explicitly null corner radii at %i px",
+    viewport => {
+      const symbols = { "App.Width": viewport };
+      expect(previewCornerRadiusUnverified({ RadiusTopLeft: null }, symbols)).toBe(true);
+      expect(previewCornerRadiusUnverified({ RadiusTopLeft: undefined }, symbols)).toBe(false);
+      expect(previewCornerRadiusUnverified({ RadiusTopLeft: "=0" }, symbols)).toBe(false);
+      // A known neighboring corner must remain usable without promoting
+      // the explicit null to a verified zero or inventing runtime state.
+      const props = {
+        RadiusTopLeft: null,
+        RadiusTopRight: "=If(App.Width < 720, 12, 6)"
+      };
+      const path = previewChildClipPath(props, 0, 0, 100, 40, symbols);
+      expect(path).toContain(`M 0 0 H ${viewport < 720 ? 88 : 94}`);
+      expect(path).not.toContain("A 4 4");
+    }
+  );
 
   it("marks invalid negative and unsupported expressions", () => {
     expect(previewCornerRadiusUnverified({ RadiusTopLeft: "=-5" })).toBe(true);
