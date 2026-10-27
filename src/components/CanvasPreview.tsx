@@ -111,10 +111,17 @@ function flatten(
       // source-verified geometry: fallback dimensions must not authorize
       // rendering descendants of a potentially hidden control.
       // https://learn.microsoft.com/en-us/power-platform/power-fx/operators
-      ...(!rect.dynamic ? {
-        "Self.Width": rect.width, "Self.Height": rect.height,
-        "Self.X": rect.x, "Self.Y": rect.y
-      } : {})
+      // Omitted .pa.yaml properties use control/variant defaults; a generic
+      // paint fallback must not certify Self visibility or reveal descendants.
+      // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/power-apps-yaml
+      ...(!rect.dynamic && control.properties.Width !== undefined
+        ? { "Self.Width": rect.width } : {}),
+      ...(!rect.dynamic && control.properties.Height !== undefined
+        ? { "Self.Height": rect.height } : {}),
+      ...(!rect.dynamic && control.properties.X !== undefined
+        ? { "Self.X": rect.x } : {}),
+      ...(!rect.dynamic && control.properties.Y !== undefined
+        ? { "Self.Y": rect.y } : {})
     };
     // AutoLayout already checked Visible with source-proven Self sizes and
     // without guessed Parent/sibling geometry. Do not re-evaluate that gate
@@ -132,10 +139,17 @@ function flatten(
       ...visibilitySymbols,
       ...(templateWidth !== undefined ? { "Parent.TemplateWidth": templateWidth } : {}),
       ...(templateHeight !== undefined ? { "Parent.TemplateHeight": templateHeight } : {}),
-      ...(!rect.dynamic ? {
-        "Self.Width": rect.width, "Self.Height": rect.height,
-        "Self.X": rect.x, "Self.Y": rect.y
-      } : {})
+      // Omitted .pa.yaml properties use control/variant defaults; a generic
+      // paint fallback must not certify Self visibility or reveal descendants.
+      // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/power-apps-yaml
+      ...(!rect.dynamic && control.properties.Width !== undefined
+        ? { "Self.Width": rect.width } : {}),
+      ...(!rect.dynamic && control.properties.Height !== undefined
+        ? { "Self.Height": rect.height } : {}),
+      ...(!rect.dynamic && control.properties.X !== undefined
+        ? { "Self.X": rect.x } : {}),
+      ...(!rect.dynamic && control.properties.Y !== undefined
+        ? { "Self.Y": rect.y } : {})
     };
     // Compute template geometry in the gallery's own formula scope. Parent
     // refers to its actual parent container/screen, not the gallery viewport.
@@ -176,7 +190,12 @@ function flatten(
       editorGroup ? parentControl : control,
       simulationSymbols,
       visibilityUnknown,
-      parentGeometryVerified && !rect.dynamic
+      // Missing dimensions use variant-specific defaults, not the generic
+      // painted rectangle. Never certify descendant Parent.Width/Height
+      // from those fallbacks. Groups retain their enclosing parent scope.
+      parentGeometryVerified && !rect.dynamic && (editorGroup ||
+        (control.properties.Width !== undefined &&
+         control.properties.Height !== undefined))
     ));
   }
   return output;

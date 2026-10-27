@@ -124,4 +124,53 @@ describe("CanvasPreview current-control Self scope in Visible", () => {
     expect(html.includes("Synthetic verified descendant")).toBe(shown);
     expect(html.includes("Inspect KnownChild")).toBe(shown);
   });
+  it.each(["Width", "Height"] as const)(
+    "does not certify omitted parent %s as a runtime dimension",
+    omitted => {
+      const conditional = control("ConditionalChild", "GroupContainer@1.3.0", {
+        X: "=4", Y: "=4", Width: "=100", Height: "=40",
+        Visible: omitted === "Width" ? "=Parent.Width > 200" : "=Parent.Height > 200"
+      }, [control("ProtectedLeaf", "Classic/Label@2.5.1", {
+        Width: "=80", Height: "=20", Text: '="Synthetic protected text"'
+      })]);
+      const properties: Record<string, unknown> = {
+        X: "=0", Y: "=0", Width: "=500", Height: "=300"
+      };
+      delete properties[omitted];
+      const screen: CanvasScreen = {
+        id: "Synthetic", name: "Synthetic", properties: {},
+        children: [control("DefaultSizedHost", "GroupContainer@1.3.0",
+          properties, [conditional])],
+        sourceFile: "Src/SyntheticVisibility.pa.yaml", sourceFormat: "pa-yaml-v3"
+      };
+      const html = renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+      expect(html).toContain("Inspect ConditionalChild");
+      expect(html).not.toContain("Synthetic protected text");
+      expect(html).not.toContain("Inspect ProtectedLeaf");
+    }
+  );
+
+  it.each(["Width", "Height"] as const)(
+    "does not prove Self visibility from omitted %s paint defaults",
+    omitted => {
+      const properties: Record<string, unknown> = {
+        X: "=0", Y: "=0", Width: "=300", Height: "=300",
+        Visible: omitted === "Width" ? "=Self.Width > 200" : "=Self.Height > 200"
+      };
+      delete properties[omitted];
+      const screen: CanvasScreen = {
+        id: "Synthetic", name: "Synthetic", properties: {},
+        children: [control("DefaultSizedConditional", "GroupContainer@1.3.0",
+          properties, [control("ProtectedLeaf", "Classic/Label@2.5.1", {
+            Width: "=80", Height: "=20", Text: '="Synthetic protected text"'
+          })])],
+        sourceFile: "Src/SyntheticVisibility.pa.yaml", sourceFormat: "pa-yaml-v3"
+      };
+      const html = renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+      expect(html).toContain("Inspect DefaultSizedConditional");
+      expect(html).not.toContain("Synthetic protected text");
+      expect(html).not.toContain("Inspect ProtectedLeaf");
+    }
+  );
+
 });
