@@ -412,9 +412,17 @@ export function autoLayoutChildren(
     const align = control.properties.AlignInContainer === undefined
       ? "setbycontainer"
       : previewLayoutEnum(control.properties.AlignInContainer, "AlignInContainer");
+    // Parent.Width/Height in the preview context may be fallback geometry,
+    // not source-verified runtime dimensions. An inherited Stretch can
+    // change Self.Width/Height and therefore a child's Visible formula.
+    // Resolve the parent alignment only from the selected App viewport;
+    // keep Parent-, SQL- and variable-dependent alignment unknown.
     const inheritedAlign = parent.properties.LayoutAlignItems === undefined
       ? "start"
-      : previewLayoutEnum(parent.properties.LayoutAlignItems, "LayoutAlignItems", symbols);
+      : previewLayoutEnum(parent.properties.LayoutAlignItems, "LayoutAlignItems", {
+          "App.Width": context.appWidth,
+          "App.Height": context.appHeight
+        });
     const fixedSize = fill === 0 && align !== null && align !== "stretch" &&
       !(align === "setbycontainer" &&
         (inheritedAlign === null || inheritedAlign === "stretch"));
