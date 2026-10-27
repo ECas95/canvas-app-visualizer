@@ -24,7 +24,10 @@ export function previewSvgTextWindow(
   lineHeight: number,
   align: PreviewSvgVerticalAlign
 ): PreviewSvgTextWindow {
-  // Canvas text can contain LF, CRLF or a standalone CR (for example from\n  // Char(13)). SVG tspans need one line per source line break; leaving a\n  // bare CR inside a tspan changes the layout and bottom/middle selection.\n  const allLines = value.split(/\r\n|\r|\n/);
+  // Canvas text can contain LF, CRLF or a standalone CR (for example from
+  // Char(13)). SVG tspans need one line per source line break; leaving a
+  // bare CR inside a tspan changes the layout and bottom/middle selection.
+  const allLines = value.split(/\r\n|\r|\n/);
   const safeHeight = Number.isFinite(height) ? Math.max(0, height) : 0;
   const safeLineHeight = Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 1;
   // Retain the existing SVG budget and two extra lines for partially clipped
