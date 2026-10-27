@@ -479,7 +479,7 @@ export function CanvasVisualControl({
           // A missing Rotation uses the Canvas default (0 degrees), but an
           // explicit runtime-dependent Rotation cannot be shown as unrotated.
           // Withhold the glyph until its orientation is verifiable.
-          const rotation = props.Rotation == null
+          const rotation = props.Rotation === undefined
             ? 0 : previewIconRotation(props.Rotation, simulationSymbols);
           if (rotation === null) return (
             <g data-preview-icon-state="unknown" pointerEvents="none">
