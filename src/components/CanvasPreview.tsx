@@ -67,7 +67,8 @@ function flatten(
   templateHeight?: number,
   parentControl?: CanvasControl,
   simulationSymbols: PreviewVariables = {},
-  ancestorVisibilityUnknown = false
+  ancestorVisibilityUnknown = false,
+  parentGeometryVerified = true
 ): DrawItem[] {
   const output: DrawItem[] = [];
   const baseContext = {
@@ -86,13 +87,25 @@ function flatten(
           control, rect: controlRect(control, index, context)
         }));
 
-  for (const { control, rect, sourceVisibility } of positioned) {
+  for (const { control, rect: positionedRect, sourceVisibility } of positioned) {
+    // A parent's runtime-dependent bounds/position may be represented by
+    // preview fallbacks. Descendant coordinates inherit that uncertainty even
+    // when their own authored dimensions are numeric.
+    const rect = parentGeometryVerified ? positionedRect : {
+      ...positionedRect, dynamic: true
+    };
     // A proven-false parent hides its complete subtree; unresolved visibility
     // stays visible instead of guessing runtime state.
     const visibilitySymbols = {
-      ...siblingSymbols,
+      // Sibling geometry and Parent dimensions derived from an unresolved
+      // ancestor are paint approximations, not facts for Visible or Text.
+      // In particular, never decide a conditional subtree's visibility from
+      // the default width of a SQL-dependent parent container.
+      ...(parentGeometryVerified ? siblingSymbols : {}),
       "App.Width": appWidth, "App.Height": appHeight,
-      "Parent.Width": parentWidth, "Parent.Height": parentHeight,
+      ...(parentGeometryVerified ? {
+        "Parent.Width": parentWidth, "Parent.Height": parentHeight
+      } : {}),
       ...simulationSymbols,
       // Visible is evaluated in the current control's Self scope. Use only
       // source-verified geometry: fallback dimensions must not authorize
@@ -162,7 +175,8 @@ function flatten(
       editorGroup ? templateHeight : template?.height,
       editorGroup ? parentControl : control,
       simulationSymbols,
-      visibilityUnknown
+      visibilityUnknown,
+      parentGeometryVerified && !rect.dynamic
     ));
   }
   return output;

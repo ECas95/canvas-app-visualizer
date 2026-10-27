@@ -78,4 +78,50 @@ describe("CanvasPreview current-control Self scope in Visible", () => {
     expect(html).not.toContain("Synthetic descendant");
     expect(html).not.toContain("Inspect VisibleChild");
   });
+
+  it.each([
+    "=Parent.Width > 2000",
+    "=Parent.Width < 2000"
+  ])("does not decide absolute-child visibility using an unknown parent's fallback: %s", condition => {
+    const protectedText = control("ProtectedText", "Classic/Label@2.5.1", {
+      Text: '="Synthetic protected descendant"', Width: "=120", Height: "=20"
+    });
+    const conditional = control("ConditionalChild", "GroupContainer@1.3.0", {
+      X: "=4", Y: "=4", Width: "=150", Height: "=50", Visible: condition
+    }, [protectedText]);
+    const host = control("RuntimeSizedHost", "GroupContainer@1.3.0", {
+      X: "=0", Y: "=0", Width: "=varSqlWidth", Height: "=120"
+    }, [conditional]);
+    const screen: CanvasScreen = {
+      id: "Synthetic", name: "Synthetic", properties: {}, children: [host],
+      sourceFile: "Src/SyntheticVisibility.pa.yaml", sourceFormat: "pa-yaml-v3"
+    };
+    const html = renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+    expect(html).toContain("Inspect ConditionalChild");
+    expect(html).not.toContain("Synthetic protected descendant");
+    expect(html).not.toContain("Inspect ProtectedText");
+  });
+
+  it.each([
+    ["=300", true],
+    ["=100", false]
+  ])("preserves verified Parent.Width visibility for a fixed host %s", (width, shown) => {
+    const leaf = control("KnownLeaf", "Classic/Label@2.5.1", {
+      Text: '="Synthetic verified descendant"', Width: "=100", Height: "=20"
+    });
+    const conditional = control("KnownChild", "GroupContainer@1.3.0", {
+      X: "=4", Y: "=4", Width: "=120", Height: "=40",
+      Visible: "=Parent.Width > 200"
+    }, [leaf]);
+    const host = control("FixedHost", "GroupContainer@1.3.0", {
+      X: "=0", Y: "=0", Width: width, Height: "=120"
+    }, [conditional]);
+    const screen: CanvasScreen = {
+      id: "Synthetic", name: "Synthetic", properties: {}, children: [host],
+      sourceFile: "Src/SyntheticVisibility.pa.yaml", sourceFormat: "pa-yaml-v3"
+    };
+    const html = renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+    expect(html.includes("Synthetic verified descendant")).toBe(shown);
+    expect(html.includes("Inspect KnownChild")).toBe(shown);
+  });
 });
