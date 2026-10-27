@@ -109,34 +109,39 @@ export function previewScrollRanges(
     const bottomPadding = vertical
       ? host.paddingBottom === undefined ? 0 : staticNumber(host.paddingBottom, host.symbols)
       : 0;
-    if (rightPadding === null || bottomPadding === null ||
-        !Number.isFinite(rightPadding) || !Number.isFinite(bottomPadding) ||
-        rightPadding < 0 || bottomPadding < 0) continue;
+    // Runtime-unknown padding on one axis must not suppress a separately
+    // verified scroll range on the other axis. Unknown never authorizes
+    // scrolling on its own axis.
+    const scrollX = horizontal && rightPadding !== null &&
+      Number.isFinite(rightPadding) && rightPadding >= 0;
+    const scrollY = vertical && bottomPadding !== null &&
+      Number.isFinite(bottomPadding) && bottomPadding >= 0;
+    if (!scrollX && !scrollY) continue;
     // Avoid spreading child extents into Math.max: large imported screens can
     // exceed the JavaScript argument limit even with valid, finite geometry.
     // Compute only explicitly scrollable axes. Overflow on a hidden axis must
     // not suppress a separately verified scroll range on the other axis.
-    const hostRight = host.x + host.width;
-    const hostBottom = host.y + host.height;
-    let right = horizontal ? hostRight : 0;
-    let bottom = vertical ? hostBottom : 0;
-    let valid = (!horizontal || Number.isFinite(hostRight)) &&
-      (!vertical || Number.isFinite(hostBottom));
+    const hostRight = scrollX ? host.x + host.width : 0;
+    const hostBottom = scrollY ? host.y + host.height : 0;
+    let right = hostRight;
+    let bottom = hostBottom;
+    let valid = (!scrollX || Number.isFinite(hostRight)) &&
+      (!scrollY || Number.isFinite(hostBottom));
     for (const child of children) {
-      if (horizontal) {
-        const edge = child.x + child.width + rightPadding;
+      if (scrollX) {
+        const edge = child.x + child.width + (rightPadding ?? 0);
         if (!Number.isFinite(edge)) { valid = false; break; }
         right = Math.max(right, edge);
       }
-      if (vertical) {
-        const edge = child.y + child.height + bottomPadding;
+      if (scrollY) {
+        const edge = child.y + child.height + (bottomPadding ?? 0);
         if (!Number.isFinite(edge)) { valid = false; break; }
         bottom = Math.max(bottom, edge);
       }
     }
     if (!valid) continue;
-    const x = horizontal ? Math.max(0, right - hostRight) : 0;
-    const y = vertical ? Math.max(0, bottom - hostBottom) : 0;
+    const x = scrollX ? Math.max(0, right - hostRight) : 0;
+    const y = scrollY ? Math.max(0, bottom - hostBottom) : 0;
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     if (x > 0 || y > 0) ranges[host.id] = { x, y };
   }

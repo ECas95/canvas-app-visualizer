@@ -314,6 +314,28 @@ describe("Canvas overflow semantics", () => {
     expect(previewScrollRanges([host, child])).not.toHaveProperty("Host");
   });
 
+  it.each([390, 768, 1366])(
+    "keeps verified scroll independent of unknown opposite padding at %i px",
+    viewport => {
+      const host = item("Host", [], 0, 0, 100, 100, {
+        overflowX: "=LayoutOverflow.Scroll",
+        overflowY: "=LayoutOverflow.Scroll",
+        paddingRight: "=varUnknownRightPadding",
+        paddingBottom: "=12",
+        symbols: { "App.Width": viewport }
+      });
+      const child = item("Child", ["Host"], 0, 0, 180, 180);
+      expect(previewScrollRanges([host, child]))
+        .toEqual({ Host: { x: 0, y: 92 } });
+      expect(previewScrollRanges([{
+        ...host, paddingRight: "=12", paddingBottom: "=varUnknownBottomPadding"
+      }, child])).toEqual({ Host: { x: 92, y: 0 } });
+      expect(previewScrollRanges([{
+        ...host, paddingBottom: "=varUnknownBottomPadding"
+      }, child])).not.toHaveProperty("Host");
+    }
+  );
+
   it("rejects unknown trailing padding only on the scrollable axis", () => {
     const child = item("Child", ["Host"], 0, 0, 100, 180);
     const host = item("Host", [], 0, 0, 100, 100, {
