@@ -19,7 +19,23 @@ describe("Canvas overflow semantics", () => {
     expect(previewOverflowMode("=If(varCanScroll, LayoutOverflow.Scroll, LayoutOverflow.Hide)")).toBe("unknown");
     expect(previewOverflowMode("=SQL.Scroll")).toBe("unknown");
     expect(previewOverflowMode(undefined)).toBe("hide");
+    expect(previewOverflowMode(null)).toBe("unknown");
   });
+
+  it.each([390, 768, 1366])(
+    "keeps explicit null overflow unknown while preserving verified scroll at %i px",
+    viewport => {
+      const host = item("Host", [], 0, 0, 100, 100, {
+        overflowX: null,
+        overflowY: "=LayoutOverflow.Scroll",
+        symbols: { "App.Width": viewport }
+      });
+      const child = item("Child", ["Host"], 0, 0, 180, 180);
+      expect(previewOverflowMode(host.overflowX, host.symbols)).toBe("unknown");
+      expect(previewScrollRanges([host, child]))
+        .toEqual({ Host: { x: 0, y: 80 } });
+    }
+  );
 
   it("recognizes Canvas overflow enum tokens despite valid Power Fx comments", () => {
     expect(previewOverflowMode("=LayoutOverflow /* layout */ . Scroll // trailing"))

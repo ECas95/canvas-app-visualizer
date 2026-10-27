@@ -48,7 +48,10 @@ export function previewOverflowMode(
   symbols?: Record<string, StaticPowerFxValue>,
   depth = 0
 ): PreviewOverflowMode {
-  if (raw === undefined || raw === null) return "hide";
+  if (raw === undefined) return "hide";
+  // An explicitly serialized null is not an omitted Canvas default. It
+  // cannot prove Hide (or Scroll), so preserve its unknown runtime state.
+  if (raw === null) return "unknown";
   const resolved = previewLayoutEnum(raw, "LayoutOverflow", symbols, depth);
   return resolved === "scroll" || resolved === "hide" ? resolved : "unknown";
 }
