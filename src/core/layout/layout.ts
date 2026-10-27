@@ -28,6 +28,8 @@ export interface LayoutContext {
 export interface PositionedControl {
   control: CanvasControl;
   rect: VisualRect;
+  /** Source-only AutoLayout visibility; unknown must not be re-evaluated with fallback geometry. */
+  sourceVisibility?: "visible" | "unknown";
 }
 
 const DEFAULTS: Record<string, { width: number; height: number }> = {
@@ -407,6 +409,9 @@ export function autoLayoutChildren(
   });
   const children = childVisibility.filter(item => item.visible !== false)
     .map(item => item.control);
+  const sourceVisibility = new Map(childVisibility.map(item => [
+    item.control, item.visible === null ? "unknown" as const : "visible" as const
+  ]));
   const visibilityAffectsLayout = children.length !== parent.children.length;
   const visibilityUnknown = childVisibility.some(item => item.visible === null);
   if (children.length === 0) return [];
@@ -584,7 +589,7 @@ export function autoLayoutChildren(
       };
       cursorMain += mainSize + gap;
       lineCrossSize = Math.max(lineCrossSize, crossSize);
-      return { control: item.control, rect };
+      return { control: item.control, rect, sourceVisibility: sourceVisibility.get(item.control) };
     });
   }
 
@@ -752,7 +757,7 @@ export function autoLayoutChildren(
     cursor +=
       (horizontal ? item.width : item.height) + effectiveGap;
 
-    return { control: item.control, rect };
+    return { control: item.control, rect, sourceVisibility: sourceVisibility.get(item.control) };
   });
 }
 

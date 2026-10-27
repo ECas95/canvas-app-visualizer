@@ -8,7 +8,8 @@ import {
   galleryTemplateGuideRect,
   isAutoLayout,
   isGallery,
-  rgba
+  rgba,
+  type PositionedControl
 } from "../core/layout/layout";
 import { previewVisibility, previewSelectionBehaviorGate, previewColorWithSymbols } from "../core/layout/previewAppearance";
 import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/layout/previewDataState";
@@ -77,14 +78,14 @@ function flatten(
     controls, baseContext, isAutoLayout(parentControl)
   );
   const context = { ...baseContext, symbols: { ...siblingSymbols, ...simulationSymbols } };
-  const positioned =
+  const positioned: PositionedControl[] =
     parentControl && isAutoLayout(parentControl)
       ? autoLayoutChildren(parentControl, context)
       : controls.map((control, index) => ({
           control, rect: controlRect(control, index, context)
         }));
 
-  for (const { control, rect } of positioned) {
+  for (const { control, rect, sourceVisibility } of positioned) {
     // A proven-false parent hides its complete subtree; unresolved visibility
     // stays visible instead of guessing runtime state.
     const visibilitySymbols = {
@@ -101,7 +102,11 @@ function flatten(
         "Self.X": rect.x, "Self.Y": rect.y
       } : {})
     };
-    const visibility = previewVisibility(control, visibilitySymbols);
+    // AutoLayout already checked Visible with source-proven Self sizes and
+    // without guessed Parent/sibling geometry. Do not re-evaluate that gate
+    // with painted fallback dimensions: it could hide an unknown control or
+    // expose a descendant based on a value that Canvas has not verified.
+    const visibility = sourceVisibility ?? previewVisibility(control, visibilitySymbols);
     if (visibility === "hidden") continue;
     // AllItems is loaded only at runtime. Preserve the control's geometry as
     // an explicitly unknown placeholder, never as a verified empty/visible UI.

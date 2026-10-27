@@ -47,6 +47,31 @@ describe("CanvasPreview current-control Self scope in Visible", () => {
     expect(html).toContain("Synthetic descendant");
   });
 
+  it("keeps AutoLayout visibility unknown when Parent geometry is only a preview fallback", () => {
+    const sensitive = control("UnverifiedChild", "GroupContainer@1.3.0", {
+      Width: "=100", Height: "=30", Visible: "=Parent.Width > 2000"
+    }, [control("SensitiveLabel", "Classic/Label@2.5.1", {
+      Text: '="Synthetic protected descendant"', Width: "=90", Height: "=20"
+    })]);
+    const host = control("AutoHost", "GroupContainer@1.3.0", {
+      X: "=0", Y: "=0", Width: "=varSqlWidth", Height: "=120",
+      LayoutDirection: "=LayoutDirection.Horizontal",
+      LayoutAlignItems: "=LayoutAlignItems.Start"
+    }, [sensitive, control("Sibling", "Classic/Label@2.5.1", {
+      Width: "=100", Height: "=30", Text: '="Synthetic sibling"'
+    })]);
+    host.variant = "AutoLayout";
+    const screen: CanvasScreen = {
+      id: "Synthetic", name: "Synthetic", properties: {}, children: [host],
+      sourceFile: "Src/SyntheticVisibility.pa.yaml", sourceFormat: "pa-yaml-v3"
+    };
+    const html = renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+    expect(html).toContain("Inspect UnverifiedChild");
+    expect(html).toContain("Inspect Sibling");
+    expect(html).not.toContain("Synthetic protected descendant");
+    expect(html).not.toContain("Inspect SensitiveLabel");
+  });
+
   it("does not trust fallback Self.Width when width depends on runtime SQL state", () => {
     const html = preview("=Self.Width > 250", "=varSqlWidth");
     expect(html).toContain("Inspect ConditionalHost");
