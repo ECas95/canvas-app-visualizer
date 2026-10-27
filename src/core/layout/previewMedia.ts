@@ -45,9 +45,17 @@ function sourceMediaName(
       return { name: tokens[0].value.slice(1, -1).replaceAll('""', '"'), origin: "literal" };
     }
   }
+  // Power Fx allows single-quoted identifiers for media names containing
+  // whitespace or apostrophes (escaped as two single quotes). This remains
+  // a source-only lookup against already imported, local raster assets.
   if (tokens.length === 3 && tokens[0].kind === "identifier" &&
       tokens[0].value.toLowerCase() === "media" && tokens[1].value === "." &&
-      tokens[2].kind === "identifier") return { name: tokens[2].value, origin: "media" };
+      (tokens[2].kind === "identifier" || tokens[2].kind === "quotedIdentifier")) {
+    const name = tokens[2].kind === "quotedIdentifier"
+      ? tokens[2].value.slice(1, -1).replaceAll("''", "'")
+      : tokens[2].value;
+    return { name, origin: "media" };
+  }
 
   // A known Blank() is an intentional empty image, not an unavailable
   // resource or an unknown SQL-backed value. The empty sentinel is never

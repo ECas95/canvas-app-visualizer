@@ -44,6 +44,23 @@ describe("Canvas image source fidelity and local-only rendering", () => {
     expect(draw("=Media.CompanyLogo")).toContain('data-preview-image-state="verified"');
   });
 
+  it("renders quoted local media identifiers without treating SQL state as verified", () => {
+    const quoted: PreviewMediaAsset = {
+      name: "company logo", path: "Resources/Company Logo.png",
+      dataUrl: "data:image/png;base64,AA=="
+    };
+    const source = "=Media.'Company Logo'";
+    expect(previewImageSourceState(source, [quoted])).toBe("verified");
+    const html = draw(source, [quoted]);
+    expect(html).toContain('data-preview-image-state="verified"');
+    expect(html).toContain('data:image/png;base64,AA==');
+    expect(previewImageSourceState("=Media.'Missing Asset'", [quoted]))
+      .toBe("source-unavailable");
+    expect(previewImageSourceState(
+      "=If(varSqlAuthorized, Media.'Company Logo', Blank())", [quoted]
+    )).toBe("runtime-unknown");
+  });
+
   it.each([
     "=ThisItem.Photo",
     "=varSqlImage",

@@ -26,6 +26,28 @@ describe("local-only image preview", () => {
       .toBe(media[0]);
   });
 
+  it("resolves quoted Power Fx media identifiers only against imported local rasters", () => {
+    const assets: PreviewMediaAsset[] = [
+      { name: "company logo", path: "Resources/Company Logo.png",
+        dataUrl: "data:image/png;base64,AA==" },
+      { name: "ceo's logo", path: "Resources/CEO's Logo.png",
+        dataUrl: "data:image/png;base64,AA==" }
+    ];
+    expect(resolvePreviewImage("=Media.'Company Logo'", assets)).toBe(assets[0]);
+    expect(resolvePreviewImage("=Media /* note */ . 'Company Logo'", assets)).toBe(assets[0]);
+    expect(resolvePreviewImage("=Media.'CEO''s Logo'", assets)).toBe(assets[1]);
+    const responsive = "=If(App.Width < 720, Media.'Company Logo', Media.'CEO''s Logo')";
+    expect(resolvePreviewImage(responsive, assets, { "App.Width": 390 })).toBe(assets[0]);
+    expect(resolvePreviewImage(responsive, assets, { "App.Width": 1366 })).toBe(assets[1]);
+    expect(resolvePreviewImage(responsive, assets)).toBeUndefined();
+    expect(resolvePreviewImage("=If(varSqlAuthorized, Media.'Company Logo', Blank())", assets))
+      .toBeUndefined();
+    expect(resolvePreviewImage("=SQL.'Company Logo'", assets)).toBeUndefined();
+    expect(resolvePreviewImage("=Media.'Company Logo' & \"x\"", assets)).toBeUndefined();
+    expect(resolvePreviewImage("=Media.'Company Logo", assets)).toBeUndefined();
+    expect(resolvePreviewImage("=Media.'Missing Asset'", assets)).toBeUndefined();
+  });
+
   it("selects only a statically verified local image branch", () => {
     const formula = "=If(App.Width < 720, Media.CompanyLogo, Media.Other)";
     expect(resolvePreviewImage(formula, media, { "App.Width": 390 }))
