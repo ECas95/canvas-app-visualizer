@@ -4,7 +4,7 @@ import type { CanvasControl } from "../types/canvas";
 import { buildCanvasModel } from "../core/model/normalize";
 import { CanvasVisualControl } from "./CanvasVisualControl";
 
-function synthetic(properties: Record<string, string>, controlType = "Classic/Label@2.5.1"): CanvasControl {
+function synthetic(properties: Record<string, string | null>, controlType = "Classic/Label@2.5.1"): CanvasControl {
   return {
     id: "synthetic-padding", name: "SyntheticPadding", controlType,
     properties: { Text: '="Local sample"', ...properties },
@@ -54,6 +54,32 @@ describe("explicit Power Fx padding uncertainty", () => {
       expect(html).not.toContain("data-preview-padding-state");
     }
   );
+
+  it.each([390, 768, 1366])(
+    "keeps explicit null padding unknown while preserving verified neighboring edges at %i px",
+    viewport => {
+      for (const edge of ["PaddingTop", "PaddingRight", "PaddingBottom", "PaddingLeft"]) {
+        const html = render(synthetic({
+          [edge]: null,
+          Wrap: "=true",
+          // A known edge remains source-verifiable independently.
+          ...((edge === "PaddingRight") ? { PaddingLeft: "=12" } : { PaddingRight: "=12" })
+        }), viewport);
+        expect(html).toContain('data-preview-padding-state="unknown"');
+        expect(html).toContain(`data-preview-padding-edges="${edge}"`);
+        expect(html).toContain(`Text padding cannot be verified for ${edge}`);
+        expect(html).toContain(edge === "PaddingRight" ? "padding-left:12px" : "padding-right:12px");
+      }
+    }
+  );
+
+  it("does not turn omitted padding into unknown, but flags all explicit null edges in order", () => {
+    const html = render(synthetic({
+      PaddingLeft: null, PaddingBottom: null, PaddingRight: null, PaddingTop: null
+    }));
+    expect(html).toContain('data-preview-padding-edges="PaddingTop,PaddingRight,PaddingBottom,PaddingLeft"');
+    expect(render(synthetic({}))).not.toContain('data-preview-padding-state="unknown"');
+  });
 
   it("does not mistake an omitted property for a runtime dependency", () => {
     expect(render(synthetic({ Wrap: "=true" }))).not.toContain("data-preview-padding-state");

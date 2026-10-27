@@ -183,7 +183,10 @@ export function CanvasVisualControl({
     ? (["PaddingTop", "PaddingRight", "PaddingBottom", "PaddingLeft"] as const)
         .filter(edge => {
           const raw = props[edge];
-          if (raw == null) return false;
+          // Omitted means control-version default; explicit null/Blank is
+          // not a verified zero inset and must stay visibly unknown.
+          if (raw === undefined) return false;
+          if (raw === null) return true;
           const resolved = staticNumber(raw, simulationSymbols);
           return resolved === null || !Number.isFinite(resolved) || resolved < 0;
         })
