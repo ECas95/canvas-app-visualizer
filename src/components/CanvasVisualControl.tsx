@@ -38,7 +38,7 @@ export function CanvasVisualControl({
   const imageSourceState = kind === "image"
     ? previewImageSourceState(props.Image, mediaAssets, simulationSymbols) : null;
   const imagePosition = kind === "image"
-    ? (props.ImagePosition == null ? "fit" : previewImagePosition(props.ImagePosition, simulationSymbols))
+    ? (props.ImagePosition === undefined ? "fit" : previewImagePosition(props.ImagePosition, simulationSymbols))
     : null;
   // Native-size Center/Tile use a browser raster background. The importer
   // supplies only bounded local PNG/JPEG/GIF/WebP data URLs, never remote URLs.

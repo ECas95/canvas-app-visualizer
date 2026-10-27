@@ -262,7 +262,9 @@ export function previewImageFlipTransform(
   x: number, y: number, width: number, height: number,
   symbols?: Record<string, StaticPowerFxValue>
 ): string | null {
-  const resolve = (value: unknown) => value === undefined || value === null
+  // Only omission establishes the source-only default. An explicit null
+  // may represent a runtime-dependent/blank formula, not a verified false.
+  const resolve = (value: unknown) => value === undefined
     ? false : staticBoolean(value, symbols);
   const flipX = resolve(horizontal);
   const flipY = resolve(vertical);
@@ -281,7 +283,9 @@ export function previewImageFlipTransform(
 export function previewImageRotation(
   raw: unknown, symbols?: Record<string, StaticPowerFxValue>
 ): 0 | 90 | 180 | 270 | null {
-  if (raw === undefined || raw === null) return 0;
+  // Omitted rotation has the source-only default; explicit null is unknown.
+  if (raw === undefined) return 0;
+  if (raw === null) return null;
   const member = sourceImageEnum(raw, "ImageRotation",
     ["none", "rotate90", "rotate180", "rotate270"], symbols);
   switch (member) {
