@@ -75,7 +75,8 @@ function flatten(
     symbols: simulationSymbols
   };
   const siblingSymbols = buildSiblingGeometrySymbols(
-    controls, baseContext, isAutoLayout(parentControl)
+    controls, baseContext, isAutoLayout(parentControl),
+    parentControl?.properties.LayoutAlignItems
   );
   const context = { ...baseContext, symbols: { ...siblingSymbols, ...simulationSymbols } };
   const positioned: PositionedControl[] =

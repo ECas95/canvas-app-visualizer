@@ -169,7 +169,8 @@ function clamp(
 export function buildSiblingGeometrySymbols(
   controls: CanvasControl[],
   context: LayoutContext,
-  parentAutoLayout = false
+  parentAutoLayout = false,
+  parentAlignItems?: unknown
 ): Record<string, StaticPowerFxValue> {
   const resolved: Record<string, StaticPowerFxValue> = {
     ...(context.symbols ?? {})
@@ -242,7 +243,20 @@ export function buildSiblingGeometrySymbols(
       const align = alignSource === undefined
         ? "setbycontainer"
         : previewLayoutEnum(alignSource, "AlignInContainer", baseSymbols);
-      if (fill !== 0 || align === "stretch" || align === null) continue;
+      // SetByContainer inherits LayoutAlignItems from the AutoLayout parent.
+      // A parent Stretch replaces the child's cross-axis source size; an
+      // unresolved parent alignment may also select Stretch at runtime.
+      // Use only App viewport facts here: Parent dimensions can be preview
+      // fallbacks and must not turn an unknown alignment into verified geometry.
+      const inheritedAlign = !parentAutoLayout || align !== "setbycontainer" ||
+        parentAlignItems === undefined
+        ? "start"
+        : previewLayoutEnum(parentAlignItems, "LayoutAlignItems", {
+          "App.Width": context.appWidth,
+          "App.Height": context.appHeight
+        });
+      if (fill !== 0 || align === "stretch" || align === null ||
+          inheritedAlign === "stretch" || inheritedAlign === null) continue;
       // A min/max constraint can override the authored size of an AutoLayout
       // child. Do not export an unclamped size to sibling Power Fx formulas.
       // Withhold both axes if a bound applies: Height may depend on Self.Width
