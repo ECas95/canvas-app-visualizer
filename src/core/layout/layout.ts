@@ -243,6 +243,24 @@ export function buildSiblingGeometrySymbols(
         ? "setbycontainer"
         : previewLayoutEnum(alignSource, "AlignInContainer", baseSymbols);
       if (fill !== 0 || align === "stretch" || align === null) continue;
+      // A min/max constraint can override the authored size of an AutoLayout
+      // child. Do not export an unclamped size to sibling Power Fx formulas.
+      // Withhold both axes if a bound applies: Height may depend on Self.Width
+      // (or vice versa). Unknown bounds are not equivalent to no constraint.
+      // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-horizontal-container
+      const constrainedSize = parentAutoLayout && ([
+        ["LayoutMinWidth", width, "min"],
+        ["LayoutMaxWidth", width, "max"],
+        ["LayoutMinHeight", height, "min"],
+        ["LayoutMaxHeight", height, "max"]
+      ] as const).some(([key, size, kind]) => {
+        const source = control.properties[key];
+        if (source === undefined) return false;
+        const bound = staticNumber(source, baseSymbols);
+        if (bound === null || size === null || bound < 0) return true;
+        return kind === "min" ? size < bound : size > bound;
+      });
+      if (constrainedSize) continue;
       setNumber(control.name + ".Width", finalWidth);
       // AutoHeight is an output measurement. Never certify its source Height
       // for sibling formulas, even when a numeric Height was serialized.
