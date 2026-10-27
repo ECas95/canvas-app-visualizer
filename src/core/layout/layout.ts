@@ -874,7 +874,14 @@ export function galleryTemplateLayout(
     "LayoutMinWidth", "LayoutMaxWidth",
     "LayoutMinHeight", "LayoutMaxHeight"
   ].some(key => control.properties[key] !== undefined);
-  const sourceSymbols = layoutSymbols(context);
+  // A dynamic gallery rect can contain preview fallback parent geometry.
+  // Never promote Parent.Width/Height or injected runtime symbols into verified
+  // Self dimensions (and then into WrapCount/TemplateSize/TemplatePadding).
+  // The selected App viewport remains independently known. A non-dynamic rect
+  // retains its full parent context for existing verified layout formulas.
+  const sourceSymbols = rect.dynamic && context
+    ? { "App.Width": context.appWidth, "App.Height": context.appHeight }
+    : layoutSymbols(context);
   const sourceWidth = containerManagedSize
     ? null : resolvedDimension(control.properties.Width, sourceSymbols);
   const sourceHeight = containerManagedSize
@@ -896,7 +903,13 @@ export function galleryTemplateLayout(
     : verifiedWidth !== null && verifiedWidth === rect.width ? verifiedWidth : undefined;
   const selfHeight = !rect.dynamic ? rect.height
     : verifiedHeight !== null && verifiedHeight === rect.height ? verifiedHeight : undefined;
-  const symbols = layoutSymbols(context, selfWidth, selfHeight);
+  const symbols = rect.dynamic
+    ? {
+        ...(sourceSymbols ?? {}),
+        ...(selfWidth !== undefined ? { "Self.Width": selfWidth } : {}),
+        ...(selfHeight !== undefined ? { "Self.Height": selfHeight } : {})
+      }
+    : layoutSymbols(context, selfWidth, selfHeight);
   const resolvedWrap = staticNumber(control.properties.WrapCount, symbols);
   // WrapCount counts whole gallery slots. Fractional, non-positive, or
   // renderer-limit-exceeding values cannot establish verified columns/rows.
