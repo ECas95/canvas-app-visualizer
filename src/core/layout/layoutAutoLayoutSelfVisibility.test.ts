@@ -14,7 +14,8 @@ function child(name: string, properties: Record<string, unknown> = {}): CanvasCo
 }
 
 function flow(viewport: number, children: CanvasControl[],
-  hostProperties: Record<string, unknown> = {}) {
+  hostProperties: Record<string, unknown> = {},
+  symbols?: Record<string, number>) {
   const host: CanvasControl = {
     id: "Host", name: "Host", controlType: "GroupContainer@1.3.0",
     variant: "AutoLayout",
@@ -30,7 +31,7 @@ function flow(viewport: number, children: CanvasControl[],
   };
   return autoLayoutChildren(host, {
     parentWidth: viewport, parentHeight: 120,
-    appWidth: viewport, appHeight: 844
+    appWidth: viewport, appHeight: 844, symbols
   });
 }
 
@@ -125,4 +126,37 @@ describe("AutoLayout child Self visibility (source-only)", () => {
     expect(rects).toHaveLength(2);
     expect(rects.every(item => item.rect.dynamic)).toBe(true);
   });
+  it.each([390, 768, 1366])(
+    "does not hide a child using fallback Parent geometry at %i px", viewport => {
+      const rects = flow(viewport, [
+        child("ParentDependent", { Visible: "=Parent.Width > 2000" }),
+        child("Sibling")
+      ]);
+      expect(rects.map(item => item.control.name))
+        .toEqual(["ParentDependent", "Sibling"]);
+      expect(rects.every(item => item.rect.dynamic)).toBe(true);
+    }
+  );
+
+  it("does not use externally supplied sibling geometry to decide visibility", () => {
+    const rects = flow(390, [
+      child("Dependent", { Visible: "=Peer.Width > 200" }),
+      child("Peer")
+    ], {}, { "Peer.Width": 100 });
+    expect(rects.map(item => item.control.name))
+      .toEqual(["Dependent", "Peer"]);
+    expect(rects.every(item => item.rect.dynamic)).toBe(true);
+  });
+
+  it.each([
+    [390, false], [768, true], [1366, true]
+  ])("still resolves viewport-only visibility at %i px", (viewport, shown) => {
+    const rects = flow(viewport, [
+      child("ViewportDependent", { Visible: "=App.Width >= 768" }),
+      child("Sibling")
+    ]);
+    expect(rects.map(item => item.control.name))
+      .toEqual(shown ? ["ViewportDependent", "Sibling"] : ["Sibling"]);
+  });
+
 });

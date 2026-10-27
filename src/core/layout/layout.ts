@@ -365,10 +365,14 @@ export function autoLayoutChildren(
     if (control.properties.Visible === undefined) {
       return { control, visible: true as boolean | null };
     }
-    const selfSymbols = { ...symbols };
-    for (const key of ["Self.X", "Self.Y", "Self.Width", "Self.Height"]) {
-      delete selfSymbols[key];
-    }
+    // Parent and sibling symbols can be preview fallbacks, not source-proven
+    // runtime geometry. A guessed Parent.Width must never decide whether a
+    // child is absent from AutoLayout (especially behind a security gate).
+    // Only the selected App viewport and independently verified Self sizes
+    // are safe inputs for this source-only visibility check.
+    const selfSymbols: Record<string, StaticPowerFxValue> = {
+      "App.Width": context.appWidth, "App.Height": context.appHeight
+    };
     const fill = control.properties.FillPortions === undefined
       ? 0 : staticNumber(control.properties.FillPortions);
     const align = control.properties.AlignInContainer === undefined
