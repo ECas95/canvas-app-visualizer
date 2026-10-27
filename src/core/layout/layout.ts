@@ -166,7 +166,8 @@ function clamp(
 
 export function buildSiblingGeometrySymbols(
   controls: CanvasControl[],
-  context: LayoutContext
+  context: LayoutContext,
+  parentAutoLayout = false
 ): Record<string, StaticPowerFxValue> {
   const resolved: Record<string, StaticPowerFxValue> = {
     ...(context.symbols ?? {})
@@ -202,9 +203,13 @@ export function buildSiblingGeometrySymbols(
         ...(width !== null ? { "Self.Width": width } : {}),
         ...(height !== null && !autoHeightUnverified ? { "Self.Height": height } : {})
       };
-      const earlyX = control.properties.X === undefined
+      // An AutoLayout parent computes child X/Y. Serialized X/Y are not
+      // verified Self positions, even when they are numeric literals. A
+      // child Width/Height formula referencing Self.X/Y must stay unknown
+      // until the parent allocation is established.
+      const earlyX = parentAutoLayout ? null : control.properties.X === undefined
         ? 0 : staticNumber(control.properties.X, firstSymbols);
-      const earlyY = control.properties.Y === undefined
+      const earlyY = parentAutoLayout ? null : control.properties.Y === undefined
         ? 0 : staticNumber(control.properties.Y, firstSymbols);
       const positionedSymbols: Record<string, StaticPowerFxValue> = {
         ...firstSymbols,
@@ -240,6 +245,9 @@ export function buildSiblingGeometrySymbols(
       // AutoHeight is an output measurement. Never certify its source Height
       // for sibling formulas, even when a numeric Height was serialized.
       setNumber(control.name + ".Height", autoHeightUnverified ? null : finalHeight);
+      // X/Y belong to the parent's AutoLayout output, not to the authored
+      // source coordinates. Do not export them as sibling Power Fx facts.
+      if (parentAutoLayout) continue;
       setNumber(
         control.name + ".X",
         control.properties.X === undefined ? 0 : staticNumber(control.properties.X, finalSymbols)

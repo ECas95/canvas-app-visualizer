@@ -73,7 +73,9 @@ function flatten(
     parentWidth, parentHeight, appWidth, appHeight, templateWidth, templateHeight,
     symbols: simulationSymbols
   };
-  const siblingSymbols = buildSiblingGeometrySymbols(controls, baseContext);
+  const siblingSymbols = buildSiblingGeometrySymbols(
+    controls, baseContext, isAutoLayout(parentControl)
+  );
   const context = { ...baseContext, symbols: { ...siblingSymbols, ...simulationSymbols } };
   const positioned =
     parentControl && isAutoLayout(parentControl)
