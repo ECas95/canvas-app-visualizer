@@ -354,15 +354,57 @@ export function autoLayoutChildren(
   // neither hidden-child gap semantics nor unknown runtime visibility is
   // certified by the source. Do not fabricate records or access decisions.
   // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-horizontal-container
-  const children = parent.children.filter(control =>
-    control.properties.Visible === undefined ||
-    staticBoolean(control.properties.Visible, symbols) !== false
-  );
+  // Visible is evaluated in each child's own Self scope. Only authored,
+  // source-verifiable sizes may be used: AutoLayout computes X/Y, while
+  // FillPortions, Stretch, min/max constraints and AutoHeight may override
+  // the serialized Width/Height. Parent dimensions can themselves be preview
+  // fallbacks, so resolve child sizes using only literal Power Fx and the
+  // selected App viewport, not an unverified Parent or sibling measurement.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-horizontal-container
+  const childVisibility = parent.children.map(control => {
+    if (control.properties.Visible === undefined) {
+      return { control, visible: true as boolean | null };
+    }
+    const selfSymbols = { ...symbols };
+    for (const key of ["Self.X", "Self.Y", "Self.Width", "Self.Height"]) {
+      delete selfSymbols[key];
+    }
+    const fill = control.properties.FillPortions === undefined
+      ? 0 : staticNumber(control.properties.FillPortions);
+    const align = control.properties.AlignInContainer === undefined
+      ? "setbycontainer"
+      : previewLayoutEnum(control.properties.AlignInContainer, "AlignInContainer");
+    const inheritedAlign = parent.properties.LayoutAlignItems === undefined
+      ? "start"
+      : previewLayoutEnum(parent.properties.LayoutAlignItems, "LayoutAlignItems", symbols);
+    const fixedSize = fill === 0 && align !== null && align !== "stretch" &&
+      !(align === "setbycontainer" &&
+        (inheritedAlign === null || inheritedAlign === "stretch"));
+    if (fixedSize) {
+      const authoredSymbols = {
+        "App.Width": context.appWidth, "App.Height": context.appHeight
+      };
+      if (control.properties.LayoutMinWidth === undefined &&
+          control.properties.LayoutMaxWidth === undefined) {
+        const width = resolvedDimension(control.properties.Width, authoredSymbols);
+        if (width !== null) selfSymbols["Self.Width"] = width;
+      }
+      if (control.properties.LayoutMinHeight === undefined &&
+          control.properties.LayoutMaxHeight === undefined &&
+          !hasUnverifiedAutoHeight(control, authoredSymbols)) {
+        const height = resolvedDimension(control.properties.Height, authoredSymbols);
+        if (height !== null) selfSymbols["Self.Height"] = height;
+      }
+    }
+    return {
+      control,
+      visible: staticBoolean(control.properties.Visible, selfSymbols)
+    };
+  });
+  const children = childVisibility.filter(item => item.visible !== false)
+    .map(item => item.control);
   const visibilityAffectsLayout = children.length !== parent.children.length;
-  const visibilityUnknown = children.some(control =>
-    control.properties.Visible !== undefined &&
-    staticBoolean(control.properties.Visible, symbols) === null
-  );
+  const visibilityUnknown = childVisibility.some(item => item.visible === null);
   if (children.length === 0) return [];
 
   const resolvedDirection = previewLayoutEnum(parent.properties.LayoutDirection, "LayoutDirection", symbols);
