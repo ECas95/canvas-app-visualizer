@@ -340,10 +340,23 @@ export function autoLayoutChildren(
   parent: CanvasControl,
   context: LayoutContext
 ): PositionedControl[] {
-  const children = parent.children;
+  const symbols = layoutSymbols(context) ?? {};
+  // Source-only Visible can hide a child or depend on unavailable runtime
+  // state. Exclude only proven-hidden children from the approximate flow;
+  // neither hidden-child gap semantics nor unknown runtime visibility is
+  // certified by the source. Do not fabricate records or access decisions.
+  // https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-horizontal-container
+  const children = parent.children.filter(control =>
+    control.properties.Visible === undefined ||
+    staticBoolean(control.properties.Visible, symbols) !== false
+  );
+  const visibilityAffectsLayout = children.length !== parent.children.length;
+  const visibilityUnknown = children.some(control =>
+    control.properties.Visible !== undefined &&
+    staticBoolean(control.properties.Visible, symbols) === null
+  );
   if (children.length === 0) return [];
 
-  const symbols = layoutSymbols(context) ?? {};
   const resolvedDirection = previewLayoutEnum(parent.properties.LayoutDirection, "LayoutDirection", symbols);
   const direction = resolvedDirection ?? parent.layout?.toLowerCase() ?? "vertical";
   const directionUnknown = parent.properties.LayoutDirection !== undefined &&
@@ -513,7 +526,7 @@ export function autoLayoutChildren(
         y: horizontal ? cursorCross : cursorMain,
         width: Math.max(0, item.baseWidth),
         height: Math.max(0, item.baseHeight),
-        dynamic: false
+        dynamic: visibilityAffectsLayout || visibilityUnknown
       };
       cursorMain += mainSize + gap;
       lineCrossSize = Math.max(lineCrossSize, crossSize);
@@ -678,7 +691,8 @@ export function autoLayoutChildren(
       width: item.width,
       height: item.height,
       dynamic: item.fallback || wrapUncertain || directionUnknown ||
-        spacingUnknown || justifyUnknown || sizingUnknown || fillAllocationClamped
+        spacingUnknown || justifyUnknown || sizingUnknown || fillAllocationClamped ||
+        visibilityAffectsLayout || visibilityUnknown
     };
 
     cursor +=
