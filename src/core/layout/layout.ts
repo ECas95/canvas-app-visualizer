@@ -407,11 +407,14 @@ export function autoLayoutChildren(
     const selfSymbols: Record<string, StaticPowerFxValue> = {
       "App.Width": context.appWidth, "App.Height": context.appHeight
     };
+    // App-only conditions in FillPortions and AlignInContainer are verified
+    // at the selected viewport. Do not use Parent/sibling/runtime symbols:
+    // those could turn a permission-dependent Visible into a false certainty.
     const fill = control.properties.FillPortions === undefined
-      ? 0 : staticNumber(control.properties.FillPortions);
+      ? 0 : staticNumber(control.properties.FillPortions, selfSymbols);
     const align = control.properties.AlignInContainer === undefined
       ? "setbycontainer"
-      : previewLayoutEnum(control.properties.AlignInContainer, "AlignInContainer");
+      : previewLayoutEnum(control.properties.AlignInContainer, "AlignInContainer", selfSymbols);
     // Parent.Width/Height in the preview context may be fallback geometry,
     // not source-verified runtime dimensions. An inherited Stretch can
     // change Self.Width/Height and therefore a child's Visible formula.

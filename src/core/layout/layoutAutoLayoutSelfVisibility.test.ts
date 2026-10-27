@@ -159,4 +159,52 @@ describe("AutoLayout child Self visibility (source-only)", () => {
       .toEqual(shown ? ["ViewportDependent", "Sibling"] : ["Sibling"]);
   });
 
+  it.each([390, 768, 1366])(
+    "uses viewport-proven FillPortions for Self visibility at %i px", viewport => {
+      const rects = flow(viewport, [
+        child("Responsive", {
+          FillPortions: "=If(App.Width < 600, 0, 1)",
+          Visible: "=Self.Width < 80"
+        }),
+        child("Sibling")
+      ]);
+      expect(rects.map(item => item.control.name)).toEqual(
+        viewport === 390 ? ["Sibling"] : ["Responsive", "Sibling"]
+      );
+      if (viewport !== 390) expect(rects[0].sourceVisibility).toBe("unknown");
+    }
+  );
+
+  it.each([390, 768, 1366])(
+    "uses viewport-proven alignment for Self visibility at %i px", viewport => {
+      const rects = flow(viewport, [
+        child("Responsive", {
+          AlignInContainer: "=If(App.Width < 600, AlignInContainer.Start, AlignInContainer.Stretch)",
+          Visible: "=Self.Height < 20"
+        }),
+        child("Sibling")
+      ]);
+      expect(rects.map(item => item.control.name)).toEqual(
+        viewport === 390 ? ["Sibling"] : ["Responsive", "Sibling"]
+      );
+      if (viewport !== 390) expect(rects[0].sourceVisibility).toBe("unknown");
+    }
+  );
+
+  it("keeps runtime-dependent fill and alignment unknown even with viewport facts", () => {
+    const rects = flow(390, [
+      child("UnknownFill", {
+        FillPortions: "=If(varSqlPermission, 0, 1)",
+        Visible: "=Self.Width < 80"
+      }),
+      child("UnknownAlign", {
+        AlignInContainer: "=If(varSqlPermission, AlignInContainer.Start, AlignInContainer.Stretch)",
+        Visible: "=Self.Height < 20"
+      })
+    ]);
+    expect(rects.map(item => item.control.name)).toEqual(["UnknownFill", "UnknownAlign"]);
+    expect(rects.map(item => item.sourceVisibility)).toEqual(["unknown", "unknown"]);
+    expect(rects.every(item => item.rect.dynamic)).toBe(true);
+  });
+
 });
