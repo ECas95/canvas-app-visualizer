@@ -5,6 +5,7 @@ import {
   isGallery, type GalleryTemplateLayout
 } from "../core/layout/layout";
 import { previewChildClipPath } from "../core/layout/previewCorners";
+import { previewVisibility } from "../core/layout/previewAppearance";
 import { galleryReferencedFields, gallerySampleCells, galleryTemplatePlaceholderText }
   from "../core/layout/gallerySchemaPreview";
 import { CanvasVisualControl } from "./CanvasVisualControl";
@@ -44,6 +45,7 @@ export function GallerySamplePreview({
   const fields = galleryReferencedFields(gallery);
   const cells = template ? gallerySampleCells(template, x, y, sampleCount) : [];
   const galleryClip = clipPrefix + "-gallery";
+  let paintedControlBudget = 240;
 
   function paint(
     children: CanvasControl[], ox: number, oy: number,
@@ -64,6 +66,7 @@ export function GallerySamplePreview({
       : children.map((control, index) => ({ control, rect: controlRect(control, index, context) }));
 
     return positioned.slice(0, 120).map(({ control, rect }, index) => {
+      if (paintedControlBudget-- <= 0) return null;
       const cx = ox + rect.x, cy = oy + rect.y;
       const key = prefix + "-" + sampleIndex + "-" + index;
       const clipId = clipPrefix + "-node-" + key.replace(/[^a-zA-Z0-9_-]/g, "");
@@ -75,6 +78,8 @@ export function GallerySamplePreview({
         "Self.Width": rect.width, "Self.Height": rect.height,
         "Self.X": rect.x, "Self.Y": rect.y
       };
+      const visibility = previewVisibility(control, renderSymbols);
+      if (visibility === "hidden") return null;
       // No ThisItem values are invented: only the field name is inserted in
       // visibly bracketed sample text. Actual formula and control remain intact.
       const painted = mockTextControl(control, sampleIndex);
@@ -88,7 +93,8 @@ export function GallerySamplePreview({
         : null;
       const clipChildren = /(?:container|form|datacard)/i.test(control.controlType);
       return (
-        <g key={key} data-sample-template-control={control.name} pointerEvents="none">
+        <g key={key} data-sample-template-control={control.name}
+          data-sample-visibility={visibility} pointerEvents="none">
           <CanvasVisualControl control={painted} simulationSymbols={renderSymbols}
             x={cx} y={cy} width={rect.width} height={rect.height}
             clipId={clipId + "-text"} />
