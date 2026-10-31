@@ -1,0 +1,12 @@
+[
+  {
+    "Title": "Example Operations",
+    "Category": "Operations",
+    "IsEnabled": true
+  },
+  {
+    "Title": "Example Reporting",
+    "Category": "Reporting",
+    "IsEnabled": false
+  }
+]
