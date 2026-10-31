@@ -102,7 +102,7 @@ try {
         const rect = card.querySelector('[data-preview-gallery-template-fill="verified"]');
         return [Number(rect?.getAttribute("x")), Number(rect?.getAttribute("y"))];
       }),
-      iconPaths: [...element.querySelectorAll('[data-sample-template-control="GalleryRowIcon"] path')]
+      iconPaths: [...element.querySelectorAll('[data-sample-template-control="GalleryRowIcon"] svg[viewBox="0 0 24 24"] > path')]
         .map(icon => icon.getAttribute("d")),
       labels: element.textContent ?? "",
       localMode: element.querySelector('[data-preview-gallery-samples]')?.getAttribute("data-preview-gallery-samples")
