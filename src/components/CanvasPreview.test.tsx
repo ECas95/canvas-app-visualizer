@@ -105,6 +105,46 @@ function renderGalleryItems(items?: string) {
   return renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
 }
 
+describe("CanvasPreview opt-in synthetic gallery cards", () => {
+  it("uses real YAML template controls and clearly bracketed ThisItem placeholders", () => {
+    const caption = control("TemplateName", "Classic/Label@2.5.1", {
+      Text: "=ThisItem.Name", X: "=16", Y: "=36", Width: "=140", Height: "=32"
+    });
+    const container = control("Card", "GroupContainer@1.5.0", {
+      X: "=8", Y: "=8", Width: "=Parent.TemplateWidth - 16",
+      Height: "=Parent.TemplateHeight - 16",
+      Fill: "=RGBA(255,255,255,1)"
+    }, [caption, control("HiddenTemplateLabel", "Classic/Label@2.5.1", {
+      Text: '="Should stay hidden"', Visible: "=false",
+      X: "=16", Y: "=80", Width: "=140", Height: "=32"
+    })]);
+    const gallery = control("Gallery", "Gallery@2.15.0", {
+      X: "=24", Y: "=100", Width: "=1200", Height: "=580",
+      TemplateSize: "=292", TemplatePadding: "=8", WrapCount: "=3",
+      Items: "=Filter(colUnknown, IsEnabled)", Visible: "=varReady"
+    }, [container]);
+    gallery.variant = "Vertical";
+    const screen: CanvasScreen = {
+      id: "Demo", name: "Demo", properties: {}, children: [gallery],
+      sourceFile: "Src/Demo.pa.yaml", sourceFormat: "pa-yaml-v3"
+    };
+    const original = renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+    expect(original).not.toContain('data-preview-gallery-samples="synthetic"');
+    expect(original).toContain("Visible unknown");
+    const shown = renderToStaticMarkup(<CanvasPreview screen={screen}
+      initialGallerySamples={true} onSelect={() => {}} />);
+    expect(shown).toContain('data-preview-gallery-samples="synthetic"');
+    expect(shown).toContain('data-sample-card="6"');
+    expect(shown).toContain("TemplateName");
+    expect(shown).toContain("[Name #1]");
+    expect(shown).toContain("[Name #6]");
+    expect(shown).not.toContain("HiddenTemplateLabel");
+    expect(shown).not.toContain("Should stay hidden");
+    expect(shown).toContain("no database rows or access verified");
+    expect(shown).not.toContain("AVAILABLE");
+  });
+});
+
 describe("CanvasPreview gallery source vs runtime rows", () => {
   it("does not turn a SQL Items formula into a visible template row", () => {
     const html = renderGalleryItems("=Filter(Modules, IsEnabled)");

@@ -16,6 +16,8 @@ import { staticBoolean, staticNumber } from "../core/powerfx/staticEval";
 import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/layout/previewDataState";
 import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScopedState, type PreviewVariables } from "../core/powerfx/previewBehavior";
 import { CanvasVisualControl } from "./CanvasVisualControl";
+import { GallerySamplePreview } from "./GallerySamplePreview";
+import { galleryReferencedFields } from "../core/layout/gallerySchemaPreview";
 import { previewChildClipPath } from "../core/layout/previewCorners";
 import { previewClampScroll, previewOverflowMode, previewScrollRanges, previewScrollOverlayAnchors, previewScrolledPosition, previewWheelScroll,
   type PreviewScrollOffset, type PreviewScrollRange } from "../core/layout/previewOverflow";
@@ -28,6 +30,8 @@ interface Props {
   onSelect: (control: CanvasControl) => void;
   /** Optional initial inspection mode; defaults to the no-runtime-records visual view. */
   initialMode?: "visual" | "structure";
+  /** Testable, explicit opt-in. Default never fabricates gallery rows. */
+  initialGallerySamples?: boolean;
 }
 
 interface DrawItem {
@@ -266,11 +270,13 @@ function wireframeColor(type: string): string {
   return "#657285";
 }
 
-export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], initialMode = "visual" }: Props) {
+export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], initialMode = "visual", initialGallerySamples = false }: Props) {
   const [profile, setProfile] = useState<Profile>("desktop");
   const [mode, setMode] = useState<PreviewMode>(initialMode);
   const [zoom, setZoom] = useState<Zoom>("fit");
   const [focusSelection, setFocusSelection] = useState(false);
+  const [showGallerySamples, setShowGallerySamples] = useState(initialGallerySamples);
+  const [gallerySampleCount, setGallerySampleCount] = useState(6);
   const [interactive, setInteractive] = useState(false);
   const [scopedState, setScopedState] = useState<PreviewScopedState>({ globals: {}, context: {} });
   const [scrollOffsets, setScrollOffsets] = useState<Record<string, PreviewScrollOffset>>({});
@@ -471,6 +477,19 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
               onChange={event => setFocusSelection(event.target.checked)} />
             Isolate selection
           </label>
+          <label className="preview-focus" title="Gallery samples repeat YAML-defined template controls with bracketed field-name placeholders. No external records or permissions are used.">
+            <input type="checkbox" checked={showGallerySamples}
+              onChange={event => setShowGallerySamples(event.target.checked)} />
+            Gallery samples (synthetic)
+          </label>
+          {showGallerySamples && <label className="preview-choice">
+            <span>Samples</span>
+            <select aria-label="Synthetic gallery sample count"
+              value={gallerySampleCount}
+              onChange={event => setGallerySampleCount(Number(event.target.value))}>
+              <option value={1}>1</option><option value={3}>3</option><option value={6}>6</option>
+            </select>
+          </label>}
           <label className="preview-focus" title="Enable local-only, reversible behavior simulation">
             <input type="checkbox" checked={interactive} onChange={event => {
               setInteractive(event.target.checked);
@@ -530,7 +549,14 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
                       selectControl(item);
                     }
                   }}>
-                  {mode === "visual" && item.runtimeGalleryStateUnknown ? (
+                  {mode === "visual" && showGallerySamples &&
+                    galleryRecordsUnknown(item.control) ? (
+                    <GallerySamplePreview gallery={item.control} template={item.galleryTemplate}
+                      x={item.x} y={item.y} width={item.width} height={item.height}
+                      appWidth={width} appHeight={height}
+                      sampleCount={gallerySampleCount}
+                      clipPrefix={`${instanceId}-mock-${index}`} />
+                  ) : mode === "visual" && item.runtimeGalleryStateUnknown ? (
                     <>
                       <rect x={item.x} y={item.y} width={item.width} height={item.height}
                         fill="#f3f6fa" fillOpacity={0.8} stroke="#8194ac"
@@ -661,7 +687,22 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
       <div className="preview-note">
         <span>{mode === "visual" ? "Static visual approximation" : "Control structure"}</span>
         <span>{visibleItems.length} drawn nodes · {unresolved} unresolved layouts</span>
-        {mode === "visual" && visibleItems.some(item => galleryRecordsUnknown(item.control) && !item.visibilityUnknown) && (
+        {mode === "visual" && showGallerySamples && visibleItems.some(item => galleryRecordsUnknown(item.control)) && (
+          <span className="preview-unknown-state" role="status">
+            SYNTHETIC gallery placeholders — sample cards are not SQL data or authorized app access
+          </span>
+        )}
+        {mode === "visual" && showGallerySamples &&
+          visibleItems.filter(item => galleryRecordsUnknown(item.control)).slice(0, 2).map(item => {
+            const fields = galleryReferencedFields(item.control);
+            return <span key={item.control.id} className="preview-unknown-state"
+              title="Inferred from ThisItem / ThisRecord in the source template; not a verified database schema.">
+              {item.control.name}: template columns {fields.length
+                ? fields.slice(0, 9).join(", ") + (fields.length > 9 ? " …" : "")
+                : "not inferred"}
+            </span>;
+          })}
+        {mode === "visual" && !showGallerySamples && visibleItems.some(item => galleryRecordsUnknown(item.control) && !item.visibilityUnknown) && (
           <span className="preview-unknown-state" role="status">
             Gallery rows unavailable — use Structure for template geometry
           </span>
