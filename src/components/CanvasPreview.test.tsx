@@ -282,6 +282,37 @@ describe("local screenshot reference overlay", () => {
   });
 });
 
+describe("nested Gallery parent formula scope", () => {
+  it("never applies Gallery Parent.TemplateWidth to children of nested containers", () => {
+    const nestedLabel = control("NestedRequiresCorrectParent", "Classic/Label@2.5.1", {
+      Text: '="This nested formula remains unresolved"',
+      Visible: "=Parent.TemplateWidth < 1",
+      X: "=12", Y: "=16", Width: "=140", Height: "=30"
+    });
+    const card = control("CardContainer", "GroupContainer@1.3.0", {
+      X: "=8", Y: "=8", Width: "=Parent.TemplateWidth - 16",
+      Height: "=Parent.TemplateHeight - 16"
+    }, [nestedLabel]);
+    const gallery = control("Cards", "Classic/VerticalGallery@2.3.0", {
+      X: "=20", Y: "=100", Width: "=780", Height: "=320",
+      Items: "=RemoteCatalog", TemplateSize: "=150",
+      TemplatePadding: "=8", WrapCount: "=2"
+    }, [card]);
+    gallery.variant = "Vertical";
+    const screen: CanvasScreen = {
+      id: "NestedFixture", name: "NestedFixture", properties: {},
+      children: [gallery], sourceFormat: "pa-yaml-v3",
+      sourceFile: "Src/NestedFixture.pa.yaml"
+    };
+    const html = renderToStaticMarkup(<CanvasPreview screen={screen}
+      initialGallerySamples={true} onSelect={() => {}} />);
+    expect(html).toContain('data-sample-template-control="NestedRequiresCorrectParent"');
+    expect(html).toContain('data-sample-visibility="unknown"');
+    expect(html).toContain("This nested formula remains unresolved");
+    expect(html).toContain('data-preview-gallery-samples="synthetic"');
+  });
+});
+
 describe("CanvasPreview gallery source vs runtime rows", () => {
   it("does not turn a SQL Items formula into a visible template row", () => {
     const html = renderGalleryItems("=Filter(Modules, IsEnabled)");

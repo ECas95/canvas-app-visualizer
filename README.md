@@ -11,6 +11,16 @@ Open a modern `.msapp` package or current `.pa.yaml` source and inspect screens,
 
 > Canvas App Visualizer is an independent project and is not affiliated with or endorsed by Microsoft. It does not replace Power Apps Studio or the Power Apps runtime.
 
+## v0.5.0 — Quantitative visual difference measurement
+
+- **Measure difference:** compare a matching local screenshot against the current source-defined Canvas SVG. See mean RGB absolute error, RMSE, and the percentage of pixels above a fixed threshold (32/255).
+- **Heatmap:** toggle an alpha-scaled red overlay. The reference and prior heatmap are excluded from the pixels being measured.
+- **Source-region diagnosis:** rank overlapping control bounds and Gallery template sample cells by local error; click an item to inspect its source control.
+- **Nested layout fidelity:** Gallery template geometry is scoped to the template's immediate descendants; nested containers use their own parent dimensions, avoiding invalid `Parent.TemplateWidth` leakage.
+- **Privacy:** comparison is performed entirely in the browser. Local screenshots, local data fixtures and heatmaps are not uploaded or stored.
+
+See [Quantitative visual difference guide](docs/QUANTITATIVE_VISUAL_DIFF.md). This debugging metric does not prove pixel-perfect equivalence with Power Apps.
+
 ## v0.4.0 — Reference screenshot comparison and Gallery text
 
 - **Compare against Power Apps:** load a cropped **local PNG/JPEG/WebP** screenshot of the original Canvas at the same simulated viewport, toggle the overlay and adjust its opacity to inspect alignment of controls. Exact pixel dimensions are checked; mismatched screenshots are not stretched.

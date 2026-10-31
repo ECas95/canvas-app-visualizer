@@ -146,7 +146,22 @@ try {
     path: resolve(output, "desktop-reference-overlay.png"),
     animations: "disabled"
   });
+  await page.getByRole("button", { name: "Measure difference" }).click();
+  const metrics = page.getByRole("region", { name: "Visual difference metrics" });
+  await metrics.waitFor({ timeout: 20000 });
+  const diffText = await metrics.textContent();
+  assert.ok(diffText?.includes("Mean RGB error:"));
+  assert.ok(diffText?.includes("Different pixels"));
+  assert.equal(await svg.locator('[data-preview-diff-heatmap="active"]').count(), 1);
+  const rankedRegions = await metrics.locator(".preview-diff-regions button").allTextContents();
+  assert.ok(rankedRegions.some(text => text.includes("sample card")));
+  report.push({ scenario: "quantitative-diff", hasMetrics: true,
+    hasHeatmap: true, gallerySlotRanked: true });
+  await page.locator(".canvas-stage").screenshot({
+    path: resolve(output, "desktop-difference-heatmap.png"), animations: "disabled"
+  });
   await page.getByLabel("Simulated viewport").selectOption("tablet");
+  assert.equal(await metrics.count(), 0);
   assert.equal(await svg.locator('[data-preview-reference="local-overlay"]').count(), 0);
   assert.ok((await page.locator(".preview-note").textContent()).includes("Overlay is withheld"));
   await page.getByLabel("Simulated viewport").selectOption("desktop");
@@ -154,7 +169,7 @@ try {
   report.push({ scenario: "reference-overlay", viewport: "1366x768",
     localOnly: true, displayedAtMatchingViewport: true, withheldAtMismatchedViewport: true });
   await writeFile(resolve(output, "geometry.json"), JSON.stringify(report, null, 2) + "\n");
-  console.log("Chromium visual smoke: 3 profiles, 8 screenshots including local Gallery and reference overlay; source geometry verified.");
+  console.log("Chromium visual smoke: 3 profiles, 9 screenshots including Gallery, reference and quantitative heatmap; source geometry verified.");
 } finally {
   await browser?.close();
   await server.close();
