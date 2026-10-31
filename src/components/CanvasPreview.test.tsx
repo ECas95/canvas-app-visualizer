@@ -246,6 +246,36 @@ describe("CanvasPreview Gallery local row visual fidelity", () => {
   });
 });
 
+describe("local screenshot reference overlay", () => {
+  const screen: CanvasScreen = {
+    id: "Reference", name: "Reference", sourceFile: "Src/Reference.pa.yaml",
+    sourceFormat: "pa-yaml-v3", properties: {}, children: []
+  };
+  const reference = {
+    dataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/nAAAAABJRU5ErkJggg==",
+    width: 1366, height: 768, name: "Power Apps original cropped.png"
+  };
+  it("renders same-viewport local reference without changing source controls", () => {
+    const original = renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+    expect(original).not.toContain('data-preview-reference="local-overlay"');
+    const compare = renderToStaticMarkup(<CanvasPreview screen={screen}
+      initialReference={reference} onSelect={() => {}} />);
+    expect(compare).toContain('data-preview-reference="local-overlay"');
+    expect(compare).toContain('opacity="0.5"');
+    expect(compare).toContain('aria-label="Reference screenshot opacity"');
+    expect(compare).toContain('Power Apps original cropped.png');
+    expect(compare).toContain(reference.dataUrl);
+    expect(compare).toContain("browser-only, no upload or pixel-parity claim");
+  });
+  it("withholds unmatched viewport references instead of stretching screenshots", () => {
+    const compare = renderToStaticMarkup(<CanvasPreview screen={screen}
+      initialReference={{ ...reference, width: 1024, height: 768 }}
+      onSelect={() => {}} />);
+    expect(compare).not.toContain('data-preview-reference="local-overlay"');
+    expect(compare).toContain("Overlay is withheld until the matching viewport is selected.");
+  });
+});
+
 describe("CanvasPreview gallery source vs runtime rows", () => {
   it("does not turn a SQL Items formula into a visible template row", () => {
     const html = renderGalleryItems("=Filter(Modules, IsEnabled)");
