@@ -141,6 +141,24 @@ export function previewIconName(
     if (args.length < 3) return null;
     const selector = evaluateStaticPowerFx(expression(args[0]), { symbols });
     if (selector === null || !["boolean", "number", "string"].includes(typeof selector)) return null;
+    if (typeof selector === "string") {
+      // The source-only parser cannot distinguish arbitrary text literals
+      // from Icon enum impostors without Microsoft's type binder. Restrict
+      // string Switch matching to an explicitly supplied local row field.
+      // A SQL-backed ThisItem with no local fixture always remains unknown.
+      const reference = args[0];
+      if (reference.length !== 3 ||
+          reference[0].kind !== "identifier" ||
+          !/^(ThisItem|ThisRecord)$/i.test(reference[0].value) ||
+          reference[1].value !== "." ||
+          !["identifier", "quotedIdentifier"].includes(reference[2].kind)) return null;
+      const field = reference[2].kind === "quotedIdentifier"
+        ? reference[2].value.slice(1, -1).replaceAll("''", "'")
+        : reference[2].value;
+      const key = (reference[0].value + "." + field).toLowerCase();
+      if (!Object.entries(symbols ?? {}).some(([name, value]) =>
+        name.toLowerCase() === key && typeof value === "string")) return null;
+    }
     for (let index = 1; index + 1 < args.length; index += 2) {
       const matchTokens = args[index];
       if (typeof selector === "string" &&
