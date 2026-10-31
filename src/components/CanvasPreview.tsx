@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import type { CanvasControl, CanvasScreen, PreviewMediaAsset } from "../types/canvas";
 import {
   autoLayoutChildren,
@@ -24,6 +24,8 @@ import { previewChildClipPath } from "../core/layout/previewCorners";
 import { previewClampScroll, previewOverflowMode, previewScrollRanges, previewScrollOverlayAnchors, previewScrolledPosition, previewWheelScroll,
   type PreviewScrollOffset, type PreviewScrollRange } from "../core/layout/previewOverflow";
 import { Icon } from "./Icon";
+import { previewReferenceFileKind, referenceViewportMatches,
+  MAX_REFERENCE_SCREENSHOT_BYTES } from "../core/layout/previewReference";
 
 interface Props {
   screen?: CanvasScreen;
@@ -36,6 +38,8 @@ interface Props {
   initialGallerySamples?: boolean;
   /** Optional test fixture, not an application-runtime or SQL data source. */
   initialGallerySnapshot?: { galleryId: string; rows: GalleryLocalRow[] };
+  /** Synthetic test-only reference input; never fetched by the portal. */
+  initialReference?: { dataUrl: string; width: number; height: number; name: string };
 }
 
 interface DrawItem {
@@ -274,7 +278,7 @@ function wireframeColor(type: string): string {
   return "#657285";
 }
 
-export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], initialMode = "visual", initialGallerySamples = false, initialGallerySnapshot }: Props) {
+export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], initialMode = "visual", initialGallerySamples = false, initialGallerySnapshot, initialReference }: Props) {
   const [profile, setProfile] = useState<Profile>("desktop");
   const [mode, setMode] = useState<PreviewMode>(initialMode);
   const [zoom, setZoom] = useState<Zoom>("fit");
@@ -284,6 +288,11 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
   const [galleryTargetId, setGalleryTargetId] = useState("");
   const [localGallerySnapshot, setLocalGallerySnapshot] = useState(initialGallerySnapshot ?? null);
   const [gallerySnapshotError, setGallerySnapshotError] = useState<string | null>(null);
+  const [reference, setReference] = useState(initialReference ?? null);
+  const [referenceOpacity, setReferenceOpacity] = useState(50);
+  const [referenceEnabled, setReferenceEnabled] = useState(true);
+  const [referenceError, setReferenceError] = useState<string | null>(null);
+  const referenceRequest = useRef(0);
   const [interactive, setInteractive] = useState(false);
   const [scopedState, setScopedState] = useState<PreviewScopedState>({ globals: {}, context: {} });
   const [scrollOffsets, setScrollOffsets] = useState<Record<string, PreviewScrollOffset>>({});
@@ -298,8 +307,56 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
     setLocalGallerySnapshot(null);
     setGalleryTargetId("");
     setGallerySnapshotError(null);
+    referenceRequest.current += 1;
+    setReference(null);
+    setReferenceError(null);
     setSimulationMessage("Simulation off. No behavior formulas are executed.");
   }, [screen]);
+
+  async function loadReferenceScreenshot(file: File | undefined) {
+    if (!file) return;
+    const request = ++referenceRequest.current;
+    setReferenceError(null);
+    if (file.size <= 0 || file.size > MAX_REFERENCE_SCREENSHOT_BYTES) {
+      setReferenceError("Reference image must be 8 MB or less.");
+      return;
+    }
+    try {
+      const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+      if (!previewReferenceFileKind(bytes, file.type)) {
+        setReferenceError("Only valid local PNG, JPEG or WebP images are supported.");
+        return;
+      }
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("Could not read local reference image."));
+        reader.onload = () => {
+          const value = reader.result;
+          if (typeof value === "string") resolve(value);
+          else reject(new Error("Unsupported local image result."));
+        };
+        reader.readAsDataURL(file);
+      });
+      const dimensions = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+        const image = new Image();
+        image.onerror = () => reject(new Error("Invalid image data."));
+        image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+        image.src = dataUrl;
+      });
+      if (referenceRequest.current !== request) return;
+      if (!referenceViewportMatches(dimensions.width, dimensions.height, width, height)) {
+        setReferenceError("Screenshot is " + dimensions.width + " × " + dimensions.height +
+          "; crop it to exactly " + width + " × " + height +
+          " pixels (Canvas content only, without the Power Apps editor).");
+        return;
+      }
+      setReference({ dataUrl, ...dimensions, name: file.name });
+      setReferenceEnabled(true);
+    } catch {
+      if (referenceRequest.current === request)
+        setReferenceError("Could not decode this local screenshot.");
+    }
+  }
 
   function simulate(formula: unknown) {
     const result = simulateScopedPreviewBehavior(formula, scopedState);
@@ -510,6 +567,35 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
               <option value="125">125%</option>
             </select>
           </label>
+          {mode === "visual" && <label className="preview-choice"
+            title="Select a cropped screenshot of the original Canvas runtime. No file leaves this browser.">
+            <span>Reference image</span>
+            <input type="file" accept="image/png,image/jpeg,image/webp"
+              aria-label="Load local Power Apps reference screenshot"
+              onChange={event => {
+                const file = event.currentTarget.files?.[0];
+                event.currentTarget.value = "";
+                void loadReferenceScreenshot(file);
+              }} />
+          </label>}
+          {mode === "visual" && reference && <label className="preview-focus">
+            <input type="checkbox" checked={referenceEnabled}
+              onChange={event => setReferenceEnabled(event.target.checked)} />
+            Overlay reference
+          </label>}
+          {mode === "visual" && reference && referenceEnabled && <label className="preview-choice">
+            <span>Opacity {referenceOpacity}%</span>
+            <input type="range" min="0" max="100" step="5"
+              aria-label="Reference screenshot opacity"
+              value={referenceOpacity}
+              onChange={event => setReferenceOpacity(Number(event.target.value))} />
+          </label>}
+          {reference && <button type="button" className="simulation-action"
+            onClick={() => {
+              referenceRequest.current += 1;
+              setReference(null);
+              setReferenceError(null);
+            }}>Clear reference</button>}
           <label className="preview-focus">
             <input type="checkbox" checked={focusSelection} disabled={!target}
               onChange={event => setFocusSelection(event.target.checked)} />
@@ -751,10 +837,25 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
                 </g>
               );
             })}
+            {mode === "visual" && reference && referenceEnabled &&
+              referenceViewportMatches(reference.width, reference.height, width, height) && (
+                <g data-preview-reference="local-overlay" pointerEvents="none" aria-hidden="true">
+                  <image x={0} y={0} width={width} height={height}
+                    href={reference.dataUrl} preserveAspectRatio="none"
+                    opacity={referenceOpacity / 100} />
+                </g>
+              )}
           </svg>
         </div>
       </div>
       <div className="preview-note">
+        {referenceError && <span className="preview-unknown-state" role="alert">{referenceError}</span>}
+        {reference && !referenceViewportMatches(reference.width, reference.height, width, height) &&
+          <span className="preview-unknown-state" role="status">
+            Reference {reference.width} × {reference.height} differs from viewport {width} × {height}.
+            Overlay is withheld until the matching viewport is selected.
+          </span>}
+        {reference && <span>Reference: {reference.name} · browser-only, no upload or pixel-parity claim</span>}
         <span>{mode === "visual" ? "Static visual approximation" : "Control structure"}</span>
         <span>{visibleItems.length} drawn nodes · {unresolved} unresolved layouts</span>
         {mode === "visual" && showGallerySamples && visibleItems.some(item => galleryRecordsUnknown(item.control)) && (
