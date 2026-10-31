@@ -458,6 +458,64 @@ class Parser {
       return value.replace(/^ +| +$/g, "");
     }
 
+    // Local Gallery strings: safe scalar-only subset of documented Power Fx
+    // text transformations. Unknown records, tables, locale-sensitive values
+    // and oversized outputs remain unresolved.
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-left-mid-right
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-replace-substitute
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-concatenate
+    if (["left", "right", "mid", "substitute", "concatenate"].includes(name)) {
+      const textOnly = args.every(arg => typeof arg === "string");
+      const bounded = (value: string) => value.length <= 4096 &&
+        Array.from(value).every(char => char.charCodeAt(0) <= 0x7f);
+      if (name === "concatenate") {
+        if (args.length < 1 || !textOnly) return null;
+        const joined = (args as string[]).join("");
+        return bounded(joined) ? joined : null;
+      }
+      const input = args[0];
+      if (typeof input !== "string" || !bounded(input)) return null;
+      if (name === "left" || name === "right" || name === "mid") {
+        const countIndex = name === "mid" ? 2 : 1;
+        const expectedLengths = name === "mid" ? [2, 3] : [2];
+        if (!expectedLengths.includes(args.length)) return null;
+        const startingPosition = name === "mid" ? args[1] : 1;
+        if (typeof startingPosition !== "number" || !Number.isInteger(startingPosition) || startingPosition < 1) return null;
+        const count = args[countIndex] ?? (name === "mid" && args.length === 2
+          ? input.length : null);
+        if (typeof count !== "number" || !Number.isInteger(count) || count < 0) return null;
+        if (name === "left") return input.slice(0, count);
+        if (name === "right") return input.slice(Math.max(0, input.length - count));
+        // Mid beyond the source length returns Blank in Power Fx; this
+        // scalar preview cannot distinguish Blank from unknown, so withhold it.
+        if (startingPosition > input.length) return null;
+        return input.slice(startingPosition - 1, startingPosition - 1 + count);
+      }
+      if (name === "substitute") {
+        if (args.length !== 3 && args.length !== 4) return null;
+        const [source, oldText, replacement, instance] = args;
+        if (typeof oldText !== "string" || typeof replacement !== "string" ||
+            !bounded(oldText) || !bounded(replacement) || oldText.length === 0) return null;
+        if (args.length === 4 && (typeof instance !== "number" ||
+            !Number.isInteger(instance) || instance <= 0)) return null;
+        if (args.length === 3) {
+          const replaced = (source as string).split(oldText).join(replacement);
+          return bounded(replaced) ? replaced : null;
+        }
+        let cursor = 0, current = 0, position = -1;
+        while (cursor <= input.length) {
+          const found = input.indexOf(oldText, cursor);
+          if (found < 0) break;
+          current++;
+          if (current === instance) { position = found; break; }
+          cursor = found + oldText.length;
+        }
+        if (position < 0) return input;
+        const replaced = input.slice(0, position) + replacement + input.slice(position + oldText.length);
+        return bounded(replaced) ? replaced : null;
+      }
+    }
+
     // Len on a verified text scalar can drive label-dependent geometry.
     // Tables and unresolved input/control values are intentionally unsupported.
     // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-len

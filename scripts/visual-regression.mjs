@@ -1,6 +1,6 @@
 /**
  * Browser-level Canvas renderer regression: synthetic source only.
- * Captures six real Chromium screenshots and verifies SVG geometry at
+ * Captures synthetic Chromium screenshots and verifies SVG geometry at
  * desktop/tablet/phone profiles. No Power Apps service, SQL or login.
  *
  * The images document this renderer, not pixel parity with Power Apps Studio.
@@ -122,8 +122,39 @@ try {
   });
   report.push({ scenario: "local-gallery", cards: local.cards,
     fills: local.fills, positions: local.positions, iconCount: local.iconPaths.length });
+  // Compare mode: local user reference, exact 1366x768 Canvas dimensions.
+  // Construct a generated PNG solely inside Chromium; never use private
+  // Power Apps screenshots or upload images to a service.
+  const referencePng = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1366; canvas.height = 768;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Canvas 2D unavailable");
+    context.fillStyle = "#c6d9ee";
+    context.fillRect(0, 0, 1366, 768);
+    return canvas.toDataURL("image/png").split(",")[1];
+  });
+  await page.getByLabel("Load local Power Apps reference screenshot").setInputFiles({
+    name: "synthetic-reference.png", mimeType: "image/png",
+    buffer: Buffer.from(referencePng, "base64")
+  });
+  const overlay = svg.locator('[data-preview-reference="local-overlay"]');
+  await overlay.waitFor({ timeout: 15000 });
+  assert.equal(await overlay.locator("image").getAttribute("opacity"), "0.5");
+  assert.ok((await page.locator(".preview-note").textContent()).includes("synthetic-reference.png"));
+  await page.locator(".canvas-stage").screenshot({
+    path: resolve(output, "desktop-reference-overlay.png"),
+    animations: "disabled"
+  });
+  await page.getByLabel("Simulated viewport").selectOption("tablet");
+  assert.equal(await svg.locator('[data-preview-reference="local-overlay"]').count(), 0);
+  assert.ok((await page.locator(".preview-note").textContent()).includes("Overlay is withheld"));
+  await page.getByLabel("Simulated viewport").selectOption("desktop");
+  assert.equal(await svg.locator('[data-preview-reference="local-overlay"]').count(), 1);
+  report.push({ scenario: "reference-overlay", viewport: "1366x768",
+    localOnly: true, displayedAtMatchingViewport: true, withheldAtMismatchedViewport: true });
   await writeFile(resolve(output, "geometry.json"), JSON.stringify(report, null, 2) + "\n");
-  console.log("Chromium visual smoke: 3 profiles, 7 screenshots including local Gallery; geometry and per-row source-driven paint verified.");
+  console.log("Chromium visual smoke: 3 profiles, 8 screenshots including local Gallery and reference overlay; source geometry verified.");
 } finally {
   await browser?.close();
   await server.close();

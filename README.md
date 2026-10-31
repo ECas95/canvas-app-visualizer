@@ -11,6 +11,15 @@ Open a modern `.msapp` package or current `.pa.yaml` source and inspect screens,
 
 > Canvas App Visualizer is an independent project and is not affiliated with or endorsed by Microsoft. It does not replace Power Apps Studio or the Power Apps runtime.
 
+## v0.4.0 — Reference screenshot comparison and Gallery text
+
+- **Compare against Power Apps:** load a cropped **local PNG/JPEG/WebP** screenshot of the original Canvas at the same simulated viewport, toggle the overlay and adjust its opacity to inspect alignment of controls. Exact pixel dimensions are checked; mismatched screenshots are not stretched.
+- **Safe local-only:** reference files are never uploaded or persisted. The renderer accepts bounded raster types only (up to 8 MB), and changing screens clears the reference.
+- **Richer ThisItem formulas:** source labels can now use bounded scalar `Left`, `Right`, `Mid`, `Substitute` and `Concatenate` on known browser-local JSON records. SQL values and locale-sensitive data are not guessed.
+- **Browser regression:** an eighth synthetic Chromium screenshot exercises the overlay and mismatched viewport protection.
+
+See [Screenshot comparison instructions](docs/SCREENSHOT_COMPARISON.md). This is manual visual comparison, **not an automatic claim of pixel-perfect fidelity** with Power Apps Studio.
+
 ## Browser-local Gallery data fixtures (October 2026)
 
 The Visual preview can now accept an **optional local JSON array** of 1–6 example rows for a selected Gallery. It binds scalar text, Boolean and numeric values to `ThisItem.*` formulas within the **actual YAML-defined Gallery card template**, so labels, conditional badges, colors and other resolvable properties can be inspected without SQL/Dataverse connections.

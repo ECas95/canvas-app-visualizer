@@ -197,6 +197,10 @@ describe("CanvasPreview Gallery local row visual fidelity", () => {
     const label = control("ModuleLabel", "Classic/Label@2.5.1", {
       Text: "=ThisItem.Name", X: "=72", Y: "=22", Width: "=230", Height: "=42"
     });
+    const shortened = control("ModuleShortName", "Classic/Label@2.5.1", {
+      Text: '=Concatenate(Left(ThisItem.Name, 6), "-", Substitute(ThisItem.Category, " ", "_"))',
+      X: "=72", Y: "=69", Width: "=260", Height: "=28"
+    });
     const logo = control("ModuleLogo", "Classic/Image@2.3.0", {
       Image: "=Media.DemoLogo", X: "=300", Y: "=22", Width: "=32", Height: "=32"
     });
@@ -204,7 +208,7 @@ describe("CanvasPreview Gallery local row visual fidelity", () => {
       X: "=24", Y: "=90", Width: "=800", Height: "=360",
       Items: "=SQLCatalog", TemplateSize: "=180", WrapCount: "=2",
       TemplateFill: "=If(ThisItem.IsEnabled, Color.Green, Color.Red)"
-    }, [icon, label, logo]);
+    }, [icon, label, shortened, logo]);
     gallery.variant = "Vertical";
     const screen: CanvasScreen = {
       id: "Modules", name: "Modules", properties: {}, children: [gallery],
@@ -229,6 +233,8 @@ describe("CanvasPreview Gallery local row visual fidelity", () => {
     expect(local).toContain('d="' + PREVIEW_ICON_PATHS.document + '"');
     expect(local).toContain(logoAsset.dataUrl);
     expect(local).toContain("Module A");
+    expect(local).toContain("Module-Operations");
+    expect(local).toContain("Module-Reporting");
     expect(local).toContain("Module B");
     expect(local).not.toContain("LOCAL #3");
     expect(local).toContain("runtime Gallery.Items and access are not verified");
@@ -243,6 +249,36 @@ describe("CanvasPreview Gallery local row visual fidelity", () => {
       screen={screen} onSelect={() => {}} />);
     expect(sourceOnly).not.toContain('data-preview-gallery-template-fill="verified"');
     expect(sourceOnly).not.toContain('data-sample-card="1"');
+  });
+});
+
+describe("local screenshot reference overlay", () => {
+  const screen: CanvasScreen = {
+    id: "Reference", name: "Reference", sourceFile: "Src/Reference.pa.yaml",
+    sourceFormat: "pa-yaml-v3", properties: {}, children: []
+  };
+  const reference = {
+    dataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/nAAAAABJRU5ErkJggg==",
+    width: 1366, height: 768, name: "Power Apps original cropped.png"
+  };
+  it("renders same-viewport local reference without changing source controls", () => {
+    const original = renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+    expect(original).not.toContain('data-preview-reference="local-overlay"');
+    const compare = renderToStaticMarkup(<CanvasPreview screen={screen}
+      initialReference={reference} onSelect={() => {}} />);
+    expect(compare).toContain('data-preview-reference="local-overlay"');
+    expect(compare).toContain('opacity="0.5"');
+    expect(compare).toContain('aria-label="Reference screenshot opacity"');
+    expect(compare).toContain('Power Apps original cropped.png');
+    expect(compare).toContain(reference.dataUrl);
+    expect(compare).toContain("browser-only, no upload or pixel-parity claim");
+  });
+  it("withholds unmatched viewport references instead of stretching screenshots", () => {
+    const compare = renderToStaticMarkup(<CanvasPreview screen={screen}
+      initialReference={{ ...reference, width: 1024, height: 768 }}
+      onSelect={() => {}} />);
+    expect(compare).not.toContain('data-preview-reference="local-overlay"');
+    expect(compare).toContain("Overlay is withheld until the matching viewport is selected.");
   });
 });
 
