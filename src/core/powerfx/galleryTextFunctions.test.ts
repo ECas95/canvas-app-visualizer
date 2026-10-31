@@ -29,6 +29,7 @@ describe("bounded Power Fx ThisItem scalar text functions", () => {
       "=Left(ThisItem.Missing, 3)", "=Right(SQL.Name, 3)",
       '=Substitute(ThisItem.Missing, "a", "b")',
       "=Mid(ThisItem.Name, -2, 3)", "=Mid(ThisItem.Name, 0, 3)",
+      "=Mid(ThisItem.Name, 99, 2)",
       "=Right(ThisItem.Name, 1.5)", "=Left(ThisItem.Name)",
       '=Substitute(ThisItem.Code, "", "x")',
       '=Substitute(ThisItem.Code, "CA-7", "JOB", 0)',
