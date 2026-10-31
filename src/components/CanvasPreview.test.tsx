@@ -114,7 +114,10 @@ describe("CanvasPreview opt-in synthetic gallery cards", () => {
       X: "=8", Y: "=8", Width: "=Parent.TemplateWidth - 16",
       Height: "=Parent.TemplateHeight - 16",
       Fill: "=RGBA(255,255,255,1)"
-    }, [caption]);
+    }, [caption, control("HiddenTemplateLabel", "Classic/Label@2.5.1", {
+      Text: '="Should stay hidden"', Visible: "=false",
+      X: "=16", Y: "=80", Width: "=140", Height: "=32"
+    })]);
     const gallery = control("Gallery", "Gallery@2.15.0", {
       X: "=24", Y: "=100", Width: "=1200", Height: "=580",
       TemplateSize: "=292", TemplatePadding: "=8", WrapCount: "=3",
@@ -135,6 +138,8 @@ describe("CanvasPreview opt-in synthetic gallery cards", () => {
     expect(shown).toContain("TemplateName");
     expect(shown).toContain("[Name #1]");
     expect(shown).toContain("[Name #6]");
+    expect(shown).not.toContain("HiddenTemplateLabel");
+    expect(shown).not.toContain("Should stay hidden");
     expect(shown).toContain("no database rows or access verified");
     expect(shown).not.toContain("AVAILABLE");
   });
