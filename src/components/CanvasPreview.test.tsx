@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CanvasControl, CanvasScreen } from "../types/canvas";
 import { CanvasPreview } from "./CanvasPreview";
+import { PREVIEW_ICON_PATHS } from "../core/layout/previewIcon";
 
 function control(name: string, type: string, properties: Record<string, unknown>,
   children: CanvasControl[] = []): CanvasControl {
@@ -184,6 +185,55 @@ describe("CanvasPreview local JSON gallery record preview", () => {
     expect(html).toContain("user-provided visual records");
     expect(html).toContain("runtime Gallery.Items and access are not verified");
     expect(html).toContain('aria-label="Load local gallery JSON records"');
+  });
+});
+
+describe("CanvasPreview Gallery local row visual fidelity", () => {
+  it("paints verified per-record TemplateFill and icons without inventing SQL rows", () => {
+    const icon = control("ModuleIcon", "Classic/Icon@2.5.0", {
+      Icon: '=Switch(ThisItem.Category, "Operations", Icon.Settings, "Reporting", Icon.Document, Icon.Information)',
+      X: "=20", Y: "=22", Width: "=42", Height: "=42"
+    });
+    const label = control("ModuleLabel", "Classic/Label@2.5.1", {
+      Text: "=ThisItem.Name", X: "=72", Y: "=22", Width: "=230", Height: "=42"
+    });
+    const gallery = control("Cards", "Classic/VerticalGallery@2.3.0", {
+      X: "=24", Y: "=90", Width: "=800", Height: "=360",
+      Items: "=SQLCatalog", TemplateSize: "=180", WrapCount: "=2",
+      TemplateFill: "=If(ThisItem.IsEnabled, Color.Green, Color.Red)"
+    }, [icon, label]);
+    gallery.variant = "Vertical";
+    const screen: CanvasScreen = {
+      id: "Modules", name: "Modules", properties: {}, children: [gallery],
+      sourceFile: "Src/Modules.pa.yaml", sourceFormat: "pa-yaml-v3"
+    };
+    const local = renderToStaticMarkup(<CanvasPreview
+      screen={screen} initialGallerySamples={true}
+      initialGallerySnapshot={{ galleryId: "Cards", rows: [
+        { Name: "Module A", Category: "Operations", IsEnabled: true },
+        { Name: "Module B", Category: "Reporting", IsEnabled: false }
+      ] }} onSelect={() => {}} />);
+    expect(local).toContain('data-preview-gallery-samples="local-snapshot"');
+    expect(local).toContain('data-preview-gallery-template-fill="verified"');
+    expect(local).toContain('fill="#008000"');
+    expect(local).toContain('fill="#ff0000"');
+    expect(local).toContain('d="' + PREVIEW_ICON_PATHS.settings + '"');
+    expect(local).toContain('d="' + PREVIEW_ICON_PATHS.document + '"');
+    expect(local).toContain("Module A");
+    expect(local).toContain("Module B");
+    expect(local).not.toContain("LOCAL #3");
+    expect(local).toContain("runtime Gallery.Items and access are not verified");
+
+    const synthetic = renderToStaticMarkup(<CanvasPreview
+      screen={screen} initialGallerySamples={true} onSelect={() => {}} />);
+    expect(synthetic).toContain('data-template-fill-state="unknown"');
+    expect(synthetic).not.toContain('data-preview-gallery-template-fill="verified"');
+    expect(synthetic).not.toContain("Module A");
+
+    const sourceOnly = renderToStaticMarkup(<CanvasPreview
+      screen={screen} onSelect={() => {}} />);
+    expect(sourceOnly).not.toContain('data-preview-gallery-template-fill="verified"');
+    expect(sourceOnly).not.toContain('data-sample-card="1"');
   });
 });
 
