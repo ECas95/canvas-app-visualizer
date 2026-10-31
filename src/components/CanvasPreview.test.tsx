@@ -145,6 +145,48 @@ describe("CanvasPreview opt-in synthetic gallery cards", () => {
   });
 });
 
+describe("CanvasPreview local JSON gallery record preview", () => {
+  it("uses typed row values in the original template without certifying SQL access", () => {
+    const field = control("RecordName", "Classic/Label@2.5.1", {
+      Text: "=ThisItem.Name", X: "=12", Y: "=12", Width: "=300", Height: "=30"
+    });
+    const state = control("RecordState", "Classic/Label@2.5.1", {
+      Text: '=If(ThisItem.IsEnabled, "AVAILABLE", "UNAVAILABLE")',
+      X: "=12", Y: "=46", Width: "=140", Height: "=30",
+      Color: "=ThisItem.AccentColor"
+    });
+    const gallery = control("SampleGallery", "Gallery@2.15.0", {
+      X: "=10", Y: "=30", Width: "=600", Height: "=300",
+      TemplateSize: "=150", TemplatePadding: "=8", WrapCount: "=2",
+      Items: "=SQLModuleCatalog", Visible: "=varReady"
+    }, [field, state]);
+    gallery.variant = "Vertical";
+    const screen: CanvasScreen = {
+      id: "Local", name: "Local", properties: {}, children: [gallery],
+      sourceFile: "Src/Local.pa.yaml", sourceFormat: "pa-yaml-v3"
+    };
+    const html = renderToStaticMarkup(<CanvasPreview screen={screen}
+      initialGallerySamples={true}
+      initialGallerySnapshot={{ galleryId: "SampleGallery", rows: [
+        { Name: "Local Preview One", IsEnabled: true, AccentColor: "#006064" },
+        { Name: "Local Preview Two", IsEnabled: false, AccentColor: "#808080" }
+      ] }}
+      onSelect={() => {}} />);
+    expect(html).toContain('data-preview-gallery-samples="local-snapshot"');
+    expect(html).toContain("Local Preview One");
+    expect(html).toContain("Local Preview Two");
+    expect(html).toContain("AVAILABLE");
+    expect(html).toContain("UNAVAILABLE");
+    expect(html).toContain("LOCAL #1");
+    expect(html).toContain("LOCAL #2");
+    expect(html).not.toContain("[Name #1]");
+    expect(html).not.toContain("LOCAL #3");
+    expect(html).toContain("user-provided visual records");
+    expect(html).toContain("runtime Gallery.Items and access are not verified");
+    expect(html).toContain('aria-label="Load local gallery JSON records"');
+  });
+});
+
 describe("CanvasPreview gallery source vs runtime rows", () => {
   it("does not turn a SQL Items formula into a visible template row", () => {
     const html = renderGalleryItems("=Filter(Modules, IsEnabled)");

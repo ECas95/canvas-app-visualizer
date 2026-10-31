@@ -469,3 +469,19 @@ describe("Power Fx text membership operators in Canvas preview", () => {
     ]) expect(staticBoolean(formula)).toBeNull();
   });
 });
+
+
+describe("scalar Power Fx text transformations for local previews", () => {
+  it("resolves ASCII Upper, Lower, Trim and TrimEnds without connectors", () => {
+    const symbols = { "ThisItem.Category": "  Operations   Team  " };
+    expect(staticString("=Upper(Trim(ThisItem.Category))", symbols)).toBe("OPERATIONS TEAM");
+    expect(staticString("=Lower(TrimEnds(ThisItem.Category))", symbols)).toBe("operations   team");
+    expect(staticString("=Trim(\"    A   B   \")")).toBe("A B");
+  });
+  it("fails closed for unsupported data and locale-sensitive transformations", () => {
+    expect(staticString("=Upper(ThisItem.Category)")).toBeNull();
+    expect(staticString('=Upper("café")')).toBeNull();
+    expect(staticString('=Connector.Upper("TEST")')).toBeNull();
+    expect(staticString("=Trim(SQL.GetName())")).toBeNull();
+  });
+});

@@ -18,6 +18,8 @@ import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScoped
 import { CanvasVisualControl } from "./CanvasVisualControl";
 import { GallerySamplePreview } from "./GallerySamplePreview";
 import { galleryReferencedFields } from "../core/layout/gallerySchemaPreview";
+import { parseGallerySnapshotJson, MAX_GALLERY_JSON_BYTES,
+  type GalleryLocalRow } from "../core/layout/galleryLocalSnapshot";
 import { previewChildClipPath } from "../core/layout/previewCorners";
 import { previewClampScroll, previewOverflowMode, previewScrollRanges, previewScrollOverlayAnchors, previewScrolledPosition, previewWheelScroll,
   type PreviewScrollOffset, type PreviewScrollRange } from "../core/layout/previewOverflow";
@@ -32,6 +34,8 @@ interface Props {
   initialMode?: "visual" | "structure";
   /** Testable, explicit opt-in. Default never fabricates gallery rows. */
   initialGallerySamples?: boolean;
+  /** Optional test fixture, not an application-runtime or SQL data source. */
+  initialGallerySnapshot?: { galleryId: string; rows: GalleryLocalRow[] };
 }
 
 interface DrawItem {
@@ -270,13 +274,16 @@ function wireframeColor(type: string): string {
   return "#657285";
 }
 
-export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], initialMode = "visual", initialGallerySamples = false }: Props) {
+export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], initialMode = "visual", initialGallerySamples = false, initialGallerySnapshot }: Props) {
   const [profile, setProfile] = useState<Profile>("desktop");
   const [mode, setMode] = useState<PreviewMode>(initialMode);
   const [zoom, setZoom] = useState<Zoom>("fit");
   const [focusSelection, setFocusSelection] = useState(false);
   const [showGallerySamples, setShowGallerySamples] = useState(initialGallerySamples);
   const [gallerySampleCount, setGallerySampleCount] = useState(6);
+  const [galleryTargetId, setGalleryTargetId] = useState("");
+  const [localGallerySnapshot, setLocalGallerySnapshot] = useState(initialGallerySnapshot ?? null);
+  const [gallerySnapshotError, setGallerySnapshotError] = useState<string | null>(null);
   const [interactive, setInteractive] = useState(false);
   const [scopedState, setScopedState] = useState<PreviewScopedState>({ globals: {}, context: {} });
   const [scrollOffsets, setScrollOffsets] = useState<Record<string, PreviewScrollOffset>>({});
@@ -288,6 +295,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
     setInteractive(false);
     setScopedState({ globals: {}, context: {} });
     setScrollOffsets({});
+    setLocalGallerySnapshot(null);
+    setGalleryTargetId("");
+    setGallerySnapshotError(null);
     setSimulationMessage("Simulation off. No behavior formulas are executed.");
   }, [screen]);
 
@@ -341,6 +351,34 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
       0, [], undefined, undefined, undefined, variables) : [],
     [screen, width, height, variables]
   );
+  const galleries = rawItems.filter(item => galleryRecordsUnknown(item.control));
+  const effectiveGalleryId = galleries.some(item => item.control.id === galleryTargetId)
+    ? galleryTargetId : galleries[0]?.control.id;
+
+  async function loadLocalGalleryJson(file: File | undefined) {
+    if (!file) return;
+    if (!effectiveGalleryId) {
+      setGallerySnapshotError("Select a Gallery before importing local rows.");
+      return;
+    }
+    if (file.size > MAX_GALLERY_JSON_BYTES) {
+      setGallerySnapshotError("Local JSON must be 64 KB or smaller.");
+      return;
+    }
+    try {
+      const parsed = parseGallerySnapshotJson(await file.text());
+      if (!parsed.rows) {
+        setGallerySnapshotError(parsed.error ?? "Invalid JSON.");
+        return;
+      }
+      setLocalGallerySnapshot({ galleryId: effectiveGalleryId, rows: parsed.rows });
+      setGallerySnapshotError(null);
+      setShowGallerySamples(true);
+    } catch {
+      setGallerySnapshotError("Could not read local JSON file.");
+    }
+  }
+
   const scrollRanges = useMemo(() => previewScrollRanges(rawItems.map(item => ({
     id: item.control.id, ancestors: item.ancestors, x: item.x, y: item.y,
     width: item.width, height: item.height, dynamic: item.dynamic,
@@ -482,7 +520,36 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
               onChange={event => setShowGallerySamples(event.target.checked)} />
             Gallery samples (synthetic)
           </label>
-          {showGallerySamples && <label className="preview-choice">
+          {showGallerySamples && galleries.length > 1 && <label className="preview-choice">
+            <span>Gallery</span>
+            <select aria-label="Choose gallery for local JSON" value={effectiveGalleryId}
+              onChange={event => {
+                setGalleryTargetId(event.target.value);
+                setLocalGallerySnapshot(null);
+                setGallerySnapshotError(null);
+              }}>
+              {galleries.map(item => <option key={item.control.id} value={item.control.id}>
+                {item.control.name}
+              </option>)}
+            </select>
+          </label>}
+          {showGallerySamples && galleries.length > 0 && <label className="preview-choice"
+            title="Read an array of 1–6 local scalar records. Data stays inside this browser; the portal does not query any connector.">
+            <span>Local JSON</span>
+            <input type="file" accept=".json,application/json"
+              aria-label="Load local gallery JSON records"
+              onChange={event => {
+                const file = event.currentTarget.files?.[0];
+                event.currentTarget.value = "";
+                void loadLocalGalleryJson(file);
+              }} />
+          </label>}
+          {showGallerySamples && localGallerySnapshot && <button type="button"
+            className="simulation-action" onClick={() => {
+              setLocalGallerySnapshot(null);
+              setGallerySnapshotError(null);
+            }}>Clear local rows</button>}
+          {showGallerySamples && !localGallerySnapshot && <label className="preview-choice">
             <span>Samples</span>
             <select aria-label="Synthetic gallery sample count"
               value={gallerySampleCount}
@@ -555,6 +622,8 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
                       x={item.x} y={item.y} width={item.width} height={item.height}
                       appWidth={width} appHeight={height}
                       sampleCount={gallerySampleCount}
+                      localRows={localGallerySnapshot?.galleryId === item.control.id
+                        ? localGallerySnapshot.rows : undefined}
                       clipPrefix={`${instanceId}-mock-${index}`} />
                   ) : mode === "visual" && item.runtimeGalleryStateUnknown ? (
                     <>
@@ -689,9 +758,14 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
         <span>{visibleItems.length} drawn nodes · {unresolved} unresolved layouts</span>
         {mode === "visual" && showGallerySamples && visibleItems.some(item => galleryRecordsUnknown(item.control)) && (
           <span className="preview-unknown-state" role="status">
-            SYNTHETIC gallery placeholders — sample cards are not SQL data or authorized app access
+            {localGallerySnapshot
+              ? "LOCAL JSON — user-provided visual records; runtime Gallery.Items and access are not verified"
+              : "SYNTHETIC gallery placeholders — sample cards are not SQL data or authorized app access"}
           </span>
         )}
+        {gallerySnapshotError && <span role="alert" className="preview-unknown-state">
+          Local gallery JSON: {gallerySnapshotError}
+        </span>}
         {mode === "visual" && showGallerySamples &&
           visibleItems.filter(item => galleryRecordsUnknown(item.control)).slice(0, 2).map(item => {
             const fields = galleryReferencedFields(item.control);

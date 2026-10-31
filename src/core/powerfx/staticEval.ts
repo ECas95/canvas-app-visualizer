@@ -443,6 +443,21 @@ class Parser {
       return args[0] === "";
     }
 
+    // Power Fx Upper/Lower/Trim/TrimEnds are pure scalar text functions.
+    // Case/space semantics for non-ASCII may depend on locale and host, so
+    // only evaluate ASCII values as confirmed preview output.
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-lower-upper-proper
+    // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-trim
+    if (["upper", "lower", "trim", "trimends"].includes(name)) {
+      if (args.length !== 1 || typeof args[0] !== "string") return null;
+      const value = args[0];
+      if (!Array.from(value).every(char => char.charCodeAt(0) <= 0x7f)) return null;
+      if (name === "upper") return value.toUpperCase();
+      if (name === "lower") return value.toLowerCase();
+      if (name === "trim") return value.replace(/ +/g, " ").replace(/^ +| +$/g, "");
+      return value.replace(/^ +| +$/g, "");
+    }
+
     // Len on a verified text scalar can drive label-dependent geometry.
     // Tables and unresolved input/control values are intentionally unsupported.
     // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-len
