@@ -143,10 +143,10 @@ export function GallerySamplePreview({
           TEMPLATE PREVIEW — synthetic cards only · no database rows or access verified
         </text>
       </g>
-      <title>
-        Sample template fields: {fields.join(", ") || "No ThisItem columns found"}.
-        Cards are placeholders, not loaded Gallery.Items or authorized records.
-      </title>
+      <title>{[
+        "Sample template fields: " + (fields.join(", ") || "No ThisItem columns found"),
+        "Cards are placeholders, not loaded Gallery.Items or authorized records."
+      ].join(". ")}</title>
     </g>
   );
 }
