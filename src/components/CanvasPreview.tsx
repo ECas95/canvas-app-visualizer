@@ -29,6 +29,8 @@ interface Props {
   onSelect: (control: CanvasControl) => void;
   /** Optional initial inspection mode; defaults to the no-runtime-records visual view. */
   initialMode?: "visual" | "structure";
+  /** Testable, explicit opt-in. Default never fabricates gallery rows. */
+  initialGallerySamples?: boolean;
 }
 
 interface DrawItem {
@@ -267,12 +269,12 @@ function wireframeColor(type: string): string {
   return "#657285";
 }
 
-export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], initialMode = "visual" }: Props) {
+export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], initialMode = "visual", initialGallerySamples = false }: Props) {
   const [profile, setProfile] = useState<Profile>("desktop");
   const [mode, setMode] = useState<PreviewMode>(initialMode);
   const [zoom, setZoom] = useState<Zoom>("fit");
   const [focusSelection, setFocusSelection] = useState(false);
-  const [showGallerySamples, setShowGallerySamples] = useState(true);
+  const [showGallerySamples, setShowGallerySamples] = useState(initialGallerySamples);
   const [gallerySampleCount, setGallerySampleCount] = useState(6);
   const [interactive, setInteractive] = useState(false);
   const [scopedState, setScopedState] = useState<PreviewScopedState>({ globals: {}, context: {} });
@@ -474,7 +476,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
               onChange={event => setFocusSelection(event.target.checked)} />
             Isolate selection
           </label>
-          <label className="preview-focus" title="Gallery samples repeat YAML-defined template controls with bracketed field-name placeholders. No SQL records or permissions are used.">
+          <label className="preview-focus" title="Gallery samples repeat YAML-defined template controls with bracketed field-name placeholders. No external records or permissions are used.">
             <input type="checkbox" checked={showGallerySamples}
               onChange={event => setShowGallerySamples(event.target.checked)} />
             Gallery samples (synthetic)
