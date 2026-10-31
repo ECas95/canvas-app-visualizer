@@ -35,7 +35,16 @@ Screens:
             WrapCount: =If(App.Width > 900, 3, If(App.Width > 600, 2, 1))
             TemplateSize: =292
             TemplatePadding: =8
+            TemplateFill: =If(ThisItem.IsEnabled, Color.Green, Color.Red)
           Children:
+            - GalleryRowIcon:
+                Control: Classic/Icon@2.5.0
+                Properties:
+                  Icon: =Switch(ThisItem.Category, "Operations", Icon.Settings, "Reporting", Icon.Document, Icon.Information)
+                  X: =8
+                  Y: =52
+                  Width: =40
+                  Height: =40
             - GalleryRowLabel:
                 Control: Classic/Label@2.5.1
                 Properties:
