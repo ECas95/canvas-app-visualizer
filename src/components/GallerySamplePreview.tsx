@@ -59,19 +59,24 @@ export function GallerySamplePreview({
   function paint(
     children: CanvasControl[], ox: number, oy: number,
     parentWidth: number, parentHeight: number, sampleIndex: number,
-    parent?: CanvasControl, depth = 0, prefix = ""
+    parent?: CanvasControl, depth = 0, prefix = "",
+    templateScope = true
   ): ReactNode {
     if (depth >= 12) return null;
     const rowSymbols = localRows?.[sampleIndex]
       ? localGalleryRowSymbols(localRows[sampleIndex]) : {};
+    // Parent.TemplateWidth/Height belong to the gallery's immediate
+    // item template. Nested containers have their own Parent scope.
+    const currentTemplateWidth = templateScope ? template?.width : undefined;
+    const currentTemplateHeight = templateScope ? template?.height : undefined;
     const symbols = buildSiblingGeometrySymbols(children, {
       parentWidth, parentHeight, appWidth, appHeight,
-      templateWidth: template?.width, templateHeight: template?.height,
+      templateWidth: currentTemplateWidth, templateHeight: currentTemplateHeight,
       symbols: rowSymbols
     });
     const context = {
       parentWidth, parentHeight, appWidth, appHeight,
-      templateWidth: template?.width, templateHeight: template?.height,
+      templateWidth: currentTemplateWidth, templateHeight: currentTemplateHeight,
       symbols: { ...symbols, ...rowSymbols }
     };
     const positioned = parent && isAutoLayout(parent)
@@ -86,8 +91,10 @@ export function GallerySamplePreview({
       const renderSymbols = {
         ...symbols, ...rowSymbols, "App.Width": appWidth, "App.Height": appHeight,
         "Parent.Width": parentWidth, "Parent.Height": parentHeight,
-        "Parent.TemplateWidth": template?.width ?? parentWidth,
-        "Parent.TemplateHeight": template?.height ?? parentHeight,
+        ...(currentTemplateWidth !== undefined
+          ? { "Parent.TemplateWidth": currentTemplateWidth } : {}),
+        ...(currentTemplateHeight !== undefined
+          ? { "Parent.TemplateHeight": currentTemplateHeight } : {}),
         "Self.Width": rect.width, "Self.Height": rect.height,
         "Self.X": rect.x, "Self.Y": rect.y
       };
@@ -102,7 +109,7 @@ export function GallerySamplePreview({
             control.controlType.toLowerCase() === "group" ? oy : cy,
             control.controlType.toLowerCase() === "group" ? parentWidth : rect.width,
             control.controlType.toLowerCase() === "group" ? parentHeight : rect.height,
-            sampleIndex, control, depth + 1, key)
+            sampleIndex, control, depth + 1, key, false)
         : null;
       const clipChildren = /(?:container|form|datacard)/i.test(control.controlType);
       return (
