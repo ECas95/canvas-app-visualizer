@@ -26,6 +26,8 @@ import { previewClampScroll, previewOverflowMode, previewScrollRanges, previewSc
 import { Icon } from "./Icon";
 import { previewReferenceFileKind, referenceViewportMatches,
   MAX_REFERENCE_SCREENSHOT_BYTES } from "../core/layout/previewReference";
+import { captureCanvasComparison } from "../core/layout/previewScreenshotDiff";
+import type { PixelDiffReport, PixelRegion } from "../core/layout/visualDiff";
 
 interface Props {
   screen?: CanvasScreen;
@@ -293,6 +295,12 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
   const [referenceEnabled, setReferenceEnabled] = useState(true);
   const [referenceError, setReferenceError] = useState<string | null>(null);
   const referenceRequest = useRef(0);
+  const screenSvgRef = useRef<SVGSVGElement | null>(null);
+  const [visualDiff, setVisualDiff] = useState<{ report: PixelDiffReport; heatmapUrl: string } | null>(null);
+  const [diffError, setDiffError] = useState<string | null>(null);
+  const [diffRunning, setDiffRunning] = useState(false);
+  const [heatmapEnabled, setHeatmapEnabled] = useState(false);
+  const diffRequest = useRef(0);
   const [interactive, setInteractive] = useState(false);
   const [scopedState, setScopedState] = useState<PreviewScopedState>({ globals: {}, context: {} });
   const [scrollOffsets, setScrollOffsets] = useState<Record<string, PreviewScrollOffset>>({});
@@ -310,6 +318,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
     referenceRequest.current += 1;
     setReference(null);
     setReferenceError(null);
+    diffRequest.current += 1;
+    setVisualDiff(null);
+    setDiffError(null);
     setSimulationMessage("Simulation off. No behavior formulas are executed.");
   }, [screen]);
 
@@ -355,6 +366,40 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
     } catch {
       if (referenceRequest.current === request)
         setReferenceError("Could not decode this local screenshot.");
+    }
+  }
+
+  async function measureVisualDifference() {
+    if (!reference || !screenSvgRef.current ||
+        !referenceViewportMatches(reference.width, reference.height, width, height)) {
+      setDiffError("Load a reference cropped to the current Canvas viewport.");
+      return;
+    }
+    const request = ++diffRequest.current;
+    setDiffRunning(true);
+    setDiffError(null);
+    setVisualDiff(null);
+    try {
+      const regions: PixelRegion[] = visibleItems
+        .filter(item => item.width > 0 && item.height > 0 && !item.dynamic)
+        .filter(item => /container|gallery|form|datacard|group|button|label|icon|image/i
+          .test(item.control.controlType))
+        .slice(0, 400)
+        .map(item => ({
+          id: item.control.id, label: item.control.name,
+          kind: item.control.controlType,
+          x: item.x, y: item.y, width: item.width, height: item.height
+        }));
+      const measured = await captureCanvasComparison(screenSvgRef.current,
+        reference.dataUrl, width, height, regions, 32);
+      if (request !== diffRequest.current) return;
+      setVisualDiff(measured);
+      setHeatmapEnabled(true);
+    } catch (error) {
+      if (request === diffRequest.current)
+        setDiffError(error instanceof Error ? error.message : "Comparison could not be completed.");
+    } finally {
+      if (request === diffRequest.current) setDiffRunning(false);
     }
   }
 
@@ -590,11 +635,25 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
               value={referenceOpacity}
               onChange={event => setReferenceOpacity(Number(event.target.value))} />
           </label>}
+          {mode === "visual" && reference &&
+            referenceViewportMatches(reference.width, reference.height, width, height) &&
+            <button type="button" className="simulation-action"
+              disabled={diffRunning} onClick={() => { void measureVisualDifference(); }}>
+              {diffRunning ? "Measuring…" : "Measure difference"}
+            </button>}
+          {visualDiff && mode === "visual" && <label className="preview-focus">
+            <input type="checkbox" checked={heatmapEnabled}
+              onChange={event => setHeatmapEnabled(event.target.checked)} />
+            Show heatmap
+          </label>}
           {reference && <button type="button" className="simulation-action"
             onClick={() => {
               referenceRequest.current += 1;
               setReference(null);
               setReferenceError(null);
+              diffRequest.current += 1;
+              setVisualDiff(null);
+              setDiffError(null);
             }}>Clear reference</button>}
           <label className="preview-focus">
             <input type="checkbox" checked={focusSelection} disabled={!target}
@@ -665,7 +724,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
             <span>{screen.name}</span>
             <span>{mode === "visual" ? "Visual approximation" : "Structure inspection"}</span>
           </div>
-          <svg viewBox={`0 0 ${width} ${height}`}
+          <svg ref={screenSvgRef} viewBox={`0 0 ${width} ${height}`}
             style={{ aspectRatio: `${width} / ${height}` }}
             data-preview-screen-fill-state={screenFillUnknown ? "unknown" : undefined}
             role="img" aria-label={`${screen.name} canvas preview`}>
@@ -837,6 +896,13 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
                 </g>
               );
             })}
+            {mode === "visual" && visualDiff && heatmapEnabled &&
+              visualDiff.report.width === width && visualDiff.report.height === height && (
+                <g data-preview-diff-heatmap="active" aria-hidden="true" pointerEvents="none">
+                  <image x={0} y={0} width={width} height={height}
+                    href={visualDiff.heatmapUrl} preserveAspectRatio="none" />
+                </g>
+              )}
             {mode === "visual" && reference && referenceEnabled &&
               referenceViewportMatches(reference.width, reference.height, width, height) && (
                 <g data-preview-reference="local-overlay" pointerEvents="none" aria-hidden="true">
@@ -849,6 +915,33 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
         </div>
       </div>
       <div className="preview-note">
+        {diffError && <span className="preview-unknown-state" role="alert">{diffError}</span>}
+        {visualDiff && mode === "visual" && (
+          <div className="preview-diff-report" role="region" aria-label="Visual difference metrics">
+            <strong>Visual difference — reference vs Canvas preview</strong>
+            <span>Mean RGB error: {visualDiff.report.meanAbsoluteError.toFixed(2)} / 255</span>
+            <span>RMSE: {visualDiff.report.rootMeanSquareError.toFixed(2)} / 255</span>
+            <span>Different pixels (threshold 32/255): {visualDiff.report.changedPercent.toFixed(2)}%</span>
+            <span>Highest-error source regions (overlapping metrics):</span>
+            <div className="preview-diff-regions">
+              {[...visualDiff.report.regions]
+                .filter(item => item.pixels > 0)
+                .sort((a, b) => b.meanAbsoluteError - a.meanAbsoluteError)
+                .slice(0, 8).map(region => (
+                  <button type="button" key={region.id} className="simulation-action"
+                    onClick={() => {
+                      const targetItem = itemById.get(region.id);
+                      if (targetItem) onSelect(targetItem.control);
+                    }}>
+                    {region.label}: {region.meanAbsoluteError.toFixed(1)} / 255
+                    ({region.changedPercent.toFixed(1)}% changed)
+                  </button>
+                ))}
+            </div>
+            <small>Region scores overlap; screenshots must show the same app state, data and fonts.
+              Rerun after any visual change. Heatmap is an inspection aid, not a Power Apps parity certificate.</small>
+          </div>
+        )}
         {referenceError && <span className="preview-unknown-state" role="alert">{referenceError}</span>}
         {reference && !referenceViewportMatches(reference.width, reference.height, width, height) &&
           <span className="preview-unknown-state" role="status">
