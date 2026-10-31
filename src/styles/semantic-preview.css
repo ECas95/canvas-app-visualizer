@@ -48,3 +48,11 @@
 
 /* Runtime-unknown visibility must never be presented as confirmed state. */
 .preview-unknown-state{display:inline-flex;align-items:center;gap:5px;border:1px solid #e6d5ac;border-radius:4px;padding:4px 7px;background:#fff9ed;color:#77531b;font-weight:600}
+
+/* Canvas-only source/reference difference inspection; no network or runtime data. */
+.preview-diff-report{display:flex;align-items:flex-start;flex-wrap:wrap;gap:7px 12px;border:1px solid #c2d4e3;border-radius:7px;padding:10px;background:#f4f9fe;color:#24384d;width:100%;font-size:11px}
+.preview-diff-report strong{font-size:12px;flex-basis:100%}
+.preview-diff-report>span{white-space:nowrap}
+.preview-diff-report small{color:#586d80;flex-basis:100%;line-height:1.5}
+.preview-diff-regions{display:flex;flex-wrap:wrap;gap:5px;width:100%}
+.preview-diff-regions button{max-width:min(300px,100%);white-space:normal;text-align:left}
