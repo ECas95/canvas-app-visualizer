@@ -81,8 +81,49 @@ try {
     });
     report.push({ profile, visual: actual, structure });
   }
+  // This fixture is intentionally fabricated. The assertion checks that two
+  // user-provided *local* rows drive distinct source-defined icons, colors
+  // and cell positions, without claiming parity with Power Apps runtime.
+  await page.getByLabel("Simulated viewport").selectOption("desktop");
+  await page.getByRole("button", { name: "Visual", exact: true }).click();
+  await page.getByRole("checkbox", { name: "Gallery samples (synthetic)" }).check();
+  await page.getByLabel("Load local gallery JSON records").setInputFiles(
+    resolve("tests/fixtures/SyntheticGalleryRows.json")
+  );
+  const localGallery = page.locator('[data-preview-gallery-samples="local-snapshot"]');
+  await localGallery.waitFor({ timeout: 20000 });
+  const local = await svg.evaluate(element => {
+    const cards = [...element.querySelectorAll('[data-sample-card]')];
+    return {
+      cards: cards.length,
+      fills: cards.map(card =>
+        card.querySelector('[data-preview-gallery-template-fill="verified"]')?.getAttribute("fill")),
+      positions: cards.map(card => {
+        const rect = card.querySelector('[data-preview-gallery-template-fill="verified"]');
+        return [Number(rect?.getAttribute("x")), Number(rect?.getAttribute("y"))];
+      }),
+      iconPaths: [...element.querySelectorAll('[data-sample-template-control="GalleryRowIcon"] path')]
+        .map(icon => icon.getAttribute("d")),
+      labels: element.textContent ?? "",
+      localMode: element.querySelector('[data-preview-gallery-samples]')?.getAttribute("data-preview-gallery-samples")
+    };
+  });
+  assert.equal(local.cards, 2);
+  assert.deepEqual(local.fills, ["#008000", "#ff0000"]);
+  assert.deepEqual(local.positions, [[20, 130], [462, 130]]);
+  assert.equal(local.iconPaths.length, 2);
+  assert.notEqual(local.iconPaths[0], local.iconPaths[1]);
+  assert.equal(local.localMode, "local-snapshot");
+  assert.ok(local.labels.includes("Example Operations"));
+  assert.ok(local.labels.includes("Example Reporting"));
+  await page.locator(".canvas-stage").screenshot({
+    path: resolve(output, "desktop-local-gallery.png"),
+    animations: "disabled"
+  });
+  report.push({ scenario: "local-gallery", cards: local.cards,
+    fills: local.fills, positions: local.positions, iconCount: local.iconPaths.length });
   await writeFile(resolve(output, "geometry.json"), JSON.stringify(report, null, 2) + "\n");
-  console.log("Chromium visual smoke: 3 profiles, 6 screenshots, geometry verified.");
+  console.log("Chromium visual smoke: 3 profiles, 7 screenshots including local Gallery; geometry and per-row source-driven paint verified.");
 } finally {
   await browser?.close();
   await server.close();
