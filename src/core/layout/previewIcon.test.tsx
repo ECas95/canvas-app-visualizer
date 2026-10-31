@@ -24,6 +24,49 @@ function renderIcon(
   );
 }
 
+describe("Source-derived Gallery row icon selection", () => {
+  it("resolves typed Icon branches from known local ThisItem.Category", () => {
+    const formula = '=Switch(ThisItem.Category, "Operations", Icon.Settings, "Reporting", Icon.Document, Icon.Information)';
+    expect(previewIconName(formula, false, { "ThisItem.Category": "Operations" })).toBe("settings");
+    expect(previewIconName(formula, false, { "ThisItem.Category": "Reporting" })).toBe("document");
+    expect(previewIconName(formula, false, { "ThisItem.Category": "Other" })).toBe("information");
+    expect(previewIconName(formula, false)).toBeNull();
+    expect(renderIcon(formula, "Classic/Icon@2.5.0", "=Color.Red", {},
+      { "ThisItem.Category": "Operations" }))
+      .toContain('d="' + PREVIEW_ICON_PATHS.settings + '"');
+  });
+
+  it("keeps unsupported, mixed-type or runtime-dependent icon branches unknown", () => {
+    const symbols = { "ThisItem.Category": "Operations" };
+    for (const formula of [
+      '=Switch(ThisItem.Category, varUnknown, Icon.Settings, Icon.Home)',
+      '=Switch(ThisItem.Category, Icon.Home, Icon.Settings, Icon.Document)',
+      '=Switch(ThisItem.Category, "Reporting", Icon.Document, varUnknown, Icon.Settings, Icon.Information)',
+      '=Switch(ThisItem.Category, "Operations", Icon.AddressBook, Icon.Information)',
+      '=Switch(Connector.GetCategory(), "Operations", Icon.Settings, Icon.Information)'
+    ]) {
+      // A known match must not run a connector, but can skip later unknown
+      // alternatives. The malformed/unsupported selected branches fail.
+      if (formula.includes('varUnknown, Icon.Settings, Icon.Information')) continue;
+      expect(previewIconName(formula, false, symbols)).toBeNull();
+    }
+    expect(previewIconName(
+      '=Switch(ThisItem.Category, "Operations", Icon.Settings, varUnknown, Icon.Information)',
+      false, symbols
+    )).toBe("settings");
+    expect(previewIconName('=Switch(ThisItem.Category, "Operations", Icon.Settings)', false))
+      .toBeNull();
+  });
+
+  it("provides common dashboard glyphs while keeping unsupported enum names unknown", () => {
+    for (const name of ["Calendar", "Document", "Settings", "People",
+      "List", "Information", "Warning", "Computer", "Folder", "Database", "Play", "Pause"]) {
+      expect(previewIconName("=Icon." + name)).not.toBeNull();
+    }
+    expect(previewIconName("=Icon.DatabaseAdmin")).toBeNull();
+  });
+});
+
 describe("Canvas source-only Icon enums", () => {
   it("resolves only supported complete classic enum literals", () => {
     expect(previewIconName("=Icon.Add")).toBe("add");

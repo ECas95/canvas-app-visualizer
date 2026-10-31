@@ -1,12 +1,12 @@
 import type { ReactNode } from "react";
 import { staticString } from "../core/powerfx/staticEval";
-import type { CanvasControl } from "../types/canvas";
+import type { CanvasControl, PreviewMediaAsset } from "../types/canvas";
 import {
   autoLayoutChildren, buildSiblingGeometrySymbols, controlRect, isAutoLayout,
   isGallery, type GalleryTemplateLayout
 } from "../core/layout/layout";
 import { previewChildClipPath } from "../core/layout/previewCorners";
-import { previewVisibility } from "../core/layout/previewAppearance";
+import { previewColorWithSymbols, previewVisibility } from "../core/layout/previewAppearance";
 import { galleryReferencedFields, gallerySampleCells, galleryTemplatePlaceholderText }
   from "../core/layout/gallerySchemaPreview";
 import { CanvasVisualControl } from "./CanvasVisualControl";
@@ -24,6 +24,7 @@ interface Props {
   clipPrefix: string;
   sampleCount: number;
   localRows?: GalleryLocalRow[];
+  mediaAssets?: PreviewMediaAsset[];
 }
 
 function mockTextControl(control: CanvasControl, sampleIndex: number,
@@ -47,7 +48,7 @@ function mockTextControl(control: CanvasControl, sampleIndex: number,
 /** Paint source-defined template controls in simulated cells, not SQL rows. */
 export function GallerySamplePreview({
   gallery, template, x, y, width, height, appWidth, appHeight,
-  clipPrefix, sampleCount, localRows
+  clipPrefix, sampleCount, localRows, mediaAssets = []
 }: Props) {
   const fields = galleryReferencedFields(gallery);
   const cells = template ? gallerySampleCells(template, x, y,
@@ -108,6 +109,7 @@ export function GallerySamplePreview({
         <g key={key} data-sample-template-control={control.name}
           data-sample-visibility={visibility} pointerEvents="none">
           <CanvasVisualControl control={painted} simulationSymbols={renderSymbols}
+            mediaAssets={mediaAssets}
             x={cx} y={cy} width={rect.width} height={rect.height}
             clipId={clipId + "-text"} />
           {descendants && clipChildren ? (
@@ -145,8 +147,23 @@ export function GallerySamplePreview({
       <g clipPath={"url(#" + galleryClip + ")"}>
         <rect x={x} y={y} width={width} height={height}
           fill="#f8fafc" stroke="#b8c8d9" />
-        {cells.map(cell => (
-          <g key={cell.index} data-sample-card={cell.index + 1}>
+        {cells.map(cell => {
+          const rowSymbols = localRows?.[cell.index]
+            ? localGalleryRowSymbols(localRows[cell.index]) : {};
+          const sourceFill = gallery.properties.TemplateFill;
+          const templateFill = sourceFill === undefined ? null
+            : previewColorWithSymbols(sourceFill, {
+              ...rowSymbols, "App.Width": appWidth, "App.Height": appHeight,
+              "Parent.TemplateWidth": cell.width,
+              "Parent.TemplateHeight": cell.height
+            });
+          return (
+          <g key={cell.index} data-sample-card={cell.index + 1}
+            data-template-fill-state={sourceFill === undefined ? "omitted"
+              : templateFill === null ? "unknown" : "verified"}>
+            {templateFill !== null && <rect x={cell.x} y={cell.y}
+              width={cell.width} height={cell.height}
+              fill={templateFill} data-preview-gallery-template-fill="verified" />}
             {paint(gallery.children, cell.x, cell.y, cell.width, cell.height, cell.index)}
             <rect x={cell.x + 8} y={cell.y + 8} width={108} height={17}
               rx={4} fill="#fff3d6" stroke="#d29b39" opacity={0.96}/>
@@ -154,7 +171,8 @@ export function GallerySamplePreview({
               fontSize={10} fontWeight={600} fill="#754b00">
               {localRows ? "LOCAL #" : "SAMPLE #"}{cell.index + 1}</text>
           </g>
-        ))}
+          );
+        })}
         <rect x={x} y={y + Math.max(0, height - 28)} width={width} height={28}
           fill="#fff2cf" opacity={0.96}/>
         <text x={x + 10} y={y + Math.max(20, height - 10)}

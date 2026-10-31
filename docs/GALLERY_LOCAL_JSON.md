@@ -53,3 +53,30 @@ Canvas Gallery.Items may refer to SQL, Dataverse, collections or filtered source
 https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/controls/control-gallery
 https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-lower-upper-proper
 https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/power-apps-yaml
+
+## Per-record card appearance
+
+When the imported YAML already declares the following properties, the portal can
+resolve them for each **explicitly supplied** local JSON record:
+
+- A Gallery template background, for example `TemplateFill = If(ThisItem.IsEnabled, Color.Green, Color.Red)`.
+- A Classic Icon chosen from a locally bound text category, for example
+  `Icon = Switch(ThisItem.Category, "Operations", Icon.Settings, "Reporting", Icon.Document, Icon.Information)`.
+- Local media embedded in the original MSAPP package, referenced statically in
+  the card template as `Media.CompanyLogo`. Only vetted local raster assets
+  are used; remote image requests remain blocked.
+
+Text `Switch` icon selection requires a locally supplied `ThisItem` or
+`ThisRecord` text field and literal string case values. The source-only mode
+must not infer the result from SQL or a runtime collection. Unsupported icon
+enums remain explicitly unknown; the additional glyphs are local SVG
+approximations rather than a binary copy of Microsoft Power Apps resources.
+
+The synthetic browser regression fixture is in
+`tests/fixtures/SyntheticResponsive.pa.yaml` and
+`tests/fixtures/SyntheticGalleryRows.json`. The Chromium visual suite
+validates two local row cards with different glyphs, verified background
+colors, and wrapped positions; screenshots are uploaded as CI artifacts.
+These fixtures do **not** measure pixel-identical rendering against Power
+Apps Studio. A genuine screenshot comparison additionally needs a
+user-provided reference at the same viewport and runtime state.

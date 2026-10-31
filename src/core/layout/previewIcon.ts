@@ -30,7 +30,21 @@ export const PREVIEW_ICON_PATHS = {
   // Classic Icon.Lock and Icon.ShoppingCart are documented Microsoft Canvas icons.
   // These are bounded local SVG approximations, not Power Apps runtime assets.
   lock: "M6 11V8A6 6 0 0 1 18 8V11 M5 11H19V21H5Z",
-  shoppingcart: "M3 4H5L7.5 16H19L21 7H6 M8.5 20A1 1 0 1 0 10.5 20A1 1 0 1 0 8.5 20 M17.5 20A1 1 0 1 0 19.5 20A1 1 0 1 0 17.5 20"
+  shoppingcart: "M3 4H5L7.5 16H19L21 7H6 M8.5 20A1 1 0 1 0 10.5 20A1 1 0 1 0 8.5 20 M17.5 20A1 1 0 1 0 19.5 20A1 1 0 1 0 17.5 20",
+  // Source-derived approximations of common Classic Icon enums / Fluent
+  // names. Paths are original local drawings, not extracted Microsoft assets.
+  calendar: "M4 5H20V21H4Z M4 10H20 M8 3V7 M16 3V7 M8 14H11 M14 14H17 M8 18H11",
+  document: "M6 3H15L19 7V21H6Z M15 3V8H19 M9 12H16 M9 16H16",
+  settings: "M12 3V6 M12 18V21 M3 12H6 M18 12H21 M5.6 5.6L7.7 7.7 M16.3 16.3L18.4 18.4 M18.4 5.6L16.3 7.7 M7.7 16.3L5.6 18.4 M12 8A4 4 0 1 0 12 16A4 4 0 1 0 12 8",
+  people: "M9 10A3 3 0 1 0 9 4A3 3 0 1 0 9 10 M3 20V18A6 6 0 0 1 15 18V20 M17 10A3 3 0 0 0 17 4 M17 14A5 5 0 0 1 22 19",
+  list: "M4 5H6 M9 5H21 M4 12H6 M9 12H21 M4 19H6 M9 19H21",
+  information: "M12 3A9 9 0 1 0 12 21A9 9 0 1 0 12 3 M12 10V17 M12 7V7.5",
+  warning: "M12 3L22 21H2Z M12 9V15 M12 18V18.5",
+  computer: "M3 4H21V17H3Z M8 21H16 M12 17V21",
+  folder: "M3 6H10L12 9H21V20H3Z",
+  database: "M4 5A8 3 0 1 0 20 5A8 3 0 1 0 4 5 M4 5V19 M20 5V19 M4 12A8 3 0 0 0 20 12 M4 19A8 3 0 0 0 20 19",
+  play: "M7 4L20 12L7 20Z",
+  pause: "M7 5H10V19H7Z M14 5H17V19H14Z"
 } as const;
 
 export type PreviewIconName = keyof typeof PREVIEW_ICON_PATHS;
@@ -119,17 +133,37 @@ export function previewIconName(
     "=" + source.slice(part[0].start, part[part.length - 1].end);
 
   if (functionName === "switch") {
-    // Switch matches an ordered scalar selector, then returns a typed Icon
-    // result. Avoid text selectors here: the scalar evaluator cannot tell a
-    // text value from an enum member serialized as a string. Unknown earlier
-    // matches cannot be skipped, and no default means a known Blank icon.
+    // Text Switch cases are safe only when each compared case is an explicit
+    // Power Fx string *literal*, not a name that might actually be an enum.
+    // The selector must be a known scalar (e.g. an opt-in local ThisItem row).
+    // This resolves per-record icons without guessing any SQL field values.
     // https://learn.microsoft.com/en-us/power-platform/power-fx/reference/function-if
     if (args.length < 3) return null;
     const selector = evaluateStaticPowerFx(expression(args[0]), { symbols });
-    if (selector === null || (typeof selector !== "boolean" &&
-        typeof selector !== "number")) return null;
+    if (selector === null || !["boolean", "number", "string"].includes(typeof selector)) return null;
+    if (typeof selector === "string") {
+      // The source-only parser cannot distinguish arbitrary text literals
+      // from Icon enum impostors without Microsoft's type binder. Restrict
+      // string Switch matching to an explicitly supplied local row field.
+      // A SQL-backed ThisItem with no local fixture always remains unknown.
+      const reference = args[0];
+      if (reference.length !== 3 ||
+          reference[0].kind !== "identifier" ||
+          !/^(ThisItem|ThisRecord)$/i.test(reference[0].value) ||
+          reference[1].value !== "." ||
+          !["identifier", "quotedIdentifier"].includes(reference[2].kind)) return null;
+      const field = reference[2].kind === "quotedIdentifier"
+        ? reference[2].value.slice(1, -1).replaceAll("''", "'")
+        : reference[2].value;
+      const key = (reference[0].value + "." + field).toLowerCase();
+      if (!Object.entries(symbols ?? {}).some(([name, value]) =>
+        name.toLowerCase() === key && typeof value === "string")) return null;
+    }
     for (let index = 1; index + 1 < args.length; index += 2) {
-      const match = evaluateStaticPowerFx(expression(args[index]), { symbols });
+      const matchTokens = args[index];
+      if (typeof selector === "string" &&
+          (matchTokens.length !== 1 || matchTokens[0].kind !== "string")) return null;
+      const match = evaluateStaticPowerFx(expression(matchTokens), { symbols });
       if (match === null || typeof match !== typeof selector) return null;
       if (selector === match) {
         return previewIconName(expression(args[index + 1]), modern, symbols, depth + 1);
