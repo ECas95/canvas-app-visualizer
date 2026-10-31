@@ -622,6 +622,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
                       x={item.x} y={item.y} width={item.width} height={item.height}
                       appWidth={width} appHeight={height}
                       sampleCount={gallerySampleCount}
+                      mediaAssets={mediaAssets}
                       localRows={localGallerySnapshot?.galleryId === item.control.id
                         ? localGallerySnapshot.rows : undefined}
                       clipPrefix={`${instanceId}-mock-${index}`} />
