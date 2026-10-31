@@ -197,17 +197,25 @@ describe("CanvasPreview Gallery local row visual fidelity", () => {
     const label = control("ModuleLabel", "Classic/Label@2.5.1", {
       Text: "=ThisItem.Name", X: "=72", Y: "=22", Width: "=230", Height: "=42"
     });
+    const logo = control("ModuleLogo", "Classic/Image@2.3.0", {
+      Image: "=Media.DemoLogo", X: "=300", Y: "=22", Width: "=32", Height: "=32"
+    });
     const gallery = control("Cards", "Classic/VerticalGallery@2.3.0", {
       X: "=24", Y: "=90", Width: "=800", Height: "=360",
       Items: "=SQLCatalog", TemplateSize: "=180", WrapCount: "=2",
       TemplateFill: "=If(ThisItem.IsEnabled, Color.Green, Color.Red)"
-    }, [icon, label]);
+    }, [icon, label, logo]);
     gallery.variant = "Vertical";
     const screen: CanvasScreen = {
       id: "Modules", name: "Modules", properties: {}, children: [gallery],
       sourceFile: "Src/Modules.pa.yaml", sourceFormat: "pa-yaml-v3"
     };
+    const logoAsset = {
+      name: "demologo", path: "Resources/Images/DemoLogo.png",
+      dataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/nAAAAABJRU5ErkJggg=="
+    };
     const local = renderToStaticMarkup(<CanvasPreview
+      mediaAssets={[logoAsset]}
       screen={screen} initialGallerySamples={true}
       initialGallerySnapshot={{ galleryId: "Cards", rows: [
         { Name: "Module A", Category: "Operations", IsEnabled: true },
@@ -219,6 +227,7 @@ describe("CanvasPreview Gallery local row visual fidelity", () => {
     expect(local).toContain('fill="#ff0000"');
     expect(local).toContain('d="' + PREVIEW_ICON_PATHS.settings + '"');
     expect(local).toContain('d="' + PREVIEW_ICON_PATHS.document + '"');
+    expect(local).toContain(logoAsset.dataUrl);
     expect(local).toContain("Module A");
     expect(local).toContain("Module B");
     expect(local).not.toContain("LOCAL #3");
