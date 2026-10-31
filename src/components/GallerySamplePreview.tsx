@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { staticString } from "../core/powerfx/staticEval";
 import type { CanvasControl } from "../types/canvas";
 import {
   autoLayoutChildren, buildSiblingGeometrySymbols, controlRect, isAutoLayout,
@@ -9,6 +10,7 @@ import { previewVisibility } from "../core/layout/previewAppearance";
 import { galleryReferencedFields, gallerySampleCells, galleryTemplatePlaceholderText }
   from "../core/layout/gallerySchemaPreview";
 import { CanvasVisualControl } from "./CanvasVisualControl";
+import { localGalleryRowSymbols, type GalleryLocalRow } from "../core/layout/galleryLocalSnapshot";
 
 interface Props {
   gallery: CanvasControl;
@@ -21,13 +23,18 @@ interface Props {
   appHeight: number;
   clipPrefix: string;
   sampleCount: number;
+  localRows?: GalleryLocalRow[];
 }
 
-function mockTextControl(control: CanvasControl, sampleIndex: number): CanvasControl {
+function mockTextControl(control: CanvasControl, sampleIndex: number,
+  rowSymbols: Record<string, string | number | boolean>): CanvasControl {
   const props = control.properties;
   const names = ["Text", "Label", "Default", "Value", "Placeholder", "HintText"];
   let changed: Record<string, unknown> | null = null;
   for (const key of names) {
+    // Keep the actual Power Fx formula when a user-provided scalar row can
+    // resolve it. Otherwise use a clearly labelled field-name placeholder.
+    if (staticString(props[key], rowSymbols) !== null) continue;
     const text = galleryTemplatePlaceholderText(props[key], sampleIndex);
     if (text) {
       changed ??= { ...props };
@@ -40,10 +47,11 @@ function mockTextControl(control: CanvasControl, sampleIndex: number): CanvasCon
 /** Paint source-defined template controls in simulated cells, not SQL rows. */
 export function GallerySamplePreview({
   gallery, template, x, y, width, height, appWidth, appHeight,
-  clipPrefix, sampleCount
+  clipPrefix, sampleCount, localRows
 }: Props) {
   const fields = galleryReferencedFields(gallery);
-  const cells = template ? gallerySampleCells(template, x, y, sampleCount) : [];
+  const cells = template ? gallerySampleCells(template, x, y,
+    localRows ? localRows.length : sampleCount) : [];
   const galleryClip = clipPrefix + "-gallery";
   let paintedControlBudget = 240;
 
@@ -53,13 +61,17 @@ export function GallerySamplePreview({
     parent?: CanvasControl, depth = 0, prefix = ""
   ): ReactNode {
     if (depth >= 12) return null;
+    const rowSymbols = localRows?.[sampleIndex]
+      ? localGalleryRowSymbols(localRows[sampleIndex]) : {};
     const symbols = buildSiblingGeometrySymbols(children, {
       parentWidth, parentHeight, appWidth, appHeight,
-      templateWidth: template?.width, templateHeight: template?.height
+      templateWidth: template?.width, templateHeight: template?.height,
+      symbols: rowSymbols
     });
     const context = {
       parentWidth, parentHeight, appWidth, appHeight,
-      templateWidth: template?.width, templateHeight: template?.height, symbols
+      templateWidth: template?.width, templateHeight: template?.height,
+      symbols: { ...symbols, ...rowSymbols }
     };
     const positioned = parent && isAutoLayout(parent)
       ? autoLayoutChildren(parent, context)
@@ -71,7 +83,7 @@ export function GallerySamplePreview({
       const key = prefix + "-" + sampleIndex + "-" + index;
       const clipId = clipPrefix + "-node-" + key.replace(/[^a-zA-Z0-9_-]/g, "");
       const renderSymbols = {
-        ...symbols, "App.Width": appWidth, "App.Height": appHeight,
+        ...symbols, ...rowSymbols, "App.Width": appWidth, "App.Height": appHeight,
         "Parent.Width": parentWidth, "Parent.Height": parentHeight,
         "Parent.TemplateWidth": template?.width ?? parentWidth,
         "Parent.TemplateHeight": template?.height ?? parentHeight,
@@ -82,7 +94,7 @@ export function GallerySamplePreview({
       if (visibility === "hidden") return null;
       // No ThisItem values are invented: only the field name is inserted in
       // visibly bracketed sample text. Actual formula and control remain intact.
-      const painted = mockTextControl(control, sampleIndex);
+      const painted = mockTextControl(control, sampleIndex, rowSymbols);
       const descendants = control.children.length > 0 && !isGallery(control)
         ? paint(control.children,
             control.controlType.toLowerCase() === "group" ? ox : cx,
@@ -126,7 +138,7 @@ export function GallerySamplePreview({
     );
   }
   return (
-    <g data-preview-gallery-samples="synthetic" pointerEvents="none">
+    <g data-preview-gallery-samples={localRows ? "local-snapshot" : "synthetic"} pointerEvents="none">
       <defs>
         <clipPath id={galleryClip}><rect x={x} y={y} width={width} height={height}/></clipPath>
       </defs>
@@ -139,19 +151,24 @@ export function GallerySamplePreview({
             <rect x={cell.x + 8} y={cell.y + 8} width={108} height={17}
               rx={4} fill="#fff3d6" stroke="#d29b39" opacity={0.96}/>
             <text x={cell.x + 14} y={cell.y + 20}
-              fontSize={10} fontWeight={600} fill="#754b00">SAMPLE #{cell.index + 1}</text>
+              fontSize={10} fontWeight={600} fill="#754b00">
+              {localRows ? "LOCAL #" : "SAMPLE #"}{cell.index + 1}</text>
           </g>
         ))}
         <rect x={x} y={y + Math.max(0, height - 28)} width={width} height={28}
           fill="#fff2cf" opacity={0.96}/>
         <text x={x + 10} y={y + Math.max(20, height - 10)}
           fontSize={12} fontWeight={700} fill="#795114">
-          TEMPLATE PREVIEW — synthetic cards only · no database rows or access verified
+          {localRows
+            ? "LOCAL JSON PREVIEW — unverified data and permissions · no connector executed"
+            : "TEMPLATE PREVIEW — synthetic cards only · no database rows or access verified"}
         </text>
       </g>
       <title>{[
         "Sample template fields: " + (fields.join(", ") || "No ThisItem columns found"),
-        "Cards are placeholders, not loaded Gallery.Items or authorized records."
+        localRows
+          ? "Rows come from a local file; they are not confirmed Gallery.Items or authorized records."
+          : "Cards are placeholders, not loaded Gallery.Items or authorized records."
       ].join(". ")}</title>
     </g>
   );
