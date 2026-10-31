@@ -486,7 +486,10 @@ class Parser {
         if (typeof count !== "number" || !Number.isInteger(count) || count < 0) return null;
         if (name === "left") return input.slice(0, count);
         if (name === "right") return input.slice(Math.max(0, input.length - count));
-        return input.slice((startingPosition as number) - 1, (startingPosition as number) - 1 + count);
+        // Mid beyond the source length returns Blank in Power Fx; this
+        // scalar preview cannot distinguish Blank from unknown, so withhold it.
+        if (startingPosition > input.length) return null;
+        return input.slice(startingPosition - 1, startingPosition - 1 + count);
       }
       if (name === "substitute") {
         if (args.length !== 3 && args.length !== 4) return null;
