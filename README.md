@@ -11,6 +11,12 @@ Open a modern `.msapp` package or current `.pa.yaml` source and inspect screens,
 
 > Canvas App Visualizer is an independent project and is not affiliated with or endorsed by Microsoft. It does not replace Power Apps Studio or the Power Apps runtime.
 
+## Browser-local Gallery data fixtures (October 2026)
+
+The Visual preview can now accept an **optional local JSON array** of 1–6 example rows for a selected Gallery. It binds scalar text, Boolean and numeric values to `ThisItem.*` formulas within the **actual YAML-defined Gallery card template**, so labels, conditional badges, colors and other resolvable properties can be inspected without SQL/Dataverse connections.
+
+**No automatic data retrieval or authorization.** Local rows are UI fixtures, not verified runtime or permission records; all preview cards remain noninteractive. The source-only mode is unchanged by default. See [Gallery local JSON instructions](docs/GALLERY_LOCAL_JSON.md) for a sample file and limits.
+
 ## v0.3.0 — Opt-in local interactive preview
 
 - **Simulate local state** is off by default. When enabled, safe scalar Power Fx `Set` and `UpdateContext` behavior can update local preview variables without executing SQL or connectors.
