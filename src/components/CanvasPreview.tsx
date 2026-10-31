@@ -922,13 +922,6 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
                 </g>
               );
             })}
-            {mode === "visual" && visualDiff && heatmapEnabled &&
-              visualDiff.report.width === width && visualDiff.report.height === height && (
-                <g data-preview-diff-heatmap="active" aria-hidden="true" pointerEvents="none">
-                  <image x={0} y={0} width={width} height={height}
-                    href={visualDiff.heatmapUrl} preserveAspectRatio="none" />
-                </g>
-              )}
             {mode === "visual" && reference && referenceEnabled &&
               referenceViewportMatches(reference.width, reference.height, width, height) && (
                 <g data-preview-reference="local-overlay" pointerEvents="none" aria-hidden="true">
@@ -937,6 +930,14 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
                     opacity={referenceOpacity / 100} />
                 </g>
               )}
+            {mode === "visual" && visualDiff && heatmapEnabled &&
+                          visualDiff.report.width === width && visualDiff.report.height === height && (
+                            <g data-preview-diff-heatmap="active" aria-hidden="true" pointerEvents="none">
+                              <image x={0} y={0} width={width} height={height}
+                                href={visualDiff.heatmapUrl} preserveAspectRatio="none" />
+                            </g>
+                          )}
+            
           </svg>
         </div>
       </div>
