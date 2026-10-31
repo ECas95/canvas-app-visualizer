@@ -467,7 +467,7 @@ class Parser {
     if (["left", "right", "mid", "substitute", "concatenate"].includes(name)) {
       const textOnly = args.every(arg => typeof arg === "string");
       const bounded = (value: string) => value.length <= 4096 &&
-        /^[\\x00-\\x7F]*$/.test(value);
+        Array.from(value).every(char => char.charCodeAt(0) <= 0x7f);
       if (name === "concatenate") {
         if (args.length < 1 || !textOnly) return null;
         const joined = (args as string[]).join("");
@@ -480,7 +480,7 @@ class Parser {
         const expectedLengths = name === "mid" ? [2, 3] : [2];
         if (!expectedLengths.includes(args.length)) return null;
         const startingPosition = name === "mid" ? args[1] : 1;
-        if (!Number.isInteger(startingPosition) || (startingPosition as number) < 1) return null;
+        if (typeof startingPosition !== "number" || !Number.isInteger(startingPosition) || startingPosition < 1) return null;
         const count = args[countIndex] ?? (name === "mid" && args.length === 2
           ? input.length : null);
         if (typeof count !== "number" || !Number.isInteger(count) || count < 0) return null;
