@@ -17,6 +17,7 @@ import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/lay
 import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScopedState, type PreviewVariables } from "../core/powerfx/previewBehavior";
 import { CanvasVisualControl } from "./CanvasVisualControl";
 import { GallerySamplePreview } from "./GallerySamplePreview";
+import { galleryReferencedFields } from "../core/layout/gallerySchemaPreview";
 import { previewChildClipPath } from "../core/layout/previewCorners";
 import { previewClampScroll, previewOverflowMode, previewScrollRanges, previewScrollOverlayAnchors, previewScrolledPosition, previewWheelScroll,
   type PreviewScrollOffset, type PreviewScrollRange } from "../core/layout/previewOverflow";
@@ -691,6 +692,16 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
             SYNTHETIC gallery placeholders — sample cards are not SQL data or authorized app access
           </span>
         )}
+        {mode === "visual" && showGallerySamples &&
+          visibleItems.filter(item => galleryRecordsUnknown(item.control)).slice(0, 2).map(item => {
+            const fields = galleryReferencedFields(item.control);
+            return <span key={item.control.id} className="preview-unknown-state"
+              title="Inferred from ThisItem / ThisRecord in the source template; not a verified database schema.">
+              {item.control.name}: template columns {fields.length
+                ? fields.slice(0, 9).join(", ") + (fields.length > 9 ? " …" : "")
+                : "not inferred"}
+            </span>;
+          })}
         {mode === "visual" && !showGallerySamples && visibleItems.some(item => galleryRecordsUnknown(item.control) && !item.visibilityUnknown) && (
           <span className="preview-unknown-state" role="status">
             Gallery rows unavailable — use Structure for template geometry
