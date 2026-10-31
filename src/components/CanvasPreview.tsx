@@ -18,6 +18,7 @@ import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScoped
 import { CanvasVisualControl } from "./CanvasVisualControl";
 import { GallerySamplePreview } from "./GallerySamplePreview";
 import { galleryReferencedFields } from "../core/layout/gallerySchemaPreview";
+import { gallerySampleCells } from "../core/layout/gallerySchemaPreview";
 import { parseGallerySnapshotJson, MAX_GALLERY_JSON_BYTES,
   type GalleryLocalRow } from "../core/layout/galleryLocalSnapshot";
 import { previewChildClipPath } from "../core/layout/previewCorners";
@@ -380,16 +381,32 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
     setDiffError(null);
     setVisualDiff(null);
     try {
-      const regions: PixelRegion[] = visibleItems
+      const nestedRegions: PixelRegion[] = visibleItems
         .filter(item => item.width > 0 && item.height > 0 && !item.dynamic)
         .filter(item => /container|gallery|form|datacard|group|button|label|icon|image/i
           .test(item.control.controlType))
-        .slice(0, 400)
         .map(item => ({
           id: item.control.id, label: item.control.name,
           kind: item.control.controlType,
           x: item.x, y: item.y, width: item.width, height: item.height
         }));
+      // A SQL-backed Gallery has no instantiated child controls in the source
+      // model, but the *explicitly enabled* template/local data preview has
+      // known sample slots. Include each as an independent spatial region.
+      const sampleRegions: PixelRegion[] = showGallerySamples
+        ? visibleItems.flatMap(item => {
+          if (!galleryRecordsUnknown(item.control) || !item.galleryTemplate) return [];
+          const rowCount = localGallerySnapshot?.galleryId === item.control.id
+            ? localGallerySnapshot.rows.length : gallerySampleCount;
+          return gallerySampleCells(item.galleryTemplate, item.x, item.y, rowCount)
+            .map(cell => ({
+              id: item.control.id + "::sample" + cell.index,
+              label: item.control.name + " / sample card " + (cell.index + 1),
+              kind: "Gallery template slot", x: cell.x, y: cell.y,
+              width: cell.width, height: cell.height
+            }));
+        }) : [];
+      const regions = [...nestedRegions, ...sampleRegions].slice(0, 400);
       const measured = await captureCanvasComparison(screenSvgRef.current,
         reference.dataUrl, width, height, regions, 32);
       if (request !== diffRequest.current) return;
@@ -402,6 +419,15 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
       if (request === diffRequest.current) setDiffRunning(false);
     }
   }
+
+  useEffect(() => {
+    // Previously captured pixels no longer describe the current renderer
+    // when the viewport, records, scroll position or visual state changes.
+    diffRequest.current += 1;
+    setVisualDiff(null);
+    setDiffError(null);
+  }, [profile, mode, screen, reference, localGallerySnapshot, showGallerySamples,
+    gallerySampleCount, focusSelection, variables, scrollOffsets]);
 
   function simulate(formula: unknown) {
     const result = simulateScopedPreviewBehavior(formula, scopedState);
@@ -930,7 +956,8 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
                 .slice(0, 8).map(region => (
                   <button type="button" key={region.id} className="simulation-action"
                     onClick={() => {
-                      const targetItem = itemById.get(region.id);
+                      const targetId = region.id.split("::sample")[0];
+                      const targetItem = itemById.get(targetId);
                       if (targetItem) onSelect(targetItem.control);
                     }}>
                     {region.label}: {region.meanAbsoluteError.toFixed(1)} / 255
