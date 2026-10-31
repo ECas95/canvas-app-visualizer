@@ -693,7 +693,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
         )}
         {mode === "visual" && !showGallerySamples && visibleItems.some(item => galleryRecordsUnknown(item.control) && !item.visibilityUnknown) && (
           <span className="preview-unknown-state" role="status">
-            Gallery rows unavailable — enable synthetic Gallery samples to inspect the YAML template
+            Gallery rows unavailable — use Structure for template geometry
           </span>
         )}
         {mode === "visual" && screenFillUnknown && (
