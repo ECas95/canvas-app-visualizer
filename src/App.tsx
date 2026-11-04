@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FileDrop } from "./components/FileDrop";
 import { AppTree } from "./components/AppTree";
 import { CanvasPreview } from "./components/CanvasPreview";
@@ -6,6 +6,7 @@ import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { Inspector } from "./components/Inspector";
 import { Icon } from "./components/Icon";
 import { analyzeCanvasApp } from "./core/analyzer/analyzer";
+import { analyzeOfficialPowerFxSyntax, mergeOfficialPowerFxFindings } from "./core/powerfx/officialEngine";
 import { importCanvasFiles } from "./core/importers/source";
 import { collectFormulaRefs, countControls } from "./core/model/formulas";
 import { buildFindingLocationIndex, locationForFinding } from "./core/model/findingNavigation";
@@ -55,7 +56,33 @@ export default function App() {
   const [selectedControl, setSelectedControl] = useState<CanvasControl>();
   const [rightTab, setRightTab] = useState<"inspect" | "diagnostics">("diagnostics");
 
-  const findings = useMemo(() => (app ? analyzeCanvasApp(app) : []), [app]);
+  const staticFindings = useMemo(() => (app ? analyzeCanvasApp(app) : []), [app]);
+  const [official, setOfficial] = useState<{
+    app: CanvasAppModel; status: "loading" | "ready" | "unavailable";
+    findings: Finding[]; message?: string;
+  } | null>(null);
+  const officialStatus = official?.app === app ? official.status : app ? "loading" : "unavailable";
+  const findings = useMemo(() =>
+    mergeOfficialPowerFxFindings(staticFindings,
+      official?.app === app ? official.findings : [],
+      official?.app === app && official.status === "ready"),
+    [app, staticFindings, official]
+  );
+
+  useEffect(() => {
+    if (!app) return;
+    let active = true;
+    setOfficial({ app, status: "loading", findings: [] });
+    void analyzeOfficialPowerFxSyntax(app).then(result => {
+      if (active) setOfficial({ app, status: "ready", findings: result });
+    }).catch(error => {
+      if (active) setOfficial({
+        app, status: "unavailable", findings: [],
+        message: error instanceof Error ? error.message : "Unknown WASM error."
+      });
+    });
+    return () => { active = false; };
+  }, [app]);
   const formulaCount = useMemo(
     () => (app ? collectFormulaRefs(app).length : 0),
     [app]
@@ -233,6 +260,16 @@ export default function App() {
             <strong>{findings.length}</strong> Findings
           </span>
         </div>
+      </div>
+
+      <div className="powerfx-engine-status" role="status">
+        <strong>Power Fx:</strong> {officialStatus === "ready"
+          ? "Microsoft parser ready · syntax diagnostics verified"
+          : officialStatus === "loading"
+            ? "Loading official Microsoft parser locally…"
+            : "Official parser unavailable · conservative lexical fallback"}
+        {official?.app === app && official.status === "unavailable" &&
+          <span title={official.message}> (runtime did not load)</span>}
       </div>
 
       {warnings.length > 0 && (
