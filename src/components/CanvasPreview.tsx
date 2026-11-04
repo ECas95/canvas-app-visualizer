@@ -53,6 +53,9 @@ interface Props {
   initialGallerySamples?: boolean;
   /** Optional test fixture, not an application-runtime or SQL data source. */
   initialGallerySnapshot?: { galleryId: string; rows: GalleryLocalRow[] };
+  /** Explicit synthetic-test Form fixture; never extracted from imported source. */
+  initialFormSamples?: boolean;
+  initialFormSnapshot?: { formId: string; row: GalleryLocalRow };
   /** Synthetic test-only reference input; never fetched by the portal. */
   initialReference?: { dataUrl: string; width: number; height: number; name: string };
 }
@@ -296,7 +299,8 @@ function wireframeColor(type: string): string {
 export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
   navigationScreens, appOnStart, onNavigateScreen,
   initialMode = "visual", initialGallerySamples = false,
-  initialGallerySnapshot, initialReference }: Props) {
+  initialGallerySnapshot, initialReference,
+  initialFormSamples = false, initialFormSnapshot }: Props) {
   const [profile, setProfile] = useState<Profile>("desktop");
   const [mode, setMode] = useState<PreviewMode>(initialMode);
   const [zoom, setZoom] = useState<Zoom>("fit");
@@ -306,11 +310,11 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
   const [galleryTargetId, setGalleryTargetId] = useState("");
   const [localGallerySnapshot, setLocalGallerySnapshot] = useState(initialGallerySnapshot ?? null);
   const [gallerySnapshotError, setGallerySnapshotError] = useState<string | null>(null);
-  const [showFormSamples, setShowFormSamples] = useState(false);
+  const [showFormSamples, setShowFormSamples] = useState(initialFormSamples);
   const [formTargetId, setFormTargetId] = useState("");
   const [localFormSnapshot, setLocalFormSnapshot] = useState<{
     formId: string; row: GalleryLocalRow
-  } | null>(null);
+  } | null>(initialFormSnapshot ?? null);
   const [formSnapshotError, setFormSnapshotError] = useState<string | null>(null);
   const [reference, setReference] = useState(initialReference ?? null);
   const [referenceOpacity, setReferenceOpacity] = useState(50);
@@ -529,6 +533,11 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
   function selectControl(item: DrawItem) {
     const control = item.control;
     onSelect(control);
+    if (interactive && mode === "visual" && showFormSamples &&
+        item.ancestors.some(id => formHosts.some(form => form.control.id === id))) {
+      setSimulationMessage("Sample Form controls are inspection-only; source data and writes are not executed.");
+      return;
+    }
     if (interactive && mode === "visual" && control.properties.OnSelect) {
       const gate = previewSelectionBehaviorGate(control, item.renderSymbols, {
         ancestorVisibilityUnknown: item.visibilityUnknown,
