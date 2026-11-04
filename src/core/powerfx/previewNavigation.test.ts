@@ -76,6 +76,20 @@ describe("safe multi-screen Canvas behavior preview", () => {
     expect(result.state.screenId).toBe("Home");
   });
 
+  it("navigates normalized .pa.yaml IDs while formulas reference logical screen names", () => {
+    const screens = [
+      { ...screen("Home"), id: "Synthetic.pa.yaml:screen:Home" },
+      { ...screen("Details"), id: "Synthetic.pa.yaml:screen:Details" }
+    ];
+    const start = startPreviewNavigation(screens, screens[0].id);
+    const forward = runPreviewNavigation(screens, start.state, "=Navigate(Details)");
+    expect(forward.ok).toBe(true);
+    expect(forward.state.screenId).toBe(screens[1].id);
+    const returned = runPreviewNavigation(screens, forward.state, "=Back()");
+    expect(returned.ok).toBe(true);
+    expect(returned.state.screenId).toBe(screens[0].id);
+  });
+
   it("executes a conditional Navigate only if its condition is locally known", () => {
     const screens = [screen("Home"), screen("Details"), screen("Fallback")];
     let state = createPreviewNavigationState("Home");
