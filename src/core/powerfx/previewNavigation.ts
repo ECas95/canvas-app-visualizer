@@ -219,7 +219,22 @@ export function runPreviewNavigation(
         const applied = simulateScopedPreviewBehavior(
           "=UpdateContext(" + slice(source, record) + ")", scoped());
         if (!applied.ok) return "Navigate context unresolved: " + applied.message;
-        updatedContext = { ...updatedContext, ...applied.state.context };
+        // Evaluate using the *source* screen context, but transfer only
+        // explicitly named record fields. Carrying all source context into the
+        // destination would invent cross-screen variables.
+        const fields = splitTopLevel(record.slice(1, -1), ",");
+        if (!fields) return "Navigate context record is malformed.";
+        for (const field of fields) {
+          if (field.length < 3 || field[1].value !== ":" ||
+              field[0].kind !== "identifier") {
+            return "Navigate context contains an unsupported field.";
+          }
+          const name = field[0].value;
+          const resolved = Object.entries(applied.state.context)
+            .find(([key]) => key.toLowerCase() === name.toLowerCase());
+          if (!resolved) return "Navigate context field unresolved: " + name + ".";
+          updatedContext[name] = resolved[1];
+        }
       }
       // Target context is only committed once the destination and all
       // arguments have been validated.
@@ -230,6 +245,16 @@ export function runPreviewNavigation(
     if (operation === "back") {
       if (argumentsList.length !== 0 && argumentsList.length !== 1)
         return "Back supports only a zero-argument or transition-only call.";
+      if (argumentsList.length === 1) {
+        const transition = argumentsList[0];
+        if (transition.length !== 3 ||
+            transition[0].value.toLowerCase() !== "screentransition" ||
+            transition[1].value !== "." ||
+            !/^(?:none|fade|cover|uncover|coverright|uncoverright)$/i
+              .test(transition[2].value)) {
+          return "Unsupported Back transition; no navigation performed.";
+        }
+      }
       const targetId = state.history[state.history.length - 1];
       const target = screens.find(screen => screen.id === targetId);
       return target ? switchScreen(target, true, depth) : "Back stack is empty.";
@@ -266,9 +291,14 @@ export function startPreviewNavigation(
     return { ok: false, state, partial: false, message: "Screen not found." };
   }
   const started = runPreviewNavigation(screens, state, appOnStart, "OnStart", true);
+  // App.OnStart can itself Navigate, in which case OnVisible already ran
+  // inside the destination transition; do not trigger it a second time.
+  const wasRoutedDuringStart = started.state.screenId !== firstScreenId;
   const first = screens.find(screen => screen.id === started.state.screenId);
-  const visible = runPreviewNavigation(screens, started.state,
-    first?.properties.OnVisible, "OnVisible", true);
+  const visible = wasRoutedDuringStart
+    ? started
+    : runPreviewNavigation(screens, started.state,
+      first?.properties.OnVisible, "OnVisible", true);
   return {
     ok: visible.ok, state: visible.state,
     partial: started.partial || visible.partial,
