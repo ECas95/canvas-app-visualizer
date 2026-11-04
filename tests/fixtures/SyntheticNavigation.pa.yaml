@@ -1,0 +1,51 @@
+# Fully synthetic multi-screen interaction fixture.
+# All rows, labels and formulas are fictional; no app source or connectors.
+Screens:
+  SampleHome:
+    Properties:
+      Fill: =RGBA(245, 248, 253, 1)
+      OnVisible: =Set(gVisits, Coalesce(gVisits, 0) + 1); UpdateContext({screenLabel: "Home"})
+      OnHidden: =Set(gLeftHome, true)
+    Children:
+      - PageTitle:
+          Control: Classic/Label@2.5.1
+          Properties:
+            X: =36
+            Y: =36
+            Width: =320
+            Height: =52
+            Text: =Concatenate("Home #", gVisits)
+            Size: =22
+      - GoDetails:
+          Control: Classic/Button@2.2.0
+          Properties:
+            X: =36
+            Y: =120
+            Width: =220
+            Height: =50
+            Text: ="Go to details"
+            OnSelect: =Navigate(SampleDetails, ScreenTransition.Fade, {entry: "synthetic"})
+  SampleDetails:
+    Properties:
+      Fill: =RGBA(244, 250, 246, 1)
+      OnVisible: =UpdateContext({arrivals: Coalesce(arrivals, 0) + 1}); ClearCollect(dummyRecords, ExternalCatalog); Set(gLastScreen, "Details")
+      OnHidden: =Set(gLeftDetails, true)
+    Children:
+      - DetailTitle:
+          Control: Classic/Label@2.5.1
+          Properties:
+            X: =36
+            Y: =36
+            Width: =350
+            Height: =52
+            Text: =Concatenate("Details #", arrivals)
+            Size: =22
+      - BackHome:
+          Control: Classic/Button@2.2.0
+          Properties:
+            X: =36
+            Y: =120
+            Width: =220
+            Height: =50
+            Text: ="Back to home"
+            OnSelect: =Back()
