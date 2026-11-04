@@ -34,6 +34,7 @@ import { captureCanvasComparison } from "../core/layout/previewScreenshotDiff";
 import type { PixelDiffReport, PixelRegion } from "../core/layout/visualDiff";
 import { rankVisualRegions, visualDiffReportJson, type RegionPriority } from "../core/layout/visualDiffReport";
 import { diagnoseSourceGeometry } from "../core/layout/previewGeometryDiagnostics";
+import { previewFormControl, previewFormFields, previewFormSymbols } from "../core/layout/previewFormData";
 import { compareVisualBaseline, parseVisualBaseline,
   type VisualBaseline } from "../core/layout/visualDiffBaseline";
 
@@ -305,6 +306,12 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
   const [galleryTargetId, setGalleryTargetId] = useState("");
   const [localGallerySnapshot, setLocalGallerySnapshot] = useState(initialGallerySnapshot ?? null);
   const [gallerySnapshotError, setGallerySnapshotError] = useState<string | null>(null);
+  const [showFormSamples, setShowFormSamples] = useState(false);
+  const [formTargetId, setFormTargetId] = useState("");
+  const [localFormSnapshot, setLocalFormSnapshot] = useState<{
+    formId: string; row: GalleryLocalRow
+  } | null>(null);
+  const [formSnapshotError, setFormSnapshotError] = useState<string | null>(null);
   const [reference, setReference] = useState(initialReference ?? null);
   const [referenceOpacity, setReferenceOpacity] = useState(50);
   const [referenceEnabled, setReferenceEnabled] = useState(true);
@@ -353,6 +360,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
     setLocalGallerySnapshot(null);
     setGalleryTargetId("");
     setGallerySnapshotError(null);
+    setFormTargetId("");
+    setLocalFormSnapshot(null);
+    setFormSnapshotError(null);
     referenceRequest.current += 1;
     setReference(null);
     setReferenceError(null);
@@ -547,6 +557,26 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
   const effectiveGalleryId = galleries.some(item => item.control.id === galleryTargetId)
     ? galleryTargetId : galleries[0]?.control.id;
 
+  async function loadLocalFormJson(file: File | undefined) {
+    if (!file || !selectedFormId) return;
+    if (file.size > MAX_GALLERY_JSON_BYTES) {
+      setFormSnapshotError("Form JSON exceeds the 64 KB local limit.");
+      return;
+    }
+    try {
+      const parsed = parseGallerySnapshotJson(await file.text());
+      if (!parsed.rows || parsed.rows.length !== 1) {
+        setFormSnapshotError("Form sample requires exactly one scalar JSON record.");
+        return;
+      }
+      setLocalFormSnapshot({ formId: selectedFormId, row: parsed.rows[0] });
+      setShowFormSamples(true);
+      setFormSnapshotError(null);
+    } catch {
+      setFormSnapshotError("Could not read the local Form JSON file.");
+    }
+  }
+
   async function loadLocalGalleryJson(file: File | undefined) {
     if (!file) return;
     if (!effectiveGalleryId) {
@@ -595,6 +625,28 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
     () => new Map(items.map(item => [item.control.id, item])),
     [items]
   );
+  const formHosts = items.filter(item =>
+    /(?:^|\/)(?:editform|displayform|form)(?:@|$)/i.test(item.control.controlType)
+  );
+  const selectedFormId = formHosts.some(item => item.control.id === formTargetId)
+    ? formTargetId : formHosts[0]?.control.id;
+
+  function formPreview(item: DrawItem): {
+    control: CanvasControl; symbols: PreviewVariables
+  } {
+    if (!showFormSamples) return { control: item.control, symbols: item.renderSymbols };
+    const host = item.ancestors.find(id =>
+      formHosts.some(form => form.control.id === id));
+    if (!host) return { control: item.control, symbols: item.renderSymbols };
+    const dataCardId = item.ancestors[item.ancestors.length - 1];
+    const parent = dataCardId ? itemById.get(dataCardId)?.control : undefined;
+    const card = parent && /datacard/i.test(parent.controlType) ? parent : undefined;
+    const row = localFormSnapshot?.formId === host ? localFormSnapshot.row : undefined;
+    const symbols = previewFormSymbols(row, card, item.renderSymbols);
+    return {
+      control: previewFormControl(item.control, symbols, true, card), symbols
+    };
+  }
   const indexById = useMemo(() => new Map(items.map((item, index) => [item.control.id, index])), [items]);
   const geometryIssues = useMemo(() => diagnoseSourceGeometry(
     items.map(item => ({
@@ -815,6 +867,38 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
               <option value={1}>1</option><option value={3}>3</option><option value={6}>6</option>
             </select>
           </label>}
+          {formHosts.length > 0 && <label className="preview-focus"
+            title="Display source-derived DataCard placeholders; no Form.Item data is queried">
+            <input type="checkbox" checked={showFormSamples}
+              onChange={event => setShowFormSamples(event.target.checked)} />
+            Form examples (synthetic)
+          </label>}
+          {showFormSamples && formHosts.length > 1 && <label className="preview-choice">
+            <span>Form</span>
+            <select aria-label="Select Form for local preview" value={selectedFormId}
+              onChange={event => {
+                setFormTargetId(event.target.value);
+                setLocalFormSnapshot(null);
+              }}>
+              {formHosts.map(form =>
+                <option key={form.control.id} value={form.control.id}>{form.control.name}</option>)}
+            </select>
+          </label>}
+          {showFormSamples && formHosts.length > 0 && <label className="preview-choice"
+            title="Supply exactly one example record. It remains in browser memory.">
+            <span>Form JSON</span>
+            <input type="file" accept=".json,application/json"
+              aria-label="Load local Form JSON sample"
+              onChange={event => {
+                const file = event.currentTarget.files?.[0];
+                event.currentTarget.value = "";
+                void loadLocalFormJson(file);
+              }} />
+          </label>}
+          {localFormSnapshot && <button type="button" className="simulation-action"
+            onClick={() => { setLocalFormSnapshot(null); setFormSnapshotError(null); }}>
+            Clear Form sample
+          </button>}
           <label className="preview-focus" title="Enable local-only, reversible behavior simulation">
             <input type="checkbox" checked={interactive} onChange={event => {
               const enabled = event.target.checked;
@@ -957,8 +1041,8 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
                       <title>Cannot determine loading, emptiness or access from source</title>
                     </g>
                   ) : mode === "visual" ? (
-                    <CanvasVisualControl control={item.control} mediaAssets={mediaAssets}
-                      simulationSymbols={item.renderSymbols}
+                    <CanvasVisualControl control={formPreview(item).control} mediaAssets={mediaAssets}
+                      simulationSymbols={formPreview(item).symbols}
                       x={item.x} y={item.y} width={item.width} height={item.height}
                       clipId={`${instanceId}-text-${index}`} />
                   ) : (
@@ -1199,6 +1283,15 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
               : "SYNTHETIC gallery placeholders — sample cards are not SQL data or authorized app access"}
           </span>
         )}
+        {formSnapshotError && <span role="alert" className="preview-unknown-state">
+          Form JSON: {formSnapshotError}
+        </span>}
+        {showFormSamples && formHosts.length > 0 &&
+          <span className="preview-unknown-state" role="status">
+            Form examples: {formHosts.map(form =>
+              form.control.name + " [" + previewFormFields(form.control).slice(0, 8).join(", ") + "]"
+            ).join(" · ")} · no runtime Form.Item or access verified
+          </span>}
         {gallerySnapshotError && <span role="alert" className="preview-unknown-state">
           Local gallery JSON: {gallerySnapshotError}
         </span>}
