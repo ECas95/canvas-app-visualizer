@@ -79,8 +79,12 @@ function splitTopLevel(tokens: PowerFxToken[], separator: string): PowerFxToken[
   return output;
 }
 
-function screenFor(screens: readonly CanvasScreen[], name: string): CanvasScreen | undefined {
-  return screens.find(screen => screen.name.toLowerCase() === name.toLowerCase());
+function screenFor(screens: readonly CanvasScreen[], nameOrId: string): CanvasScreen | undefined {
+  // Normalized .pa.yaml screen IDs carry a source-file prefix, while
+  // Navigate() references the exported logical Screen name. Accept both.
+  const lookup = nameOrId.toLowerCase();
+  return screens.find(screen =>
+    screen.id.toLowerCase() === lookup || screen.name.toLowerCase() === lookup);
 }
 
 function identifier(token: PowerFxToken): string {
