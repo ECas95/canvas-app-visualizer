@@ -33,6 +33,7 @@ import { previewReferenceFileKind, referenceViewportMatches,
 import { captureCanvasComparison } from "../core/layout/previewScreenshotDiff";
 import type { PixelDiffReport, PixelRegion } from "../core/layout/visualDiff";
 import { rankVisualRegions, visualDiffReportJson, type RegionPriority } from "../core/layout/visualDiffReport";
+import { diagnoseSourceGeometry } from "../core/layout/previewGeometryDiagnostics";
 
 interface Props {
   screen?: CanvasScreen;
@@ -576,6 +577,17 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
     [items]
   );
   const indexById = useMemo(() => new Map(items.map((item, index) => [item.control.id, index])), [items]);
+  const geometryIssues = useMemo(() => diagnoseSourceGeometry(
+    items.map(item => ({
+      id: item.control.id,
+      name: item.control.name,
+      type: item.control.controlType,
+      parentId: item.ancestors[item.ancestors.length - 1],
+      x: item.x, y: item.y,
+      width: item.width, height: item.height,
+      verified: !item.dynamic && !item.visibilityUnknown
+    })), width, height
+  ), [items, width, height]);
   const target = selectedId ? itemById.get(selectedId) : undefined;
   const visibleItems = useMemo(
     () => focusSelection && target
@@ -1024,6 +1036,25 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
         </div>
       </div>
       <div className="preview-note">
+        {geometryIssues.length > 0 && <details className="preview-geometry-panel">
+          <summary>Geometry review: {geometryIssues.length} source hints</summary>
+          <div className="preview-geometry-list">
+            <p>Source-only findings — clipping and overlap may be intentional.
+              Unknown runtime bounds are not treated as verified defects.</p>
+            {geometryIssues.slice(0, 25).map(issue => (
+              <button type="button" key={issue.id}
+                className="simulation-action"
+                onClick={() => {
+                  const item = itemById.get(issue.controlId);
+                  if (item) onSelect(item.control);
+                }}>
+                <strong>{issue.kind}</strong> · {issue.label}
+                {issue.excessPercent > 0 ? " · " + issue.excessPercent + "%" : ""}
+                <small>{issue.detail}</small>
+              </button>
+            ))}
+          </div>
+        </details>}
         {diffError && <span className="preview-unknown-state" role="alert">{diffError}</span>}
         {visualDiff && mode === "visual" && (
           <div className="preview-diff-report" role="region" aria-label="Visual difference metrics">
