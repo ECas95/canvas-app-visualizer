@@ -7,7 +7,7 @@ Screens:
   SampleHome:
     Properties:
       Fill: =RGBA(245, 248, 253, 1)
-      OnVisible: =Set(gVisits, Coalesce(gVisits, 0) + 1); UpdateContext({screenLabel: "Home"})
+      OnVisible: =Set(gVisits, Coalesce(gVisits, 0) + 1); UpdateContext({screenLabel:"Home"})
       OnHidden: =Set(gLeftHome, true)
     Children:
       - PageTitle:
@@ -27,11 +27,11 @@ Screens:
             Width: =220
             Height: =50
             Text: ="Go to details"
-            OnSelect: =Navigate(SampleDetails, ScreenTransition.Fade, {entry: "synthetic", arrivals: 0})
+            OnSelect: =Navigate(SampleDetails, ScreenTransition.Fade, {entry:"synthetic", arrivals:0})
   SampleDetails:
     Properties:
       Fill: =RGBA(244, 250, 246, 1)
-      OnVisible: =UpdateContext({arrivals: Coalesce(arrivals, 0) + 1}); ClearCollect(dummyRecords, ExternalCatalog); Set(gLastScreen, "Details")
+      OnVisible: =UpdateContext({arrivals:Coalesce(arrivals, 0) + 1}); ClearCollect(dummyRecords, ExternalCatalog); Set(gLastScreen, "Details")
       OnHidden: =Set(gLeftDetails, true)
     Children:
       - DetailTitle:
