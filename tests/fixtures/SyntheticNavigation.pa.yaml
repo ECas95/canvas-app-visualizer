@@ -1,5 +1,8 @@
 # Fully synthetic multi-screen interaction fixture.
 # All rows, labels and formulas are fictional; no app source or connectors.
+App:
+  Properties:
+    OnStart: =Set(gVisits, 0)
 Screens:
   SampleHome:
     Properties:
