@@ -6,7 +6,7 @@
  * The images document this renderer, not pixel parity with Power Apps Studio.
  */
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
 import { createServer } from "vite";
@@ -155,8 +155,33 @@ try {
   assert.equal(await svg.locator('[data-preview-diff-heatmap="active"]').count(), 1);
   const rankedRegions = await metrics.locator(".preview-diff-regions button").allTextContents();
   assert.ok(rankedRegions.some(text => text.includes("sample card")));
+  const priority = page.getByLabel("Visual region ranking");
+  await priority.selectOption("intensity");
+  assert.equal(await priority.inputValue(), "intensity");
+  await priority.selectOption("impact");
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Export JSON report" }).click()
+  ]);
+  const exportPath = await download.path();
+  assert.ok(exportPath);
+  const exported = JSON.parse(await readFile(exportPath, "utf8"));
+  assert.equal(exported.schemaVersion, 1);
+  assert.equal(exported.metrics.threshold, 32);
+  assert.ok(exported.regions.length > 0);
+  assert.ok(exported.regions.every(r => typeof r.impactScore === "number"));
+  assert.equal("heatmap" in exported.metrics, false);
+  const thresholdSlider = page.getByLabel("Pixel difference threshold");
+  await thresholdSlider.focus();
+  await thresholdSlider.press("ArrowRight");
+  await page.getByText("Pixel threshold: 40/255").waitFor();
+  assert.equal(await metrics.count(), 0); // no stale report after changing threshold
+  await page.getByRole("button", { name: "Measure difference" }).click();
+  await metrics.waitFor({ timeout: 20000 });
+  assert.ok((await metrics.textContent())?.includes("threshold 40/255"));
   report.push({ scenario: "quantitative-diff", hasMetrics: true,
-    hasHeatmap: true, gallerySlotRanked: true });
+    hasHeatmap: true, gallerySlotRanked: true,
+    exportedJSON: true, adjustableThreshold: true });
   await page.locator(".canvas-stage").screenshot({
     path: resolve(output, "desktop-difference-heatmap.png"), animations: "disabled"
   });

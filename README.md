@@ -11,6 +11,16 @@ Open a modern `.msapp` package or current `.pa.yaml` source and inspect screens,
 
 > Canvas App Visualizer is an independent project and is not affiliated with or endorsed by Microsoft. It does not replace Power Apps Studio or the Power Apps runtime.
 
+## v0.6.0 — Fast visual diagnostics and reproducible reports
+
+- **Performance:** visual difference metrics now use streaming scanline prefix sums. Instead of rescanning every overlapping control rectangle, the comparator runs in `O(pixels + rows × regions)` time with only `O(viewport width + regions)` temporary storage beyond the output heatmap.
+- **Accuracy:** regional RMSE now uses the same per-channel squared RGB difference as screen-wide RMSE. This fixes an under-reporting bug for uneven RGB-channel mismatches.
+- **Better priorities:** switch between **Largest total impact** (large areas first) and **Highest average error** (severe local mismatches) for the top control/gallery regions.
+- **Adjustable sensitivity:** choose a threshold from 0 to 128/255 to distinguish subtle antialiasing changes from larger differences. Changing thresholds invalidates outdated measurements.
+- **Export:** download a browser-generated JSON diagnostic report with source control names, rankings and metrics, but **no image contents, heatmap pixels or gallery records**. Export is opt-in only.
+
+See [Visual diagnostics v0.6 guide](docs/FAST_VISUAL_DIAGNOSTICS.md) and the existing [screenshot comparison guide](docs/QUANTITATIVE_VISUAL_DIFF.md).
+
 ## v0.5.0 — Quantitative visual difference measurement
 
 - **Measure difference:** compare a matching local screenshot against the current source-defined Canvas SVG. See mean RGB absolute error, RMSE, and the percentage of pixels above a fixed threshold (32/255).
