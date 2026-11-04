@@ -313,6 +313,40 @@ describe("nested Gallery parent formula scope", () => {
   });
 });
 
+describe("CanvasPreview Form/DataCard source-only local examples", () => {
+  it("displays bracketed fields or explicit Form JSON without querying source data", () => {
+    const input = control("NameValue", "Classic/TextInput@2.3.2", {
+      X: "=12", Y: "=28", Width: "=180", Height: "=36",
+      Default: "=Parent.Default"
+    });
+    const card = control("NameCard", "TypedDataCard@1.0", {
+      X: "=16", Y: "=16", Width: "=260", Height: "=96",
+      DataField: '="Name"', Default: "=ThisItem.Name"
+    }, [input]);
+    const form = control("DemoForm", "EditForm@2.4.0", {
+      X: "=20", Y: "=30", Width: "=500", Height: "=300",
+      Item: "=LookUp(ExternalSQL, ID = 1)"
+    }, [card]);
+    const screen: CanvasScreen = {
+      id: "FormDemo", name: "FormDemo", properties: {},
+      children: [form], sourceFile: "Src/Synthetic.pa.yaml", sourceFormat: "pa-yaml-v3"
+    };
+    const source = renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+    expect(source).not.toContain("[Name #example]");
+    const placeholders = renderToStaticMarkup(<CanvasPreview screen={screen}
+      initialFormSamples={true} onSelect={() => {}} />);
+    expect(placeholders).toContain("[Name #example]");
+    expect(placeholders).toContain("no runtime Form.Item or access verified");
+    const local = renderToStaticMarkup(<CanvasPreview screen={screen}
+      initialFormSamples={true} initialFormSnapshot={{
+        formId: "DemoForm", row: { Name: "Sample Admin" }
+      }} onSelect={() => {}} />);
+    expect(local).toContain("Sample Admin");
+    expect(local).not.toContain("[Name #example]");
+    expect(local).toContain('aria-label="Load local Form JSON sample"');
+  });
+});
+
 describe("CanvasPreview gallery source vs runtime rows", () => {
   it("does not turn a SQL Items formula into a visible template row", () => {
     const html = renderGalleryItems("=Filter(Modules, IsEnabled)");

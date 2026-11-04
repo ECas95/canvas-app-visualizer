@@ -15,6 +15,9 @@ import { previewVisibility, previewSelectionBehaviorGate, previewColorWithSymbol
 import { staticBoolean, staticNumber } from "../core/powerfx/staticEval";
 import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/layout/previewDataState";
 import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScopedState, type PreviewVariables } from "../core/powerfx/previewBehavior";
+import { previewNavigationSymbols, runPreviewNavigation,
+  selectPreviewNavigationScreen, startPreviewNavigation,
+  type PreviewNavigationState } from "../core/powerfx/previewNavigation";
 import { CanvasVisualControl } from "./CanvasVisualControl";
 import { GallerySamplePreview } from "./GallerySamplePreview";
 import { galleryReferencedFields } from "../core/layout/gallerySchemaPreview";
@@ -30,18 +33,29 @@ import { previewReferenceFileKind, referenceViewportMatches,
 import { captureCanvasComparison } from "../core/layout/previewScreenshotDiff";
 import type { PixelDiffReport, PixelRegion } from "../core/layout/visualDiff";
 import { rankVisualRegions, visualDiffReportJson, type RegionPriority } from "../core/layout/visualDiffReport";
+import { diagnoseSourceGeometry } from "../core/layout/previewGeometryDiagnostics";
+import { previewFormControl, previewFormFields, previewFormSymbols } from "../core/layout/previewFormData";
+import { compareVisualBaseline, parseVisualBaseline,
+  type VisualBaseline } from "../core/layout/visualDiffBaseline";
 
 interface Props {
   screen?: CanvasScreen;
   mediaAssets?: PreviewMediaAsset[];
   selectedId?: string;
   onSelect: (control: CanvasControl) => void;
+  /** Optional source-only navigation; no real screen, connector or flow is invoked. */
+  navigationScreens?: CanvasScreen[];
+  appOnStart?: unknown;
+  onNavigateScreen?: (screenId: string) => void;
   /** Optional initial inspection mode; defaults to the no-runtime-records visual view. */
   initialMode?: "visual" | "structure";
   /** Testable, explicit opt-in. Default never fabricates gallery rows. */
   initialGallerySamples?: boolean;
   /** Optional test fixture, not an application-runtime or SQL data source. */
   initialGallerySnapshot?: { galleryId: string; rows: GalleryLocalRow[] };
+  /** Explicit synthetic-test Form fixture; never extracted from imported source. */
+  initialFormSamples?: boolean;
+  initialFormSnapshot?: { formId: string; row: GalleryLocalRow };
   /** Synthetic test-only reference input; never fetched by the portal. */
   initialReference?: { dataUrl: string; width: number; height: number; name: string };
 }
@@ -282,7 +296,11 @@ function wireframeColor(type: string): string {
   return "#657285";
 }
 
-export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], initialMode = "visual", initialGallerySamples = false, initialGallerySnapshot, initialReference }: Props) {
+export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
+  navigationScreens, appOnStart, onNavigateScreen,
+  initialMode = "visual", initialGallerySamples = false,
+  initialGallerySnapshot, initialReference,
+  initialFormSamples = false, initialFormSnapshot }: Props) {
   const [profile, setProfile] = useState<Profile>("desktop");
   const [mode, setMode] = useState<PreviewMode>(initialMode);
   const [zoom, setZoom] = useState<Zoom>("fit");
@@ -292,6 +310,12 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
   const [galleryTargetId, setGalleryTargetId] = useState("");
   const [localGallerySnapshot, setLocalGallerySnapshot] = useState(initialGallerySnapshot ?? null);
   const [gallerySnapshotError, setGallerySnapshotError] = useState<string | null>(null);
+  const [showFormSamples, setShowFormSamples] = useState(initialFormSamples);
+  const [formTargetId, setFormTargetId] = useState("");
+  const [localFormSnapshot, setLocalFormSnapshot] = useState<{
+    formId: string; row: GalleryLocalRow
+  } | null>(initialFormSnapshot ?? null);
+  const [formSnapshotError, setFormSnapshotError] = useState<string | null>(null);
   const [reference, setReference] = useState(initialReference ?? null);
   const [referenceOpacity, setReferenceOpacity] = useState(50);
   const [referenceEnabled, setReferenceEnabled] = useState(true);
@@ -301,24 +325,48 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
   const [visualDiff, setVisualDiff] = useState<{ report: PixelDiffReport; heatmapUrl: string } | null>(null);
   const [diffError, setDiffError] = useState<string | null>(null);
   const [diffRunning, setDiffRunning] = useState(false);
+  const [visualBaseline, setVisualBaseline] = useState<VisualBaseline | null>(null);
+  const [baselineError, setBaselineError] = useState<string | null>(null);
   const [diffThreshold, setDiffThreshold] = useState(32);
   const [diffPriority, setDiffPriority] = useState<RegionPriority>("impact");
   const [heatmapEnabled, setHeatmapEnabled] = useState(false);
   const diffRequest = useRef(0);
   const [interactive, setInteractive] = useState(false);
   const [scopedState, setScopedState] = useState<PreviewScopedState>({ globals: {}, context: {} });
+  const [navigationState, setNavigationState] = useState<PreviewNavigationState | null>(null);
   const [scrollOffsets, setScrollOffsets] = useState<Record<string, PreviewScrollOffset>>({});
-  const variables = useMemo(() => previewScopedSymbols(scopedState), [scopedState]);
+  const variables = useMemo(() =>
+    interactive && navigationState
+      ? previewNavigationSymbols(navigationState)
+      : previewScopedSymbols(scopedState),
+    [interactive, navigationState, scopedState]);
   const [simulationMessage, setSimulationMessage] = useState("Simulation off. No behavior formulas are executed.");
   const instanceId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
 
   useEffect(() => {
-    setInteractive(false);
-    setScopedState({ globals: {}, context: {} });
+    // Internal Navigate/Back must preserve the opted-in simulator and global
+    // variables. Browsing to another screen also triggers its local OnVisible.
+    if (interactive && navigationState && screen && navigationScreens?.length) {
+      if (navigationState.screenId !== screen.id) {
+        const entered = selectPreviewNavigationScreen(navigationScreens,
+          navigationState, screen.id);
+        if (entered.ok) {
+          setNavigationState(entered.state);
+          setSimulationMessage(entered.message);
+        }
+      }
+    } else {
+      setInteractive(false);
+      setNavigationState(null);
+      setScopedState({ globals: {}, context: {} });
+    }
     setScrollOffsets({});
     setLocalGallerySnapshot(null);
     setGalleryTargetId("");
     setGallerySnapshotError(null);
+    setFormTargetId("");
+    setLocalFormSnapshot(null);
+    setFormSnapshotError(null);
     referenceRequest.current += 1;
     setReference(null);
     setReferenceError(null);
@@ -370,6 +418,21 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
     } catch {
       if (referenceRequest.current === request)
         setReferenceError("Could not decode this local screenshot.");
+    }
+  }
+
+  async function loadVisualBaseline(file: File | undefined) {
+    if (!file) return;
+    if (file.size > 512 * 1024) {
+      setBaselineError("Baseline report must be 512 KB or smaller.");
+      return;
+    }
+    try {
+      const next = parseVisualBaseline(await file.text());
+      setVisualBaseline(next);
+      setBaselineError(null);
+    } catch (error) {
+      setBaselineError(error instanceof Error ? error.message : "Invalid baseline report.");
     }
   }
 
@@ -433,7 +496,18 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
   }, [profile, mode, screen, reference, localGallerySnapshot, showGallerySamples,
     gallerySampleCount, focusSelection, variables, scrollOffsets, diffThreshold]);
 
-  function simulate(formula: unknown) {
+  function simulate(formula: unknown, trigger: "OnSelect" | "OnVisible" = "OnSelect") {
+    if (navigationState && navigationScreens?.length) {
+      const result = runPreviewNavigation(navigationScreens, navigationState, formula,
+        trigger, trigger === "OnVisible");
+      if (result.ok) {
+        setNavigationState(result.state);
+        if (result.state.screenId !== screen?.id)
+          onNavigateScreen?.(result.state.screenId);
+      }
+      setSimulationMessage(result.message);
+      return;
+    }
     const result = simulateScopedPreviewBehavior(formula, scopedState);
     if (result.ok) setScopedState(result.state);
     setSimulationMessage(result.message);
@@ -459,6 +533,11 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
   function selectControl(item: DrawItem) {
     const control = item.control;
     onSelect(control);
+    if (interactive && mode === "visual" && showFormSamples &&
+        item.ancestors.some(id => formHosts.some(form => form.control.id === id))) {
+      setSimulationMessage("Sample Form controls are inspection-only; source data and writes are not executed.");
+      return;
+    }
     if (interactive && mode === "visual" && control.properties.OnSelect) {
       const gate = previewSelectionBehaviorGate(control, item.renderSymbols, {
         ancestorVisibilityUnknown: item.visibilityUnknown,
@@ -466,7 +545,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
         galleryRecordsUnknown: galleryRecordsUnknown(control)
       });
       if (gate === "allowed") {
-        simulate(control.properties.OnSelect);
+        simulate(control.properties.OnSelect, "OnSelect");
       } else if (gate === "visibility-unverified") {
         setSimulationMessage("OnSelect skipped: Visible is not confirmed for this control or an ancestor.");
       } else if (gate === "gallery-unverified") {
@@ -486,6 +565,26 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
   const galleries = rawItems.filter(item => galleryRecordsUnknown(item.control));
   const effectiveGalleryId = galleries.some(item => item.control.id === galleryTargetId)
     ? galleryTargetId : galleries[0]?.control.id;
+
+  async function loadLocalFormJson(file: File | undefined) {
+    if (!file || !selectedFormId) return;
+    if (file.size > MAX_GALLERY_JSON_BYTES) {
+      setFormSnapshotError("Form JSON exceeds the 64 KB local limit.");
+      return;
+    }
+    try {
+      const parsed = parseGallerySnapshotJson(await file.text());
+      if (!parsed.rows || parsed.rows.length !== 1) {
+        setFormSnapshotError("Form sample requires exactly one scalar JSON record.");
+        return;
+      }
+      setLocalFormSnapshot({ formId: selectedFormId, row: parsed.rows[0] });
+      setShowFormSamples(true);
+      setFormSnapshotError(null);
+    } catch {
+      setFormSnapshotError("Could not read the local Form JSON file.");
+    }
+  }
 
   async function loadLocalGalleryJson(file: File | undefined) {
     if (!file) return;
@@ -535,7 +634,40 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
     () => new Map(items.map(item => [item.control.id, item])),
     [items]
   );
+  const formHosts = items.filter(item =>
+    /(?:^|\/)(?:editform|displayform|form)(?:@|$)/i.test(item.control.controlType)
+  );
+  const selectedFormId = formHosts.some(item => item.control.id === formTargetId)
+    ? formTargetId : formHosts[0]?.control.id;
+
+  function formPreview(item: DrawItem): {
+    control: CanvasControl; symbols: PreviewVariables
+  } {
+    if (!showFormSamples) return { control: item.control, symbols: item.renderSymbols };
+    const host = item.ancestors.find(id =>
+      formHosts.some(form => form.control.id === id));
+    if (!host) return { control: item.control, symbols: item.renderSymbols };
+    const dataCardId = item.ancestors[item.ancestors.length - 1];
+    const parent = dataCardId ? itemById.get(dataCardId)?.control : undefined;
+    const card = parent && /datacard/i.test(parent.controlType) ? parent : undefined;
+    const row = localFormSnapshot?.formId === host ? localFormSnapshot.row : undefined;
+    const symbols = previewFormSymbols(row, card, item.renderSymbols);
+    return {
+      control: previewFormControl(item.control, symbols, true, card), symbols
+    };
+  }
   const indexById = useMemo(() => new Map(items.map((item, index) => [item.control.id, index])), [items]);
+  const geometryIssues = useMemo(() => diagnoseSourceGeometry(
+    items.map(item => ({
+      id: item.control.id,
+      name: item.control.name,
+      type: item.control.controlType,
+      parentId: item.ancestors[item.ancestors.length - 1],
+      x: item.x, y: item.y,
+      width: item.width, height: item.height,
+      verified: !item.dynamic && !item.visibilityUnknown
+    })), width, height
+  ), [items, width, height]);
   const target = selectedId ? itemById.get(selectedId) : undefined;
   const visibleItems = useMemo(
     () => focusSelection && target
@@ -582,6 +714,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
     }, child);
   }
 
+  const baselineComparison = visualBaseline && visualDiff
+    ? compareVisualBaseline(visualBaseline, visualDiff.report, screen?.name ?? "")
+    : null;
   const unresolved = items.filter(item => item.dynamic).length;
   const runtimeVisibilityUnknown = items.filter(item => item.visibilityUnknown).length;
 
@@ -741,19 +876,80 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
               <option value={1}>1</option><option value={3}>3</option><option value={6}>6</option>
             </select>
           </label>}
+          {formHosts.length > 0 && <label className="preview-focus"
+            title="Display source-derived DataCard placeholders; no Form.Item data is queried">
+            <input type="checkbox" checked={showFormSamples}
+              onChange={event => setShowFormSamples(event.target.checked)} />
+            Form examples (synthetic)
+          </label>}
+          {showFormSamples && formHosts.length > 1 && <label className="preview-choice">
+            <span>Form</span>
+            <select aria-label="Select Form for local preview" value={selectedFormId}
+              onChange={event => {
+                setFormTargetId(event.target.value);
+                setLocalFormSnapshot(null);
+              }}>
+              {formHosts.map(form =>
+                <option key={form.control.id} value={form.control.id}>{form.control.name}</option>)}
+            </select>
+          </label>}
+          {showFormSamples && formHosts.length > 0 && <label className="preview-choice"
+            title="Supply exactly one example record. It remains in browser memory.">
+            <span>Form JSON</span>
+            <input type="file" accept=".json,application/json"
+              aria-label="Load local Form JSON sample"
+              onChange={event => {
+                const file = event.currentTarget.files?.[0];
+                event.currentTarget.value = "";
+                void loadLocalFormJson(file);
+              }} />
+          </label>}
+          {localFormSnapshot && <button type="button" className="simulation-action"
+            onClick={() => { setLocalFormSnapshot(null); setFormSnapshotError(null); }}>
+            Clear Form sample
+          </button>}
           <label className="preview-focus" title="Enable local-only, reversible behavior simulation">
             <input type="checkbox" checked={interactive} onChange={event => {
-              setInteractive(event.target.checked);
+              const enabled = event.target.checked;
+              setInteractive(enabled);
               setScopedState({ globals: {}, context: {} });
-              setSimulationMessage(event.target.checked ? "Local simulator ready. Click a control or run OnVisible." : "Simulation off. No behavior formulas are executed.");
+              if (enabled && screen && navigationScreens?.length) {
+                const started = startPreviewNavigation(navigationScreens, screen.id, appOnStart);
+                setNavigationState(started.state);
+                setSimulationMessage(started.message);
+                if (started.state.screenId !== screen.id)
+                  onNavigateScreen?.(started.state.screenId);
+              } else {
+                setNavigationState(null);
+                setSimulationMessage(enabled
+                  ? "Local simulator ready. Click a control or run OnVisible."
+                  : "Simulation off. No behavior formulas are executed.");
+              }
             }} />
             Simulate local state
           </label>
           {interactive && <button type="button" className="simulation-action"
-            onClick={() => simulate(screen.properties.OnVisible)}
+            onClick={() => simulate(screen.properties.OnVisible, "OnVisible")}
             disabled={!screen.properties.OnVisible}>Run OnVisible</button>}
           {interactive && <button type="button" className="simulation-action"
-            onClick={() => { setScopedState({ globals: {}, context: {} }); setSimulationMessage("Local state reset."); }}>Reset</button>}
+            onClick={() => {
+              setScopedState({ globals: {}, context: {} });
+              if (screen && navigationScreens?.length) {
+                const restarted = startPreviewNavigation(navigationScreens, screen.id, appOnStart);
+                setNavigationState(restarted.state);
+                setSimulationMessage("Reset + lifecycle: " + restarted.message);
+                if (restarted.state.screenId !== screen.id)
+                  onNavigateScreen?.(restarted.state.screenId);
+              } else {
+                setSimulationMessage("Local state reset.");
+              }
+            }}>Reset</button>}
+          {interactive && navigationState && <span className="preview-navigation-status"
+            role="status" title="A local Power Fx navigation model; no real screen actions run">
+            {navigationScreens?.find(item => item.id === navigationState.screenId)?.name ?? screen.name}
+            {" · "}{navigationState.history.length} history
+            {" · "}{navigationState.notices.length} skipped warnings
+          </span>}
           <span className="preview-dimensions">{width} × {height}</span>
         </div>
       </div>
@@ -854,8 +1050,8 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
                       <title>Cannot determine loading, emptiness or access from source</title>
                     </g>
                   ) : mode === "visual" ? (
-                    <CanvasVisualControl control={item.control} mediaAssets={mediaAssets}
-                      simulationSymbols={item.renderSymbols}
+                    <CanvasVisualControl control={formPreview(item).control} mediaAssets={mediaAssets}
+                      simulationSymbols={formPreview(item).symbols}
                       x={item.x} y={item.y} width={item.width} height={item.height}
                       clipId={`${instanceId}-text-${index}`} />
                   ) : (
@@ -955,6 +1151,25 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
         </div>
       </div>
       <div className="preview-note">
+        {geometryIssues.length > 0 && <details className="preview-geometry-panel">
+          <summary>Geometry review: {geometryIssues.length} source hints</summary>
+          <div className="preview-geometry-list">
+            <p>Source-only findings — clipping and overlap may be intentional.
+              Unknown runtime bounds are not treated as verified defects.</p>
+            {geometryIssues.slice(0, 25).map(issue => (
+              <button type="button" key={issue.id}
+                className="simulation-action"
+                onClick={() => {
+                  const item = itemById.get(issue.controlId);
+                  if (item) onSelect(item.control);
+                }}>
+                <strong>{issue.kind}</strong> · {issue.label}
+                {issue.excessPercent > 0 ? " · " + issue.excessPercent + "%" : ""}
+                <small>{issue.detail}</small>
+              </button>
+            ))}
+          </div>
+        </details>}
         {diffError && <span className="preview-unknown-state" role="alert">{diffError}</span>}
         {visualDiff && mode === "visual" && (
           <div className="preview-diff-report" role="region" aria-label="Visual difference metrics">
@@ -971,6 +1186,21 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
                 <option value="intensity">Highest average error</option>
               </select>
             </label>
+            <label className="preview-diff-priority">
+              <span>Compare previous report</span>
+              <input type="file" accept=".json,application/json"
+                aria-label="Import previous visual diagnostic report"
+                onChange={event => {
+                  const file = event.currentTarget.files?.[0];
+                  event.currentTarget.value = "";
+                  void loadVisualBaseline(file);
+                }} />
+            </label>
+            {visualBaseline && <button type="button" className="simulation-action"
+              onClick={() => {
+                setVisualBaseline(null);
+                setBaselineError(null);
+              }}>Clear baseline</button>}
             <button type="button" className="simulation-action"
               onClick={() => {
                 const json = visualDiffReportJson(visualDiff.report, {
@@ -1005,6 +1235,40 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
                   </button>
                 ))}
             </div>
+            {baselineError && <span role="alert">{baselineError}</span>}
+            {visualBaseline && baselineComparison && (
+              <div className="preview-baseline-results" role="group"
+                aria-label="Visual baseline version comparison">
+                <strong>Compared with {visualBaseline.context.generatedAt}</strong>
+                {baselineComparison.compatible ? (
+                  <>
+                    <span>Δ MAE: {baselineComparison.meanErrorDelta.toFixed(2)} / 255</span>
+                    <span>Δ RMSE: {baselineComparison.rmseDelta.toFixed(2)} / 255</span>
+                    <span>Δ changed: {baselineComparison.changedPercentDelta.toFixed(2)} points</span>
+                    <span>Improved regions: {baselineComparison.improvements.length}</span>
+                    <span>Regressed regions: {baselineComparison.regressions.length}</span>
+                    <div className="preview-diff-regions">
+                      {baselineComparison.regressions.slice(0, 5).map(region => (
+                        <button type="button" key={region.id} className="simulation-action"
+                          onClick={() => {
+                            const item = itemById.get(region.id.split("::sample")[0]);
+                            if (item) onSelect(item.control);
+                          }}>Regressed: {region.label} (+{region.deltaError.toFixed(1)})</button>
+                      ))}
+                      {baselineComparison.improvements.slice(0, 5).map(region => (
+                        <button type="button" key={region.id} className="simulation-action"
+                          onClick={() => {
+                            const item = itemById.get(region.id.split("::sample")[0]);
+                            if (item) onSelect(item.control);
+                          }}>Improved: {region.label} ({region.deltaError.toFixed(1)})</button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <span>{baselineComparison.reason}</span>
+                )}
+              </div>
+            )}
             <small>Rank by impact to fix large mismatched areas first, or by intensity
               to find severe localized defects. Region scores overlap; screenshots must show
               the same state, data and fonts. JSON exports contain control names and metrics,
@@ -1028,6 +1292,15 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
               : "SYNTHETIC gallery placeholders — sample cards are not SQL data or authorized app access"}
           </span>
         )}
+        {formSnapshotError && <span role="alert" className="preview-unknown-state">
+          Form JSON: {formSnapshotError}
+        </span>}
+        {showFormSamples && formHosts.length > 0 &&
+          <span className="preview-unknown-state" role="status">
+            Form examples: {formHosts.map(form =>
+              form.control.name + " [" + previewFormFields(form.control).slice(0, 8).join(", ") + "]"
+            ).join(" · ")} · no runtime Form.Item or access verified
+          </span>}
         {gallerySnapshotError && <span role="alert" className="preview-unknown-state">
           Local gallery JSON: {gallerySnapshotError}
         </span>}
@@ -1066,6 +1339,18 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
         {interactive && <span className="simulation-status" aria-live="polite">
           {simulationMessage} · {Object.keys(variables).length} local variable(s)
         </span>}
+        {interactive && navigationState && <details className="simulation-vars">
+          <summary>Navigation events ({navigationState.events.length})</summary>
+          <div className="simulation-vars-panel">
+            <strong>Local-only behavior log</strong>
+            {navigationState.events.slice(-10).map((event, index) =>
+              <p key={index}>{event}</p>)}
+            {navigationState.notices.slice(-8).map((warning, index) =>
+              <p key={"warning-" + index} role="status">Skipped: {warning}</p>)}
+            <small>Actions not in the allowlist have not been executed. The state
+              may differ from the real app.</small>
+          </div>
+        </details>}
         {interactive && (
           <details className="simulation-vars">
             <summary>Inspect state ({Object.keys(variables).length})</summary>

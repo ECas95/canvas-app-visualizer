@@ -11,6 +11,16 @@ Open a modern `.msapp` package or current `.pa.yaml` source and inspect screens,
 
 > Canvas App Visualizer is an independent project and is not affiliated with or endorsed by Microsoft. It does not replace Power Apps Studio or the Power Apps runtime.
 
+## v0.7.0 — Safe multi-screen behavior and deeper diagnostics
+
+- **Navigate, Back and OnVisible**: opt-in, browser-only simulation of safe Power Fx navigation, per-screen contexts and local lifecycle events. Unsupported SQL/connector actions are visibly skipped; OnSelect remains transactional.
+- **Form/DataCard examples**: opt-in source-derived field placeholders and one browser-local JSON record for `ThisItem` / `Parent.Default` rendering, without using records from imported MSAPP connections.
+- **Version comparison**: import a previously downloaded visual-difference report to evaluate improved/regressed controls, with strict matching of screen, viewport and threshold.
+- **Geometry review**: identify likely clipping, viewport overflow, unresolved positions and strong sibling overlaps, with clickable source controls.
+- **Official Microsoft.PowerFx syntax**: independently loaded .NET WebAssembly parser diagnostics, with an explicit fallback when unavailable. It does not execute behavior formulas or grant access.
+
+See [Interactive Preview v0.7 guide](docs/INTERACTIVE_PREVIEW_V0.7.md) for exact capabilities, synthetic fixtures, security and remaining gaps. This is **not** complete Power Apps runtime emulation.
+
 ## v0.6.0 — Fast visual diagnostics and reproducible reports
 
 - **Performance:** visual difference metrics now use streaming scanline prefix sums. Instead of rescanning every overlapping control rectangle, the comparator runs in `O(pixels + rows × regions)` time with only `O(viewport width + regions)` temporary storage beyond the output heatmap.

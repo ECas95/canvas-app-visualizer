@@ -27,6 +27,11 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Setup official Power Fx .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
       - name: Install dependencies
         run: npm install
 
@@ -38,6 +43,19 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Publish official Microsoft Power Fx WebAssembly engine
+        run: >
+          dotnet publish powerfx-wasm/CanvasAppVisualizer.PowerFxWasm.csproj
+          --configuration Release
+          --output "$RUNNER_TEMP/powerfx-wasm"
+
+      - name: Bundle Power Fx runtime with the static site
+        shell: bash
+        run: |
+          test -f "$RUNNER_TEMP/powerfx-wasm/wwwroot/_framework/dotnet.js"
+          mkdir -p dist/powerfx
+          cp -R "$RUNNER_TEMP/powerfx-wasm/wwwroot/." dist/powerfx/
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
