@@ -258,6 +258,14 @@ export default function App() {
         />
 
         <CanvasPreview
+          navigationScreens={app.screens}
+          appOnStart={app.appProperties.OnStart}
+          onNavigateScreen={id => {
+            if (!app.screens.some(screen => screen.id === id)) return;
+            setSelectedScreenId(id);
+            setSelectedControl(undefined);
+            setRightTab("inspect");
+          }}
           mediaAssets={mediaAssets}
           screen={selectedScreen}
           selectedId={selectedControl?.id}
