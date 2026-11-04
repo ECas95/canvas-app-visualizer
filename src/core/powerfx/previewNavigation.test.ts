@@ -35,6 +35,7 @@ describe("safe multi-screen Canvas behavior preview", () => {
     expect(navigated.state.screenId).toBe("Details");
     expect(navigated.state.globals.gLeftHome).toBe(true);
     expect(navigated.state.contexts.Details.selectedId).toBe(7);
+    expect(navigated.state.contexts.Details.page).toBeUndefined();
     expect(navigated.state.contexts.Details.visits).toBe(1);
     expect(navigated.state.history).toEqual(["Home"]);
     expect(initial.state.globals.gLeftHome).toBeUndefined();
@@ -101,6 +102,18 @@ describe("safe multi-screen Canvas behavior preview", () => {
     expect(previewNavigationSymbols(selected.state).opened).toBe(true);
     expect(selected.state.globals.wentAway).toBe(true);
     expect(selected.state.history).toEqual([]);
+  });
+
+  it("runs a destination OnVisible exactly once when App.OnStart performs Navigate", () => {
+    const screens = [
+      screen("Home"),
+      screen("Next", { OnVisible: "=Set(gEntered, gEntered + 1)" })
+    ];
+    const started = startPreviewNavigation(screens, "Home",
+      "=Set(gEntered, 0); Navigate(Next)");
+    expect(started.ok).toBe(true);
+    expect(started.state.screenId).toBe("Next");
+    expect(started.state.globals.gEntered).toBe(1);
   });
 
   it("blocks unknown screens, unsafe transition/context expressions and empty Back", () => {
