@@ -193,6 +193,25 @@ try {
   assert.equal(await svg.locator('[data-preview-reference="local-overlay"]').count(), 1);
   report.push({ scenario: "reference-overlay", viewport: "1366x768",
     localOnly: true, displayedAtMatchingViewport: true, withheldAtMismatchedViewport: true });
+  // Fully synthetic multi-screen navigation regression. No real connector.
+  await page.getByRole("button", { name: "Open another" }).click();
+  await page.locator('input[type="file"]').setInputFiles(
+    resolve("tests/fixtures/SyntheticNavigation.pa.yaml")
+  );
+  await page.getByRole("img", { name: "SampleHome canvas preview" }).waitFor();
+  await page.getByRole("checkbox", { name: "Simulate local state" }).check();
+  await page.getByRole("button", { name: /Inspect GoDetails/ }).click();
+  await page.getByRole("img", { name: "SampleDetails canvas preview" })
+    .waitFor({ timeout: 12000 });
+  assert.ok((await page.locator(".preview-navigation-status").textContent())
+    ?.includes("SampleDetails"));
+  await page.getByRole("button", { name: /Inspect BackHome/ }).click();
+  await page.getByRole("img", { name: "SampleHome canvas preview" })
+    .waitFor({ timeout: 12000 });
+  assert.ok((await page.locator(".preview-navigation-status").textContent())
+    ?.includes("SampleHome"));
+  report.push({ scenario: "safe-navigation", navigate: true, back: true,
+    lifecycle: true, localOnly: true });
   await writeFile(resolve(output, "geometry.json"), JSON.stringify(report, null, 2) + "\n");
   console.log("Chromium visual smoke: 3 profiles, 9 screenshots including Gallery, reference and quantitative heatmap; source geometry verified.");
 } finally {
