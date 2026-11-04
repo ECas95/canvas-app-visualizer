@@ -15,6 +15,9 @@ import { previewVisibility, previewSelectionBehaviorGate, previewColorWithSymbol
 import { staticBoolean, staticNumber } from "../core/powerfx/staticEval";
 import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/layout/previewDataState";
 import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScopedState, type PreviewVariables } from "../core/powerfx/previewBehavior";
+import { previewNavigationSymbols, runPreviewNavigation,
+  selectPreviewNavigationScreen, startPreviewNavigation,
+  type PreviewNavigationState } from "../core/powerfx/previewNavigation";
 import { CanvasVisualControl } from "./CanvasVisualControl";
 import { GallerySamplePreview } from "./GallerySamplePreview";
 import { galleryReferencedFields } from "../core/layout/gallerySchemaPreview";
@@ -36,6 +39,10 @@ interface Props {
   mediaAssets?: PreviewMediaAsset[];
   selectedId?: string;
   onSelect: (control: CanvasControl) => void;
+  /** Optional source-only navigation; no real screen, connector or flow is invoked. */
+  navigationScreens?: CanvasScreen[];
+  appOnStart?: unknown;
+  onNavigateScreen?: (screenId: string) => void;
   /** Optional initial inspection mode; defaults to the no-runtime-records visual view. */
   initialMode?: "visual" | "structure";
   /** Testable, explicit opt-in. Default never fabricates gallery rows. */
@@ -282,7 +289,10 @@ function wireframeColor(type: string): string {
   return "#657285";
 }
 
-export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], initialMode = "visual", initialGallerySamples = false, initialGallerySnapshot, initialReference }: Props) {
+export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
+  navigationScreens, appOnStart, onNavigateScreen,
+  initialMode = "visual", initialGallerySamples = false,
+  initialGallerySnapshot, initialReference }: Props) {
   const [profile, setProfile] = useState<Profile>("desktop");
   const [mode, setMode] = useState<PreviewMode>(initialMode);
   const [zoom, setZoom] = useState<Zoom>("fit");
@@ -307,14 +317,33 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
   const diffRequest = useRef(0);
   const [interactive, setInteractive] = useState(false);
   const [scopedState, setScopedState] = useState<PreviewScopedState>({ globals: {}, context: {} });
+  const [navigationState, setNavigationState] = useState<PreviewNavigationState | null>(null);
   const [scrollOffsets, setScrollOffsets] = useState<Record<string, PreviewScrollOffset>>({});
-  const variables = useMemo(() => previewScopedSymbols(scopedState), [scopedState]);
+  const variables = useMemo(() =>
+    interactive && navigationState
+      ? previewNavigationSymbols(navigationState)
+      : previewScopedSymbols(scopedState),
+    [interactive, navigationState, scopedState]);
   const [simulationMessage, setSimulationMessage] = useState("Simulation off. No behavior formulas are executed.");
   const instanceId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
 
   useEffect(() => {
-    setInteractive(false);
-    setScopedState({ globals: {}, context: {} });
+    // Internal Navigate/Back must preserve the opted-in simulator and global
+    // variables. Browsing to another screen also triggers its local OnVisible.
+    if (interactive && navigationState && screen && navigationScreens?.length) {
+      if (navigationState.screenId !== screen.id) {
+        const entered = selectPreviewNavigationScreen(navigationScreens,
+          navigationState, screen.id);
+        if (entered.ok) {
+          setNavigationState(entered.state);
+          setSimulationMessage(entered.message);
+        }
+      }
+    } else {
+      setInteractive(false);
+      setNavigationState(null);
+      setScopedState({ globals: {}, context: {} });
+    }
     setScrollOffsets({});
     setLocalGallerySnapshot(null);
     setGalleryTargetId("");
@@ -433,7 +462,18 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
   }, [profile, mode, screen, reference, localGallerySnapshot, showGallerySamples,
     gallerySampleCount, focusSelection, variables, scrollOffsets, diffThreshold]);
 
-  function simulate(formula: unknown) {
+  function simulate(formula: unknown, trigger: "OnSelect" | "OnVisible" = "OnSelect") {
+    if (navigationState && navigationScreens?.length) {
+      const result = runPreviewNavigation(navigationScreens, navigationState, formula,
+        trigger, trigger === "OnVisible");
+      if (result.ok) {
+        setNavigationState(result.state);
+        if (result.state.screenId !== screen?.id)
+          onNavigateScreen?.(result.state.screenId);
+      }
+      setSimulationMessage(result.message);
+      return;
+    }
     const result = simulateScopedPreviewBehavior(formula, scopedState);
     if (result.ok) setScopedState(result.state);
     setSimulationMessage(result.message);
@@ -466,7 +506,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
         galleryRecordsUnknown: galleryRecordsUnknown(control)
       });
       if (gate === "allowed") {
-        simulate(control.properties.OnSelect);
+        simulate(control.properties.OnSelect, "OnSelect");
       } else if (gate === "visibility-unverified") {
         setSimulationMessage("OnSelect skipped: Visible is not confirmed for this control or an ancestor.");
       } else if (gate === "gallery-unverified") {
@@ -743,17 +783,46 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
           </label>}
           <label className="preview-focus" title="Enable local-only, reversible behavior simulation">
             <input type="checkbox" checked={interactive} onChange={event => {
-              setInteractive(event.target.checked);
+              const enabled = event.target.checked;
+              setInteractive(enabled);
               setScopedState({ globals: {}, context: {} });
-              setSimulationMessage(event.target.checked ? "Local simulator ready. Click a control or run OnVisible." : "Simulation off. No behavior formulas are executed.");
+              if (enabled && screen && navigationScreens?.length) {
+                const started = startPreviewNavigation(navigationScreens, screen.id, appOnStart);
+                setNavigationState(started.state);
+                setSimulationMessage(started.message);
+                if (started.state.screenId !== screen.id)
+                  onNavigateScreen?.(started.state.screenId);
+              } else {
+                setNavigationState(null);
+                setSimulationMessage(enabled
+                  ? "Local simulator ready. Click a control or run OnVisible."
+                  : "Simulation off. No behavior formulas are executed.");
+              }
             }} />
             Simulate local state
           </label>
           {interactive && <button type="button" className="simulation-action"
-            onClick={() => simulate(screen.properties.OnVisible)}
+            onClick={() => simulate(screen.properties.OnVisible, "OnVisible")}
             disabled={!screen.properties.OnVisible}>Run OnVisible</button>}
           {interactive && <button type="button" className="simulation-action"
-            onClick={() => { setScopedState({ globals: {}, context: {} }); setSimulationMessage("Local state reset."); }}>Reset</button>}
+            onClick={() => {
+              setScopedState({ globals: {}, context: {} });
+              if (screen && navigationScreens?.length) {
+                const restarted = startPreviewNavigation(navigationScreens, screen.id, appOnStart);
+                setNavigationState(restarted.state);
+                setSimulationMessage("Reset + lifecycle: " + restarted.message);
+                if (restarted.state.screenId !== screen.id)
+                  onNavigateScreen?.(restarted.state.screenId);
+              } else {
+                setSimulationMessage("Local state reset.");
+              }
+            }}>Reset</button>}
+          {interactive && navigationState && <span className="preview-navigation-status"
+            role="status" title="A local Power Fx navigation model; no real screen actions run">
+            {navigationScreens?.find(item => item.id === navigationState.screenId)?.name ?? screen.name}
+            {" · "}{navigationState.history.length} history
+            {" · "}{navigationState.notices.length} skipped warnings
+          </span>}
           <span className="preview-dimensions">{width} × {height}</span>
         </div>
       </div>
@@ -1066,6 +1135,18 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
         {interactive && <span className="simulation-status" aria-live="polite">
           {simulationMessage} · {Object.keys(variables).length} local variable(s)
         </span>}
+        {interactive && navigationState && <details className="simulation-vars">
+          <summary>Navigation events ({navigationState.events.length})</summary>
+          <div className="simulation-vars-panel">
+            <strong>Local-only behavior log</strong>
+            {navigationState.events.slice(-10).map((event, index) =>
+              <p key={index}>{event}</p>)}
+            {navigationState.notices.slice(-8).map((warning, index) =>
+              <p key={"warning-" + index} role="status">Skipped: {warning}</p>)}
+            <small>Actions not in the allowlist have not been executed. The state
+              may differ from the real app.</small>
+          </div>
+        </details>}
         {interactive && (
           <details className="simulation-vars">
             <summary>Inspect state ({Object.keys(variables).length})</summary>
