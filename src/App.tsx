@@ -61,11 +61,11 @@ export default function App() {
     app: CanvasAppModel; status: "loading" | "ready" | "unavailable";
     findings: Finding[]; message?: string;
   } | null>(null);
-  const officialStatus = official?.app === app ? official.status : app ? "loading" : "unavailable";
+  const officialStatus = official && official.app === app ? official.status : app ? "loading" : "unavailable";
   const findings = useMemo(() =>
     mergeOfficialPowerFxFindings(staticFindings,
-      official?.app === app ? official.findings : [],
-      official?.app === app && official.status === "ready"),
+      official && official.app === app ? official.findings : [],
+      official !== null && official.app === app && official.status === "ready"),
     [app, staticFindings, official]
   );
 
