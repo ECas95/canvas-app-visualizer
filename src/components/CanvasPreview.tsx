@@ -29,6 +29,7 @@ import { previewReferenceFileKind, referenceViewportMatches,
   MAX_REFERENCE_SCREENSHOT_BYTES } from "../core/layout/previewReference";
 import { captureCanvasComparison } from "../core/layout/previewScreenshotDiff";
 import type { PixelDiffReport, PixelRegion } from "../core/layout/visualDiff";
+import { rankVisualRegions, visualDiffReportJson, type RegionPriority } from "../core/layout/visualDiffReport";
 
 interface Props {
   screen?: CanvasScreen;
@@ -300,6 +301,8 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
   const [visualDiff, setVisualDiff] = useState<{ report: PixelDiffReport; heatmapUrl: string } | null>(null);
   const [diffError, setDiffError] = useState<string | null>(null);
   const [diffRunning, setDiffRunning] = useState(false);
+  const [diffThreshold, setDiffThreshold] = useState(32);
+  const [diffPriority, setDiffPriority] = useState<RegionPriority>("impact");
   const [heatmapEnabled, setHeatmapEnabled] = useState(false);
   const diffRequest = useRef(0);
   const [interactive, setInteractive] = useState(false);
@@ -408,7 +411,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
         }) : [];
       const regions = [...nestedRegions, ...sampleRegions].slice(0, 400);
       const measured = await captureCanvasComparison(screenSvgRef.current,
-        reference.dataUrl, width, height, regions, 32);
+        reference.dataUrl, width, height, regions, diffThreshold);
       if (request !== diffRequest.current) return;
       setVisualDiff(measured);
       setHeatmapEnabled(true);
@@ -426,8 +429,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
     diffRequest.current += 1;
     setVisualDiff(null);
     setDiffError(null);
+    setDiffRunning(false);
   }, [profile, mode, screen, reference, localGallerySnapshot, showGallerySamples,
-    gallerySampleCount, focusSelection, variables, scrollOffsets]);
+    gallerySampleCount, focusSelection, variables, scrollOffsets, diffThreshold]);
 
   function simulate(formula: unknown) {
     const result = simulateScopedPreviewBehavior(formula, scopedState);
@@ -661,6 +665,15 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
               value={referenceOpacity}
               onChange={event => setReferenceOpacity(Number(event.target.value))} />
           </label>}
+          {mode === "visual" && reference &&
+            referenceViewportMatches(reference.width, reference.height, width, height) &&
+            <label className="preview-choice">
+              <span>Pixel threshold: {diffThreshold}/255</span>
+              <input type="range" min="0" max="128" step="8"
+                aria-label="Pixel difference threshold"
+                value={diffThreshold}
+                onChange={event => setDiffThreshold(Number(event.target.value))} />
+            </label>}
           {mode === "visual" && reference &&
             referenceViewportMatches(reference.width, reference.height, width, height) &&
             <button type="button" className="simulation-action"
@@ -948,12 +961,38 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
             <strong>Visual difference — reference vs Canvas preview</strong>
             <span>Mean RGB error: {visualDiff.report.meanAbsoluteError.toFixed(2)} / 255</span>
             <span>RMSE: {visualDiff.report.rootMeanSquareError.toFixed(2)} / 255</span>
-            <span>Different pixels (threshold 32/255): {visualDiff.report.changedPercent.toFixed(2)}%</span>
-            <span>Highest-error source regions (overlapping metrics):</span>
+            <span>Different pixels (threshold {visualDiff.report.threshold}/255): {visualDiff.report.changedPercent.toFixed(2)}%</span>
+            <label className="preview-diff-priority">
+              <span>Rank regions</span>
+              <select aria-label="Visual region ranking"
+                value={diffPriority}
+                onChange={event => setDiffPriority(event.target.value as RegionPriority)}>
+                <option value="impact">Largest total impact</option>
+                <option value="intensity">Highest average error</option>
+              </select>
+            </label>
+            <button type="button" className="simulation-action"
+              onClick={() => {
+                const json = visualDiffReportJson(visualDiff.report, {
+                  screen: screen.name,
+                  reference: reference?.name ?? "Local reference",
+                  generatedAt: new Date().toISOString()
+                });
+                const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+                const anchor = document.createElement("a");
+                anchor.href = url;
+                anchor.download = "canvas-visual-diff-" +
+                  screen.name.replace(/[^a-z0-9_-]/gi, "_").slice(0, 64) + ".json";
+                document.body.appendChild(anchor);
+                anchor.click();
+                anchor.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+              }}>
+              Export JSON report
+            </button>
+            <span>Highest-priority source regions (overlapping metrics):</span>
             <div className="preview-diff-regions">
-              {[...visualDiff.report.regions]
-                .filter(item => item.pixels > 0)
-                .sort((a, b) => b.meanAbsoluteError - a.meanAbsoluteError)
+              {rankVisualRegions(visualDiff.report.regions, diffPriority)
                 .slice(0, 8).map(region => (
                   <button type="button" key={region.id} className="simulation-action"
                     onClick={() => {
@@ -966,8 +1005,11 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [], 
                   </button>
                 ))}
             </div>
-            <small>Region scores overlap; screenshots must show the same app state, data and fonts.
-              Rerun after any visual change. Heatmap is an inspection aid, not a Power Apps parity certificate.</small>
+            <small>Rank by impact to fix large mismatched areas first, or by intensity
+              to find severe localized defects. Region scores overlap; screenshots must show
+              the same state, data and fonts. JSON exports contain control names and metrics,
+              never screenshots or pixel arrays. Rerun after changes; results do not certify
+              Power Apps parity.</small>
           </div>
         )}
         {referenceError && <span className="preview-unknown-state" role="alert">{referenceError}</span>}
