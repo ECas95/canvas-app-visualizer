@@ -62,3 +62,18 @@
 .preview-diff-priority select{max-width:185px;min-width:140px;padding:5px 7px;border:1px solid #b6cade;border-radius:5px;color:#264662;background:#fff}
 .preview-diff-priority select:focus-visible{outline:2px solid #0f6cbd;outline-offset:2px}
 .preview-choice input[type="range"]{accent-color:#0f6cbd;max-width:105px;vertical-align:middle}
+
+/* v0.7 source-only navigation, geometry and baseline inspection */
+.preview-navigation-status{display:inline-flex;gap:4px;align-items:center;padding:4px 7px;border-radius:5px;background:#e8f4ff;border:1px solid #b5d3ee;color:#174a70;white-space:nowrap;font-size:10px}
+.preview-geometry-panel{position:relative;font-size:10px;flex-shrink:0;color:#795114}
+.preview-geometry-panel>summary{cursor:pointer;padding:5px 8px;background:#fff9ed;border:1px solid #e4d2a5;border-radius:5px}
+.preview-geometry-panel>summary:focus-visible{outline:2px solid #0f6cbd;outline-offset:2px}
+.preview-geometry-list{display:flex;flex-direction:column;gap:5px;position:absolute;bottom:calc(100% + 10px);left:0;width:min(390px,80vw);max-height:330px;overflow:auto;z-index:21;padding:12px;background:#fff;border:1px solid #d4c9a9;border-radius:8px;box-shadow:0 8px 25px #0002}
+.preview-geometry-list p{margin:0 0 6px;color:#667586;line-height:1.4}
+.preview-geometry-list button{white-space:normal;max-width:100%;text-align:left}
+.preview-geometry-list button small{display:block;margin-top:3px;color:#64748b;font-weight:400}
+.preview-baseline-results{display:flex;gap:6px 10px;flex-wrap:wrap;align-items:center;width:100%;padding:9px 10px;border-top:1px solid #c9d9e8;color:#29526d}
+.preview-baseline-results strong{flex-basis:100%;font-size:11px}
+.preview-baseline-results>span{padding:3px 5px;background:#fff;border-radius:4px}
+.powerfx-engine-status{padding:5px 14px;border-bottom:1px solid #d9e3ed;color:#385972;font-size:11px;background:#f8fbff}
+.powerfx-engine-status strong{font-weight:700}
