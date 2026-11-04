@@ -27,7 +27,7 @@ Screens:
             Width: =220
             Height: =50
             Text: ="Go to details"
-            OnSelect: =Navigate(SampleDetails, ScreenTransition.Fade, {entry: "synthetic"})
+            OnSelect: =Navigate(SampleDetails, ScreenTransition.Fade, {entry: "synthetic", arrivals: 0})
   SampleDetails:
     Properties:
       Fill: =RGBA(244, 250, 246, 1)
