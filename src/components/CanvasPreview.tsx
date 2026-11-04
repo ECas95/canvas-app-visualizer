@@ -34,6 +34,8 @@ import { captureCanvasComparison } from "../core/layout/previewScreenshotDiff";
 import type { PixelDiffReport, PixelRegion } from "../core/layout/visualDiff";
 import { rankVisualRegions, visualDiffReportJson, type RegionPriority } from "../core/layout/visualDiffReport";
 import { diagnoseSourceGeometry } from "../core/layout/previewGeometryDiagnostics";
+import { compareVisualBaseline, parseVisualBaseline,
+  type VisualBaseline } from "../core/layout/visualDiffBaseline";
 
 interface Props {
   screen?: CanvasScreen;
@@ -312,6 +314,8 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
   const [visualDiff, setVisualDiff] = useState<{ report: PixelDiffReport; heatmapUrl: string } | null>(null);
   const [diffError, setDiffError] = useState<string | null>(null);
   const [diffRunning, setDiffRunning] = useState(false);
+  const [visualBaseline, setVisualBaseline] = useState<VisualBaseline | null>(null);
+  const [baselineError, setBaselineError] = useState<string | null>(null);
   const [diffThreshold, setDiffThreshold] = useState(32);
   const [diffPriority, setDiffPriority] = useState<RegionPriority>("impact");
   const [heatmapEnabled, setHeatmapEnabled] = useState(false);
@@ -400,6 +404,21 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
     } catch {
       if (referenceRequest.current === request)
         setReferenceError("Could not decode this local screenshot.");
+    }
+  }
+
+  async function loadVisualBaseline(file: File | undefined) {
+    if (!file) return;
+    if (file.size > 512 * 1024) {
+      setBaselineError("Baseline report must be 512 KB or smaller.");
+      return;
+    }
+    try {
+      const next = parseVisualBaseline(await file.text());
+      setVisualBaseline(next);
+      setBaselineError(null);
+    } catch (error) {
+      setBaselineError(error instanceof Error ? error.message : "Invalid baseline report.");
     }
   }
 
@@ -634,6 +653,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
     }, child);
   }
 
+  const baselineComparison = visualBaseline && visualDiff
+    ? compareVisualBaseline(visualBaseline, visualDiff.report, screen?.name ?? "")
+    : null;
   const unresolved = items.filter(item => item.dynamic).length;
   const runtimeVisibilityUnknown = items.filter(item => item.visibilityUnknown).length;
 
@@ -1071,6 +1093,21 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
                 <option value="intensity">Highest average error</option>
               </select>
             </label>
+            <label className="preview-diff-priority">
+              <span>Compare previous report</span>
+              <input type="file" accept=".json,application/json"
+                aria-label="Import previous visual diagnostic report"
+                onChange={event => {
+                  const file = event.currentTarget.files?.[0];
+                  event.currentTarget.value = "";
+                  void loadVisualBaseline(file);
+                }} />
+            </label>
+            {visualBaseline && <button type="button" className="simulation-action"
+              onClick={() => {
+                setVisualBaseline(null);
+                setBaselineError(null);
+              }}>Clear baseline</button>}
             <button type="button" className="simulation-action"
               onClick={() => {
                 const json = visualDiffReportJson(visualDiff.report, {
@@ -1105,6 +1142,40 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
                   </button>
                 ))}
             </div>
+            {baselineError && <span role="alert">{baselineError}</span>}
+            {visualBaseline && baselineComparison && (
+              <div className="preview-baseline-results" role="group"
+                aria-label="Visual baseline version comparison">
+                <strong>Compared with {visualBaseline.context.generatedAt}</strong>
+                {baselineComparison.compatible ? (
+                  <>
+                    <span>Δ MAE: {baselineComparison.meanErrorDelta.toFixed(2)} / 255</span>
+                    <span>Δ RMSE: {baselineComparison.rmseDelta.toFixed(2)} / 255</span>
+                    <span>Δ changed: {baselineComparison.changedPercentDelta.toFixed(2)} points</span>
+                    <span>Improved regions: {baselineComparison.improvements.length}</span>
+                    <span>Regressed regions: {baselineComparison.regressions.length}</span>
+                    <div className="preview-diff-regions">
+                      {baselineComparison.regressions.slice(0, 5).map(region => (
+                        <button type="button" key={region.id} className="simulation-action"
+                          onClick={() => {
+                            const item = itemById.get(region.id.split("::sample")[0]);
+                            if (item) onSelect(item.control);
+                          }}>Regressed: {region.label} (+{region.deltaError.toFixed(1)})</button>
+                      ))}
+                      {baselineComparison.improvements.slice(0, 5).map(region => (
+                        <button type="button" key={region.id} className="simulation-action"
+                          onClick={() => {
+                            const item = itemById.get(region.id.split("::sample")[0]);
+                            if (item) onSelect(item.control);
+                          }}>Improved: {region.label} ({region.deltaError.toFixed(1)})</button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <span>{baselineComparison.reason}</span>
+                )}
+              </div>
+            )}
             <small>Rank by impact to fix large mismatched areas first, or by intensity
               to find severe localized defects. Region scores overlap; screenshots must show
               the same state, data and fonts. JSON exports contain control names and metrics,
