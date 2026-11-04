@@ -24,7 +24,7 @@ describe("safe multi-screen Canvas behavior preview", () => {
         OnHidden: "=Set(gLeftDetails, true)"
       })
     ];
-    const initial = startPreviewNavigation(screens, "Home");
+    const initial = startPreviewNavigation(screens, "Home", "=Set(gVisits, 0)");
     expect(initial.ok).toBe(true);
     expect(initial.state.globals.gVisits).toBe(1);
     expect(initial.state.contexts.Home.page).toBe("home");
