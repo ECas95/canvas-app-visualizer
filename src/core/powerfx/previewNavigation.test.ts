@@ -30,7 +30,7 @@ describe("safe multi-screen Canvas behavior preview", () => {
     expect(initial.state.contexts.Home.page).toBe("home");
 
     const navigated = runPreviewNavigation(screens, initial.state,
-      "=Navigate(Details, ScreenTransition.Fade, { selectedId: 7 })");
+      "=Navigate(Details, ScreenTransition.Fade, { selectedId: 7, visits: 0 })");
     expect(navigated.ok).toBe(true);
     expect(navigated.state.screenId).toBe("Details");
     expect(navigated.state.globals.gLeftHome).toBe(true);
