@@ -56,6 +56,8 @@ interface Props {
   onNavigateScreen?: (screenId: string) => void;
   /** Optional initial inspection mode; defaults to the no-runtime-records visual view. */
   initialMode?: "visual" | "structure" | "all";
+  /** Explicit synthetic test fixture; never loaded from an MSAPP at runtime. */
+  initialScenario?: PreviewVariables;
   /** Testable, explicit opt-in. Default never fabricates gallery rows. */
   initialGallerySamples?: boolean;
   /** Optional test fixture, not an application-runtime or SQL data source. */
@@ -330,13 +332,13 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
   navigationScreens, appOnStart, onNavigateScreen,
   initialMode = "visual", initialGallerySamples = false,
   initialGallerySnapshot, initialReference,
-  initialFormSamples = false, initialFormSnapshot }: Props) {
+  initialFormSamples = false, initialFormSnapshot, initialScenario = {} }: Props) {
   const [profile, setProfile] = useState<Profile>("desktop");
   const [mode, setMode] = useState<PreviewMode>(initialMode);
   const [inspectFilter, setInspectFilter] = useState<VisibilityInspectionFilter>("all");
   const [inspectQuery, setInspectQuery] = useState("");
   const [inspectPage, setInspectPage] = useState(0);
-  const [scenarioSymbols, setScenarioSymbols] = useState<PreviewVariables>({});
+  const [scenarioSymbols, setScenarioSymbols] = useState<PreviewVariables>(initialScenario);
   const [scenarioError, setScenarioError] = useState<string | null>(null);
   const [zoom, setZoom] = useState<Zoom>("fit");
   const [focusSelection, setFocusSelection] = useState(false);
@@ -467,6 +469,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
       const parsed = parseVisibilityScenario(await file.text());
       setScenarioSymbols(parsed);
       setScenarioError(null);
+      setInspectPage(0);
     } catch (error) {
       setScenarioError(error instanceof Error ? error.message : "Invalid scenario JSON.");
     }
@@ -869,6 +872,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
               onClick={() => {
                 setScenarioSymbols({});
                 setScenarioError(null);
+                setInspectPage(0);
               }}>Clear visibility scenario</button>}
           <label className="preview-choice">
             <span>Viewport</span>
