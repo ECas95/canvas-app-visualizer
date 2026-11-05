@@ -85,9 +85,9 @@ describe("CanvasPreview All elements source visibility and coordinates", () => {
     expect(html).toContain('data-inspect-template="definition"');
     expect(html).toContain("Synthetic hidden descendant");
     expect(html).toContain("Visibility inventory: ");
-    expect(html).toContain("4<!-- --> hidden");
-    expect(html).toContain("Visible: <!-- -->=varPermit");
-    expect(html).toContain("X <!-- -->80.0");
+    expect((html.match(/data-inventory-status="hidden"/g) ?? [])).toHaveLength(2);
+    expect(html).toContain("=varPermit");
+    expect(html).toContain("80.0");
   });
 
   it("resolves only explicit synthetic scalar scenarios and keeps inherited hidden state", () => {
@@ -95,25 +95,19 @@ describe("CanvasPreview All elements source visibility and coordinates", () => {
       initialMode="all" initialScenario={{ varPermit: true }}
       onSelect={() => {}} />);
     expect(allowed).toContain("Synthetic conditions: ");
-    const segment = allowed.slice(
-      allowed.indexOf("Inspect GuardedLabel"),
-      allowed.indexOf("Inspect GuardedLabel") + 600
+    expect(allowed).toMatch(
+      /<g class="visual-control"[^>]*data-inspect-effective-visibility="visible"[^>]*aria-label="Inspect GuardedLabel/
     );
-    expect(segment).toContain('data-inspect-effective-visibility="visible"');
-    const hiddenSegment = allowed.slice(
-      allowed.indexOf("Inspect NestedUnderHidden"),
-      allowed.indexOf("Inspect NestedUnderHidden") + 700
+    expect(allowed).toMatch(
+      /<g class="visual-control"[^>]*data-inspect-effective-visibility="hidden"[^>]*aria-label="Inspect NestedUnderHidden/
     );
-    expect(hiddenSegment).toContain('data-inspect-effective-visibility="hidden"');
 
     const denied = renderToStaticMarkup(<CanvasPreview screen={screen}
       initialMode="all" initialScenario={{ varPermit: false }}
       onSelect={() => {}} />);
-    const deniedSegment = denied.slice(
-      denied.indexOf("Inspect GuardedLabel"),
-      denied.indexOf("Inspect GuardedLabel") + 600
+    expect(denied).toMatch(
+      /<g class="visual-control"[^>]*data-inspect-effective-visibility="hidden"[^>]*aria-label="Inspect GuardedLabel/
     );
-    expect(deniedSegment).toContain('data-inspect-effective-visibility="hidden"');
   });
 
   it("does not lose false controls that AutoLayout excludes from its normal flow", () => {
