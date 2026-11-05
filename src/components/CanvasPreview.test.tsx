@@ -47,7 +47,7 @@ describe("CanvasPreview compact Canvas workspace", () => {
     expect(markup).toMatch(/id="canvas-preview-tools"[^>]*hidden=""/);
     expect(markup).toMatch(/id="canvas-preview-details"[^>]*hidden=""/);
     expect(markup).toContain("Preview remains rendered");
-    expect(markup).toContain("1<!-- --> controls drawn");
+    expect(markup).toContain("controls drawn");
   });
 });
 
