@@ -12,7 +12,14 @@ import {
   type PositionedControl
 } from "../core/layout/layout";
 import { previewVisibility, previewSelectionBehaviorGate, previewColorWithSymbols } from "../core/layout/previewAppearance";
-import { staticBoolean, staticNumber } from "../core/powerfx/staticEval";
+import {
+  autoLayoutInspectionChildren, countDeclaredVisualControls,
+  effectiveInspectVisibility, filterInspectionRecords,
+  MAX_SCENARIO_JSON_BYTES, parseVisibilityScenario,
+  type InspectVisibility, type InspectVisibilityRecord,
+  type VisibilityInspectionFilter
+} from "../core/layout/visibilityInspection";
+import { staticBoolean, staticNumber, staticString } from "../core/powerfx/staticEval";
 import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/layout/previewDataState";
 import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScopedState, type PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewNavigationSymbols, runPreviewNavigation,
@@ -20,7 +27,7 @@ import { previewNavigationSymbols, runPreviewNavigation,
   type PreviewNavigationState } from "../core/powerfx/previewNavigation";
 import { CanvasVisualControl } from "./CanvasVisualControl";
 import { GallerySamplePreview } from "./GallerySamplePreview";
-import { galleryReferencedFields } from "../core/layout/gallerySchemaPreview";
+import { galleryReferencedFields, galleryTemplatePlaceholderText } from "../core/layout/gallerySchemaPreview";
 import { gallerySampleCells } from "../core/layout/gallerySchemaPreview";
 import { parseGallerySnapshotJson, MAX_GALLERY_JSON_BYTES,
   type GalleryLocalRow } from "../core/layout/galleryLocalSnapshot";
@@ -48,7 +55,9 @@ interface Props {
   appOnStart?: unknown;
   onNavigateScreen?: (screenId: string) => void;
   /** Optional initial inspection mode; defaults to the no-runtime-records visual view. */
-  initialMode?: "visual" | "structure";
+  initialMode?: "visual" | "structure" | "all";
+  /** Explicit synthetic test fixture; never loaded from an MSAPP at runtime. */
+  initialScenario?: PreviewVariables;
   /** Testable, explicit opt-in. Default never fabricates gallery rows. */
   initialGallerySamples?: boolean;
   /** Optional test fixture, not an application-runtime or SQL data source. */
@@ -72,6 +81,9 @@ interface DrawItem {
   runtimeGalleryStateUnknown: boolean;
   galleryTemplate: ReturnType<typeof galleryTemplateLayout>;
   ancestors: string[];
+  ownVisibility: InspectVisibility;
+  effectiveVisibility: InspectVisibility;
+  templateDefinition: boolean;
 }
 
 const PROFILES = {
@@ -81,7 +93,7 @@ const PROFILES = {
 } as const;
 
 type Profile = keyof typeof PROFILES;
-type PreviewMode = "visual" | "structure";
+type PreviewMode = "visual" | "structure" | "all";
 type Zoom = "fit" | "50" | "75" | "100" | "125";
 
 function flatten(
@@ -101,7 +113,11 @@ function flatten(
   ancestorVisibilityUnknown = false,
   parentGeometryVerified = true,
   parentWidthVerified = true,
-  parentHeightVerified = true
+  parentHeightVerified = true,
+  includeSuppressed = false,
+  inheritedVisibility: InspectVisibility = "visible",
+  inheritedTemplate = false,
+  parentOwnVisibility: InspectVisibility = "visible"
 ): DrawItem[] {
   const output: DrawItem[] = [];
   const baseContext = {
@@ -115,7 +131,9 @@ function flatten(
   const context = { ...baseContext, symbols: { ...siblingSymbols, ...simulationSymbols } };
   const positioned: PositionedControl[] =
     parentControl && isAutoLayout(parentControl)
-      ? autoLayoutChildren(parentControl, context)
+      ? includeSuppressed
+        ? autoLayoutInspectionChildren(parentControl, context)
+        : autoLayoutChildren(parentControl, context)
       : controls.map((control, index) => ({
           control, rect: controlRect(control, index, context)
         }));
@@ -135,6 +153,8 @@ function flatten(
     const dimensionSymbols = {
       ...simulationSymbols,
       "App.Width": appWidth, "App.Height": appHeight,
+      ...(parentOwnVisibility !== "unknown"
+        ? { "Parent.Visible": parentOwnVisibility === "visible" } : {}),
       ...(parentWidthVerified ? { "Parent.Width": parentWidth } : {}),
       ...(parentHeightVerified ? { "Parent.Height": parentHeight } : {})
     };
@@ -158,6 +178,8 @@ function flatten(
       // the default width of a SQL-dependent parent container.
       ...(parentGeometryVerified ? siblingSymbols : {}),
       "App.Width": appWidth, "App.Height": appHeight,
+      ...(parentOwnVisibility !== "unknown"
+        ? { "Parent.Visible": parentOwnVisibility === "visible" } : {}),
       ...(parentWidthVerified ? { "Parent.Width": parentWidth } : {}),
       ...(parentHeightVerified ? { "Parent.Height": parentHeight } : {}),
       ...simulationSymbols,
@@ -179,8 +201,18 @@ function flatten(
     // without guessed Parent/sibling geometry. Do not re-evaluate that gate
     // with painted fallback dimensions: it could hide an unknown control or
     // expose a descendant based on a value that Canvas has not verified.
-    const visibility = sourceVisibility ?? previewVisibility(control, visibilitySymbols);
-    if (visibility === "hidden") continue;
+    const visibility = sourceVisibility === "unknown"
+      ? previewVisibility(control, {
+          "App.Width": appWidth, "App.Height": appHeight,
+          ...(parentOwnVisibility !== "unknown"
+            ? { "Parent.Visible": parentOwnVisibility === "visible" } : {}),
+          ...simulationSymbols,
+          ...(verifiedWidth !== null ? { "Self.Width": verifiedWidth } : {}),
+          ...(verifiedHeight !== null ? { "Self.Height": verifiedHeight } : {})
+        })
+      : sourceVisibility ?? previewVisibility(control, visibilitySymbols);
+    if (visibility === "hidden" && !includeSuppressed) continue;
+    const effectiveVisibility = effectiveInspectVisibility(inheritedVisibility, visibility);
     // AllItems is loaded only at runtime. Preserve the control's geometry as
     // an explicitly unknown placeholder, never as a verified empty/visible UI.
     const runtimeGalleryStateUnknown = dependsOnRuntimeGalleryItems(control);
@@ -212,7 +244,9 @@ function flatten(
     output.push({
       control, x, y, width: rect.width, height: rect.height,
       dynamic: rect.dynamic, renderSymbols, visibilityUnknown,
-      runtimeGalleryStateUnknown, galleryTemplate, ancestors
+      runtimeGalleryStateUnknown, galleryTemplate, ancestors,
+      ownVisibility: visibility, effectiveVisibility,
+      templateDefinition: inheritedTemplate
     });
     // Conditional descendants must not leak source-only content or imply that
     // an unavailable gallery is empty. The parent remains inspectable.
@@ -223,8 +257,9 @@ function flatten(
     // A source-only preview cannot prove an unresolved Visible formula true.
     // Do not draw descendant text or actions from a potentially hidden subtree.
     // Its geometry remains inspectable through the parent placeholder and tree.
-    if (visibilityUnknown || runtimeGalleryStateUnknown || galleryRecordsUnknown(control) ||
-        depth >= 24 || control.children.length === 0) continue;
+    if ((!includeSuppressed &&
+        (visibilityUnknown || runtimeGalleryStateUnknown || galleryRecordsUnknown(control))) ||
+        depth >= (includeSuppressed ? 48 : 24) || control.children.length === 0) continue;
     const editorGroup = control.controlType.toLowerCase() === "group";
     const template = galleryTemplate;
     output.push(...flatten(
@@ -245,9 +280,14 @@ function flatten(
       // from those fallbacks. Groups retain their enclosing parent scope.
       parentGeometryVerified && !rect.dynamic && (editorGroup ||
         (control.properties.Width !== undefined &&
-         control.properties.Height !== undefined)),
+         control.properties.Height !== undefined)) &&
+         (!galleryRecordsUnknown(control) || (template !== null && !template.dynamic)),
       editorGroup ? parentWidthVerified : verifiedWidth !== null,
-      editorGroup ? parentHeightVerified : verifiedHeight !== null
+      editorGroup ? parentHeightVerified : verifiedHeight !== null,
+      includeSuppressed,
+      effectiveVisibility,
+      inheritedTemplate || galleryRecordsUnknown(control),
+      visibility
     ));
   }
   return output;
@@ -300,9 +340,14 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
   navigationScreens, appOnStart, onNavigateScreen,
   initialMode = "visual", initialGallerySamples = false,
   initialGallerySnapshot, initialReference,
-  initialFormSamples = false, initialFormSnapshot }: Props) {
+  initialFormSamples = false, initialFormSnapshot, initialScenario = {} }: Props) {
   const [profile, setProfile] = useState<Profile>("desktop");
   const [mode, setMode] = useState<PreviewMode>(initialMode);
+  const [inspectFilter, setInspectFilter] = useState<VisibilityInspectionFilter>("all");
+  const [inspectQuery, setInspectQuery] = useState("");
+  const [inspectPage, setInspectPage] = useState(0);
+  const [scenarioSymbols, setScenarioSymbols] = useState<PreviewVariables>(initialScenario);
+  const [scenarioError, setScenarioError] = useState<string | null>(null);
   const [zoom, setZoom] = useState<Zoom>("fit");
   const [focusSelection, setFocusSelection] = useState(false);
   const [showGallerySamples, setShowGallerySamples] = useState(initialGallerySamples);
@@ -335,13 +380,22 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
   const [scopedState, setScopedState] = useState<PreviewScopedState>({ globals: {}, context: {} });
   const [navigationState, setNavigationState] = useState<PreviewNavigationState | null>(null);
   const [scrollOffsets, setScrollOffsets] = useState<Record<string, PreviewScrollOffset>>({});
-  const variables = useMemo(() =>
-    interactive && navigationState
+  const variables = useMemo(() => ({
+    ...(interactive && navigationState
       ? previewNavigationSymbols(navigationState)
-      : previewScopedSymbols(scopedState),
-    [interactive, navigationState, scopedState]);
+      : previewScopedSymbols(scopedState)),
+    ...scenarioSymbols
+  }), [interactive, navigationState, scopedState, scenarioSymbols]);
   const [simulationMessage, setSimulationMessage] = useState("Simulation off. No behavior formulas are executed.");
   const instanceId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+
+  // Scenario variables belong to the current imported app, not the browser
+  // session. Keep them across Screen navigation but erase on a new app import.
+  useEffect(() => {
+    setScenarioSymbols({});
+    setScenarioError(null);
+    setInspectPage(0);
+  }, [navigationScreens]);
 
   useEffect(() => {
     // Internal Navigate/Back must preserve the opted-in simulator and global
@@ -418,6 +472,22 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
     } catch {
       if (referenceRequest.current === request)
         setReferenceError("Could not decode this local screenshot.");
+    }
+  }
+
+  async function loadVisibilityScenario(file: File | undefined) {
+    if (!file) return;
+    if (file.size > MAX_SCENARIO_JSON_BYTES) {
+      setScenarioError("Scenario JSON must be 8 KB or smaller.");
+      return;
+    }
+    try {
+      const parsed = parseVisibilityScenario(await file.text());
+      setScenarioSymbols(parsed);
+      setScenarioError(null);
+      setInspectPage(0);
+    } catch (error) {
+      setScenarioError(error instanceof Error ? error.message : "Invalid scenario JSON.");
     }
   }
 
@@ -559,8 +629,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
 
   const rawItems = useMemo(
     () => screen ? flatten(screen.children, 0, 0, width, height, width, height,
-      0, [], undefined, undefined, undefined, variables) : [],
-    [screen, width, height, variables]
+      0, [], undefined, undefined, undefined, variables,
+      false, true, true, true, mode === "all") : [],
+    [screen, width, height, variables, mode]
   );
   const galleries = rawItems.filter(item => galleryRecordsUnknown(item.control));
   const effectiveGalleryId = galleries.some(item => item.control.id === galleryTargetId)
@@ -610,6 +681,29 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
     }
   }
 
+  function inspectionPaintedControl(item: DrawItem): {
+    control: CanvasControl; symbols: PreviewVariables
+  } {
+    const initial = formPreview(item);
+    if (!item.templateDefinition) return initial;
+    // Source-derived example text exists solely in All elements mode.
+    // Gallery data, identity and connector rows are never inferred.
+    const props = initial.control.properties;
+    let copy: Record<string, unknown> | null = null;
+    for (const property of ["Text", "Label", "Default", "Placeholder", "HintText"]) {
+      if (props[property] === undefined ||
+          staticString(props[property], initial.symbols) !== null) continue;
+      const marker = galleryTemplatePlaceholderText(props[property], 0);
+      if (!marker) continue;
+      copy ??= { ...props };
+      copy[property] = '="' + marker.replaceAll('"', '""') + '"';
+    }
+    return {
+      control: copy ? { ...initial.control, properties: copy } : initial.control,
+      symbols: initial.symbols
+    };
+  }
+
   const scrollRanges = useMemo(() => previewScrollRanges(rawItems.map(item => ({
     id: item.control.id, ancestors: item.ancestors, x: item.x, y: item.y,
     width: item.width, height: item.height, dynamic: item.dynamic,
@@ -627,13 +721,56 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
     Object.entries(scrollRanges).map(([id, range]) =>
       [id, previewClampScroll(scrollOffsets[id], range)])
   ) as Record<string, PreviewScrollOffset>, [scrollRanges, scrollOffsets]);
-  const items = useMemo(() => rawItems.map(item => ({
-    ...item, ...previewScrolledPosition(item, effectiveOffsets)
-  })), [rawItems, effectiveOffsets]);
+  const items = useMemo(() => mode === "all"
+    ? rawItems // inspect serialized coordinates, not locally scrolled positions
+    : rawItems.map(item => ({
+        ...item, ...previewScrolledPosition(item, effectiveOffsets)
+      })), [rawItems, effectiveOffsets, mode]);
   const itemById = useMemo(
     () => new Map(items.map(item => [item.control.id, item])),
     [items]
   );
+  const declaredControlCount = useMemo(
+    () => screen ? countDeclaredVisualControls(screen.children) : 0, [screen]
+  );
+  const inspectionRows: InspectVisibilityRecord[] = useMemo(() =>
+    mode === "all" ? items.map(item => ({
+      id: item.control.id, name: item.control.name,
+      controlType: item.control.controlType,
+      own: item.ownVisibility, effective: item.effectiveVisibility,
+      templateDefinition: item.templateDefinition,
+      condition: typeof item.control.properties.Visible === "string"
+        ? item.control.properties.Visible : null,
+      x: item.x, y: item.y, width: item.width, height: item.height,
+      geometryVerified: !item.dynamic
+    })) : [],
+    [items, mode]
+  );
+  const filteredInspectionRows = useMemo(() =>
+    filterInspectionRecords(inspectionRows, inspectFilter, inspectQuery),
+    [inspectionRows, inspectFilter, inspectQuery]
+  );
+  const visibleInspectionPage = filteredInspectionRows.slice(
+    inspectPage * 60, (inspectPage + 1) * 60
+  );
+  const inspectionPages = Math.max(1, Math.ceil(filteredInspectionRows.length / 60));
+  const hiddenControlCount = inspectionRows.filter(item => item.effective === "hidden").length;
+  const unknownControlCount = inspectionRows.filter(item => item.effective === "unknown").length;
+  const templateControlCount = inspectionRows.filter(item => item.templateDefinition).length;
+  const extendedCanvas = useMemo(() => {
+    if (mode !== "all") return { x: 0, y: 0, width, height };
+    let x0: number = 0, y0: number = 0;
+    let x1: number = width, y1: number = height;
+    for (const item of items) {
+      if (![item.x, item.y, item.width, item.height].every(Number.isFinite) ||
+          item.width <= 0 || item.height <= 0) continue;
+      x0 = Math.min(x0, Math.max(-width, item.x));
+      y0 = Math.min(y0, Math.max(-height, item.y));
+      x1 = Math.max(x1, Math.min(3 * width, item.x + item.width));
+      y1 = Math.max(y1, Math.min(3 * height, item.y + item.height));
+    }
+    return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+  }, [mode, items, width, height]);
   const formHosts = items.filter(item =>
     /(?:^|\/)(?:editform|displayform|form)(?:@|$)/i.test(item.control.controlType)
   );
@@ -696,7 +833,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
     new Set(Object.keys(scrollRanges))
   );
   const scrollOverlaysAt = new Map<string, DrawItem[]>();
-  for (const [anchorId, hostIds] of scrollOverlayAnchorIds) {
+  for (const [anchorId, hostIds] of (mode === "all" ? [] : scrollOverlayAnchorIds)) {
     scrollOverlaysAt.set(anchorId, hostIds.flatMap(id => {
       const host = itemById.get(id);
       return host ? [host] : [];
@@ -740,7 +877,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
   const screenFillUnknown = screen.properties.Fill != null && resolvedScreenFill === null;
   const fill = resolvedScreenFill ?? "#ffffff";
   const zoomWidth = zoom === "fit" ? "min(100%,1120px)"
-    : `${Math.round(width * Number(zoom) / 100)}px`;
+    : `${Math.round(extendedCanvas.width * Number(zoom) / 100)}px`;
 
   return (
     <main className="preview">
@@ -756,7 +893,27 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
               aria-pressed={mode === "visual"} onClick={() => setMode("visual")}>Visual</button>
             <button type="button" className={mode === "structure" ? "active" : ""}
               aria-pressed={mode === "structure"} onClick={() => setMode("structure")}>Structure</button>
+            <button type="button" className={mode === "all" ? "active" : ""}
+              aria-pressed={mode === "all"} onClick={() => setMode("all")}>All elements</button>
           </div>
+          {mode === "all" && <label className="preview-choice"
+            title="Load a synthetic scalar variable scenario; source app data is never queried">
+            <span>Scenario variables JSON</span>
+            <input type="file" accept=".json,application/json"
+              aria-label="Load visibility scenario JSON"
+              onChange={event => {
+                const file = event.currentTarget.files?.[0];
+                event.currentTarget.value = "";
+                void loadVisibilityScenario(file);
+              }} />
+          </label>}
+          {mode === "all" && Object.keys(scenarioSymbols).length > 0 &&
+            <button type="button" className="simulation-action"
+              onClick={() => {
+                setScenarioSymbols({});
+                setScenarioError(null);
+                setInspectPage(0);
+              }}>Clear visibility scenario</button>}
           <label className="preview-choice">
             <span>Viewport</span>
             <select aria-label="Simulated viewport" value={profile}
@@ -957,10 +1114,15 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
         <div className="canvas-frame" style={{ width: zoomWidth }}>
           <div className="canvas-frame-bar">
             <span>{screen.name}</span>
-            <span>{mode === "visual" ? "Visual approximation" : "Structure inspection"}</span>
+            <span>{mode === "visual" ? "Visual approximation" :
+              mode === "all" ? "All source controls · visibility inspection" : "Structure inspection"}</span>
           </div>
-          <svg ref={screenSvgRef} viewBox={`0 0 ${width} ${height}`}
-            style={{ aspectRatio: `${width} / ${height}` }}
+          <svg ref={screenSvgRef}
+            viewBox={`${extendedCanvas.x} ${extendedCanvas.y} ${extendedCanvas.width} ${extendedCanvas.height}`}
+            style={{ aspectRatio: `${extendedCanvas.width} / ${extendedCanvas.height}` }}
+            data-inspection-mode={mode === "all" ? "all-source-controls" : undefined}
+            data-inspection-declared-controls={mode === "all" ? declaredControlCount : undefined}
+            data-inspection-drawn-controls={mode === "all" ? inspectionRows.length : undefined}
             data-preview-screen-fill-state={screenFillUnknown ? "unknown" : undefined}
             role="img" aria-label={`${screen.name} canvas preview`}>
             <defs>
@@ -971,7 +1133,13 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
                 </clipPath>
               ))}
             </defs>
+            {mode === "all" && <rect x={extendedCanvas.x} y={extendedCanvas.y}
+              width={extendedCanvas.width} height={extendedCanvas.height}
+              fill="#edf2f7" />}
             <rect width={width} height={height} fill={fill} />
+            {mode === "all" && <rect width={width} height={height}
+              fill="none" stroke="#0f6cbd" strokeWidth={3} strokeDasharray="9 5"
+              pointerEvents="none" />}
             {screenFillUnknown && <title>Screen Fill requires runtime state or is unsupported; white is a preview fallback, not a verified background</title>}
             {visibleItems.map(item => {
               const index = indexById.get(item.control.id) ?? 0;
@@ -982,6 +1150,10 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
                 previewOverflowMode(item.control.properties.LayoutOverflowY, item.renderSymbols) === "unknown";
               const draw = (
                 <g className="visual-control" key={item.control.id}
+                  data-inspect-effective-visibility={mode === "all" ? item.effectiveVisibility : undefined}
+                  data-inspect-own-visibility={mode === "all" ? item.ownVisibility : undefined}
+                  data-inspect-template={mode === "all" && item.templateDefinition ? "definition" : undefined}
+                  data-inspect-geometry={mode === "all" ? (item.dynamic ? "approximate" : "source-resolved") : undefined}
                   data-preview-overflow-x-state={overflowXUnknown ? "unknown" : undefined}
                   data-preview-overflow-y-state={overflowYUnknown ? "unknown" : undefined}
                   role="button" tabIndex={0}
@@ -996,7 +1168,42 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
                       selectControl(item);
                     }
                   }}>
-                  {mode === "visual" && showGallerySamples &&
+                  {mode === "all" ? (
+                    <g data-inspect-visual="source-definition">
+                      <g opacity={item.effectiveVisibility === "hidden" ? 0.32 :
+                        item.effectiveVisibility === "unknown" ? 0.58 : 0.85}
+                        pointerEvents="none">
+                        <CanvasVisualControl control={inspectionPaintedControl(item).control}
+                          simulationSymbols={inspectionPaintedControl(item).symbols}
+                          mediaAssets={mediaAssets}
+                          x={item.x} y={item.y} width={item.width} height={item.height}
+                          clipId={`${instanceId}-inspect-text-${index}`} />
+                      </g>
+                      <rect x={item.x} y={item.y}
+                        width={item.width} height={item.height}
+                        fill={item.effectiveVisibility === "hidden" ? "#f87171" :
+                          item.effectiveVisibility === "unknown" ? "#facc15" : "#60a5fa"}
+                        fillOpacity={0.06}
+                        stroke={item.effectiveVisibility === "hidden" ? "#dc2626" :
+                          item.effectiveVisibility === "unknown" ? "#a16207" : "#2563eb"}
+                        strokeWidth={selected ? 3 : 1.5}
+                        strokeDasharray={item.effectiveVisibility === "visible" &&
+                          !item.dynamic ? undefined : "5 3"}
+                        pointerEvents="none" />
+                      <text x={item.x + 4}
+                        y={item.y + Math.min(13, Math.max(11, item.height / 2))}
+                        fontSize={10} fontWeight={600}
+                        fill={item.effectiveVisibility === "hidden" ? "#991b1b" :
+                          item.effectiveVisibility === "unknown" ? "#854d0e" : "#1d4ed8"}
+                        pointerEvents="none">
+                        {[item.control.name.slice(0, 22),
+                          item.effectiveVisibility === "hidden" ? "HIDDEN" :
+                          item.effectiveVisibility === "unknown" ? "UNKNOWN" : "VISIBLE",
+                          item.templateDefinition ? "TEMPLATE" : null,
+                          item.dynamic ? "≈" : null].filter(Boolean).join(" · ")}
+                      </text>
+                    </g>
+                  ) : mode === "visual" && showGallerySamples &&
                     galleryRecordsUnknown(item.control) ? (
                     <GallerySamplePreview gallery={item.control} template={item.galleryTemplate}
                       x={item.x} y={item.y} width={item.width} height={item.height}
@@ -1083,7 +1290,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
                   ].filter(Boolean).join(" · ")}</title>
                 </g>
               );
-              const clipped = clipToAncestors(draw, item.ancestors);
+              const clipped = mode === "all" ? draw : clipToAncestors(draw, item.ancestors);
               const template = mode === "structure" &&
                 galleryRecordsUnknown(item.control) && !item.visibilityUnknown
                 ? item.galleryTemplate
@@ -1151,6 +1358,94 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
         </div>
       </div>
       <div className="preview-note">
+        {mode === "all" && (
+          <details className="preview-visibility-audit">
+            <summary>
+              Visibility inventory: {inspectionRows.length}/{declaredControlCount} controls
+              · {hiddenControlCount} hidden · {unknownControlCount} unresolved
+              · {templateControlCount} template definitions
+            </summary>
+            <div className="preview-visibility-audit-panel"
+              role="region" aria-label="All source control visibility conditions">
+              <p>Visualized controls retain their YAML order and nested parent scope.
+                Hidden nodes are ghosted, not treated as active runtime elements.
+                Template definitions are shown once, not as fabricated data rows.</p>
+              <div className="preview-visibility-filters">
+                <label>
+                  Filter status
+                  <select aria-label="Filter control visibility" value={inspectFilter}
+                    onChange={event => {
+                      setInspectFilter(event.target.value as VisibilityInspectionFilter);
+                      setInspectPage(0);
+                    }}>
+                    <option value="all">All controls</option>
+                    <option value="hidden">Hidden (effective)</option>
+                    <option value="unknown">Condition unresolved</option>
+                    <option value="template">Gallery templates</option>
+                  </select>
+                </label>
+                <input type="search" placeholder="Find control or Visible formula"
+                  aria-label="Search source visibility inventory" value={inspectQuery}
+                  onChange={event => {
+                    setInspectQuery(event.target.value);
+                    setInspectPage(0);
+                  }} />
+              </div>
+              <div className="preview-visibility-rows">
+                {visibleInspectionPage.map(row => (
+                  <button type="button" key={row.id}
+                    className="preview-visibility-row"
+                    onClick={() => {
+                      const item = itemById.get(row.id);
+                      if (item) onSelect(item.control);
+                    }}>
+                    <strong>{row.name}</strong>
+                    <span data-inventory-status={row.effective}>
+                      {row.effective.toUpperCase()}{row.own !== row.effective
+                        ? " (inherited)" : ""}
+                      {row.templateDefinition ? " · TEMPLATE" : ""}
+                    </span>
+                    <span>X {row.x.toFixed(1)} · Y {row.y.toFixed(1)}
+                      · W {row.width.toFixed(1)} · H {row.height.toFixed(1)}
+                      {!row.geometryVerified ? " · estimated" : " · source-resolved"}
+                    </span>
+                    <small title={row.condition ?? "Visible not declared; Canvas default"}>
+                      Visible: {row.condition ?? "(default)"}
+                    </small>
+                  </button>
+                ))}
+              </div>
+              {filteredInspectionRows.length === 0 && <p>No matching controls.</p>}
+              <div className="preview-visibility-pagination">
+                <span>{filteredInspectionRows.length} matches · page
+                  {Math.min(inspectPage + 1, inspectionPages)} of {inspectionPages}</span>
+                <button type="button" disabled={inspectPage === 0}
+                  onClick={() => setInspectPage(current => Math.max(0, current - 1))}>
+                  Previous
+                </button>
+                <button type="button" disabled={inspectPage >= inspectionPages - 1}
+                  onClick={() => setInspectPage(current => Math.min(inspectionPages - 1, current + 1))}>
+                  Next
+                </button>
+              </div>
+              {inspectionRows.length !== declaredControlCount &&
+                <p role="alert">Incomplete coverage: {declaredControlCount - inspectionRows.length}
+                  source controls could not be spatially placed (depth limits or unsupported hierarchy).</p>}
+              <small>All visibility judgments are local and conditional on known
+                scalar variables. Missing SQL, permissions, gallery rows, component
+                runtime bindings or other values remain unresolved.</small>
+            </div>
+          </details>
+        )}
+        {mode === "all" && scenarioError &&
+          <span className="preview-unknown-state" role="alert">
+            Scenario: {scenarioError}
+          </span>}
+        {mode === "all" && Object.keys(scenarioSymbols).length > 0 &&
+          <span className="preview-unknown-state" role="status">
+            Synthetic conditions: {Object.keys(scenarioSymbols).join(", ")}
+            · never sourced from the imported MSAPP
+          </span>}
         {geometryIssues.length > 0 && <details className="preview-geometry-panel">
           <summary>Geometry review: {geometryIssues.length} source hints</summary>
           <div className="preview-geometry-list">
@@ -1283,7 +1578,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
             Overlay is withheld until the matching viewport is selected.
           </span>}
         {reference && <span>Reference: {reference.name} · browser-only, no upload or pixel-parity claim</span>}
-        <span>{mode === "visual" ? "Static visual approximation" : "Control structure"}</span>
+        <span>{mode === "visual" ? "Static visual approximation" :
+          mode === "all" ? "All authored controls · conditions and coordinates" :
+            "Control structure"}</span>
         <span>{visibleItems.length} drawn nodes · {unresolved} unresolved layouts</span>
         {mode === "visual" && showGallerySamples && visibleItems.some(item => galleryRecordsUnknown(item.control)) && (
           <span className="preview-unknown-state" role="status">

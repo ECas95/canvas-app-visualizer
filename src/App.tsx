@@ -158,7 +158,7 @@ export default function App() {
             </div>
             <div>
               <strong>Canvas App Visualizer</strong>
-              <span>Developer workbench · v0.7</span>
+              <span>Developer workbench · v0.8</span>
             </div>
           </div>
           <a
@@ -227,7 +227,7 @@ export default function App() {
           </div>
           <div>
             <strong>Canvas App Visualizer</strong>
-            <span>{app.name} · v0.7</span>
+            <span>{app.name} · v0.8</span>
           </div>
         </div>
 
