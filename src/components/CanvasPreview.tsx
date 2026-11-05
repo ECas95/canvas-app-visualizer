@@ -12,6 +12,13 @@ import {
   type PositionedControl
 } from "../core/layout/layout";
 import { previewVisibility, previewSelectionBehaviorGate, previewColorWithSymbols } from "../core/layout/previewAppearance";
+import {
+  autoLayoutInspectionChildren, countDeclaredVisualControls,
+  effectiveInspectVisibility, filterInspectionRecords,
+  MAX_SCENARIO_JSON_BYTES, parseVisibilityScenario,
+  type InspectVisibility, type InspectVisibilityRecord,
+  type VisibilityInspectionFilter
+} from "../core/layout/visibilityInspection";
 import { staticBoolean, staticNumber } from "../core/powerfx/staticEval";
 import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/layout/previewDataState";
 import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScopedState, type PreviewVariables } from "../core/powerfx/previewBehavior";
@@ -48,7 +55,7 @@ interface Props {
   appOnStart?: unknown;
   onNavigateScreen?: (screenId: string) => void;
   /** Optional initial inspection mode; defaults to the no-runtime-records visual view. */
-  initialMode?: "visual" | "structure";
+  initialMode?: "visual" | "structure" | "all";
   /** Testable, explicit opt-in. Default never fabricates gallery rows. */
   initialGallerySamples?: boolean;
   /** Optional test fixture, not an application-runtime or SQL data source. */
@@ -72,6 +79,9 @@ interface DrawItem {
   runtimeGalleryStateUnknown: boolean;
   galleryTemplate: ReturnType<typeof galleryTemplateLayout>;
   ancestors: string[];
+  ownVisibility: InspectVisibility;
+  effectiveVisibility: InspectVisibility;
+  templateDefinition: boolean;
 }
 
 const PROFILES = {
@@ -81,7 +91,7 @@ const PROFILES = {
 } as const;
 
 type Profile = keyof typeof PROFILES;
-type PreviewMode = "visual" | "structure";
+type PreviewMode = "visual" | "structure" | "all";
 type Zoom = "fit" | "50" | "75" | "100" | "125";
 
 function flatten(
@@ -101,7 +111,10 @@ function flatten(
   ancestorVisibilityUnknown = false,
   parentGeometryVerified = true,
   parentWidthVerified = true,
-  parentHeightVerified = true
+  parentHeightVerified = true,
+  includeSuppressed = false,
+  inheritedVisibility: InspectVisibility = "visible",
+  inheritedTemplate = false
 ): DrawItem[] {
   const output: DrawItem[] = [];
   const baseContext = {
@@ -115,7 +128,9 @@ function flatten(
   const context = { ...baseContext, symbols: { ...siblingSymbols, ...simulationSymbols } };
   const positioned: PositionedControl[] =
     parentControl && isAutoLayout(parentControl)
-      ? autoLayoutChildren(parentControl, context)
+      ? includeSuppressed
+        ? autoLayoutInspectionChildren(parentControl, context)
+        : autoLayoutChildren(parentControl, context)
       : controls.map((control, index) => ({
           control, rect: controlRect(control, index, context)
         }));
@@ -180,7 +195,8 @@ function flatten(
     // with painted fallback dimensions: it could hide an unknown control or
     // expose a descendant based on a value that Canvas has not verified.
     const visibility = sourceVisibility ?? previewVisibility(control, visibilitySymbols);
-    if (visibility === "hidden") continue;
+    if (visibility === "hidden" && !includeSuppressed) continue;
+    const effectiveVisibility = effectiveInspectVisibility(inheritedVisibility, visibility);
     // AllItems is loaded only at runtime. Preserve the control's geometry as
     // an explicitly unknown placeholder, never as a verified empty/visible UI.
     const runtimeGalleryStateUnknown = dependsOnRuntimeGalleryItems(control);
@@ -212,7 +228,9 @@ function flatten(
     output.push({
       control, x, y, width: rect.width, height: rect.height,
       dynamic: rect.dynamic, renderSymbols, visibilityUnknown,
-      runtimeGalleryStateUnknown, galleryTemplate, ancestors
+      runtimeGalleryStateUnknown, galleryTemplate, ancestors,
+      ownVisibility: visibility, effectiveVisibility,
+      templateDefinition: inheritedTemplate
     });
     // Conditional descendants must not leak source-only content or imply that
     // an unavailable gallery is empty. The parent remains inspectable.
@@ -223,8 +241,9 @@ function flatten(
     // A source-only preview cannot prove an unresolved Visible formula true.
     // Do not draw descendant text or actions from a potentially hidden subtree.
     // Its geometry remains inspectable through the parent placeholder and tree.
-    if (visibilityUnknown || runtimeGalleryStateUnknown || galleryRecordsUnknown(control) ||
-        depth >= 24 || control.children.length === 0) continue;
+    if ((!includeSuppressed &&
+        (visibilityUnknown || runtimeGalleryStateUnknown || galleryRecordsUnknown(control))) ||
+        depth >= (includeSuppressed ? 48 : 24) || control.children.length === 0) continue;
     const editorGroup = control.controlType.toLowerCase() === "group";
     const template = galleryTemplate;
     output.push(...flatten(
@@ -245,9 +264,13 @@ function flatten(
       // from those fallbacks. Groups retain their enclosing parent scope.
       parentGeometryVerified && !rect.dynamic && (editorGroup ||
         (control.properties.Width !== undefined &&
-         control.properties.Height !== undefined)),
+         control.properties.Height !== undefined)) &&
+         (!galleryRecordsUnknown(control) || (template !== null && !template.dynamic)),
       editorGroup ? parentWidthVerified : verifiedWidth !== null,
-      editorGroup ? parentHeightVerified : verifiedHeight !== null
+      editorGroup ? parentHeightVerified : verifiedHeight !== null,
+      includeSuppressed,
+      effectiveVisibility,
+      inheritedTemplate || galleryRecordsUnknown(control)
     ));
   }
   return output;
@@ -303,6 +326,10 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
   initialFormSamples = false, initialFormSnapshot }: Props) {
   const [profile, setProfile] = useState<Profile>("desktop");
   const [mode, setMode] = useState<PreviewMode>(initialMode);
+  const [inspectFilter, setInspectFilter] = useState<VisibilityInspectionFilter>("all");
+  const [inspectQuery, setInspectQuery] = useState("");
+  const [scenarioSymbols, setScenarioSymbols] = useState<PreviewVariables>({});
+  const [scenarioError, setScenarioError] = useState<string | null>(null);
   const [zoom, setZoom] = useState<Zoom>("fit");
   const [focusSelection, setFocusSelection] = useState(false);
   const [showGallerySamples, setShowGallerySamples] = useState(initialGallerySamples);
@@ -335,11 +362,12 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
   const [scopedState, setScopedState] = useState<PreviewScopedState>({ globals: {}, context: {} });
   const [navigationState, setNavigationState] = useState<PreviewNavigationState | null>(null);
   const [scrollOffsets, setScrollOffsets] = useState<Record<string, PreviewScrollOffset>>({});
-  const variables = useMemo(() =>
-    interactive && navigationState
+  const variables = useMemo(() => ({
+    ...(interactive && navigationState
       ? previewNavigationSymbols(navigationState)
-      : previewScopedSymbols(scopedState),
-    [interactive, navigationState, scopedState]);
+      : previewScopedSymbols(scopedState)),
+    ...scenarioSymbols
+  }), [interactive, navigationState, scopedState, scenarioSymbols]);
   const [simulationMessage, setSimulationMessage] = useState("Simulation off. No behavior formulas are executed.");
   const instanceId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
 
@@ -559,8 +587,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
 
   const rawItems = useMemo(
     () => screen ? flatten(screen.children, 0, 0, width, height, width, height,
-      0, [], undefined, undefined, undefined, variables) : [],
-    [screen, width, height, variables]
+      0, [], undefined, undefined, undefined, variables,
+      false, true, true, true, mode === "all") : [],
+    [screen, width, height, variables, mode]
   );
   const galleries = rawItems.filter(item => galleryRecordsUnknown(item.control));
   const effectiveGalleryId = galleries.some(item => item.control.id === galleryTargetId)
