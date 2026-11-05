@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
+import JSZip from "jszip";
 import { createServer } from "vite";
 
 const profiles = [
@@ -247,6 +248,74 @@ try {
   report.push({ scenario: "all-source-visibility", controls: 7,
     hidden: true, conditional: true, template: true,
     offscreen: true, scenarioLocalOnly: true });
+
+  // Layout regression: importing a valid synthetic .msapp with an ignored
+  // Package JSON notice must not turn that warning into the 1fr grid row.
+  // A separate Power Fx status line is always present.
+  const samplePackage = new JSZip();
+  samplePackage.file("Src/SyntheticResponsive.pa.yaml",
+    await readFile(resolve("tests/fixtures/SyntheticResponsive.pa.yaml"), "utf8"));
+  samplePackage.file("Properties.json", '{"synthetic":true}');
+  const packageBytes = await samplePackage.generateAsync({ type: "nodebuffer" });
+  await page.getByRole("button", { name: "Open another" }).click();
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "SyntheticWarnings.msapp",
+    mimeType: "application/octet-stream",
+    buffer: packageBytes
+  });
+  await page.getByRole("img", { name: "VisualRegression canvas preview" })
+    .waitFor({ timeout: 20000 });
+  const warningStrip = page.locator(".warning-strip");
+  await warningStrip.waitFor({ timeout: 12000 });
+  assert.ok((await warningStrip.textContent())
+    ?.includes("Package JSON outside the selected Canvas source"));
+  async function checkWorkbenchRows(minWorkspaceHeight) {
+    const bounds = await page.evaluate(() => {
+      const rect = selector => {
+        const element = document.querySelector(selector);
+        if (!element) throw new Error("Missing layout node " + selector);
+        const r = element.getBoundingClientRect();
+        return { x: r.x, top: r.top, bottom: r.bottom, height: r.height };
+      };
+      return {
+        shellChildren: document.querySelector(".workbench")?.children.length,
+        notices: rect(".workbench-notices"),
+        warning: rect(".warning-strip"),
+        workspace: rect(".workspace"),
+        explorer: rect(".app-tree"),
+        preview: rect(".preview"),
+        inspector: rect(".right-panel"),
+        status: rect(".statusbar")
+      };
+    });
+    assert.equal(bounds.shellChildren, 5);
+    assert.ok(bounds.notices.height < 115, "Notices must not fill the workspace");
+    assert.ok(bounds.warning.height < 85, "Import warning must remain compact");
+    assert.ok(bounds.workspace.height > minWorkspaceHeight,
+      "The Canvas workspace must retain the flexible grid row");
+    assert.ok(bounds.workspace.top >= bounds.notices.bottom - 1);
+    assert.ok(bounds.workspace.bottom <= bounds.status.top + 1);
+    for (const key of ["explorer", "preview", "inspector"]) {
+      assert.ok(bounds[key].height > minWorkspaceHeight - 8,
+        key + " was squeezed beneath import notices");
+    }
+    return bounds;
+  }
+  const desktopLayout = await checkWorkbenchRows(580);
+  await page.locator(".workbench").screenshot({
+    path: resolve(output, "msapp-import-warning-workspace-desktop.png"),
+    animations: "disabled"
+  });
+  await page.setViewportSize({ width: 1000, height: 740 });
+  const narrowLayout = await checkWorkbenchRows(350);
+  await page.locator(".workbench").screenshot({
+    path: resolve(output, "msapp-import-warning-workspace-narrow.png"),
+    animations: "disabled"
+  });
+  report.push({ scenario: "msapp-warning-shell-layout", shellChildren: 5,
+    desktopWorkspaceHeight: Math.round(desktopLayout.workspace.height),
+    narrowWorkspaceHeight: Math.round(narrowLayout.workspace.height),
+    warningCompact: true, canvasAndPanelsVisible: true });
 
   await writeFile(resolve(output, "geometry.json"), JSON.stringify(report, null, 2) + "\n");
   console.log("Chromium visual smoke: 3 profiles, 10 screenshots including Gallery, reference, quantitative heatmap and all-controls visibility; source geometry verified.");
