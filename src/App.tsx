@@ -262,22 +262,27 @@ export default function App() {
         </div>
       </div>
 
-      <div className="powerfx-engine-status" role="status">
-        <strong>Power Fx:</strong> {officialStatus === "ready"
-          ? "Microsoft parser ready · syntax diagnostics verified"
-          : officialStatus === "loading"
-            ? "Loading official Microsoft parser locally…"
-            : "Official parser unavailable · conservative lexical fallback"}
-        {official?.app === app && official.status === "unavailable" &&
-          <span title={official.message}> (runtime did not load)</span>}
-      </div>
-
-      {warnings.length > 0 && (
-        <div className="warning-strip">
-          <span className="warning-dot" />
-          {warnings.join(" ")}
+      {/* Always one shell grid row for parser status AND optional import
+          warnings. The old sixth sibling displaced the flexible workspace
+          into the fixed footer row whenever an MSAPP carried Package JSON. */}
+      <div className="workbench-notices" aria-label="Source and parser notices">
+        <div className="powerfx-engine-status" role="status">
+          <strong>Power Fx:</strong> {officialStatus === "ready"
+            ? "Microsoft parser ready · syntax diagnostics verified"
+            : officialStatus === "loading"
+              ? "Loading official Microsoft parser locally…"
+              : "Official parser unavailable · conservative lexical fallback"}
+          {official?.app === app && official.status === "unavailable" &&
+            <span title={official.message}> (runtime did not load)</span>}
         </div>
-      )}
+
+        {warnings.length > 0 && (
+          <div className="warning-strip" role="note">
+            <span className="warning-dot" aria-hidden="true" />
+            <span className="warning-text">{warnings.join(" ")}</span>
+          </div>
+        )}
+      </div>
 
       <div className="workspace">
         <AppTree
