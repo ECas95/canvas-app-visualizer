@@ -194,7 +194,14 @@ function flatten(
     // without guessed Parent/sibling geometry. Do not re-evaluate that gate
     // with painted fallback dimensions: it could hide an unknown control or
     // expose a descendant based on a value that Canvas has not verified.
-    const visibility = sourceVisibility ?? previewVisibility(control, visibilitySymbols);
+    const visibility = sourceVisibility === "unknown"
+      ? previewVisibility(control, {
+          "App.Width": appWidth, "App.Height": appHeight,
+          ...simulationSymbols,
+          ...(verifiedWidth !== null ? { "Self.Width": verifiedWidth } : {}),
+          ...(verifiedHeight !== null ? { "Self.Height": verifiedHeight } : {})
+        })
+      : sourceVisibility ?? previewVisibility(control, visibilitySymbols);
     if (visibility === "hidden" && !includeSuppressed) continue;
     const effectiveVisibility = effectiveInspectVisibility(inheritedVisibility, visibility);
     // AllItems is loaded only at runtime. Preserve the control's geometry as
@@ -656,13 +663,48 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
     Object.entries(scrollRanges).map(([id, range]) =>
       [id, previewClampScroll(scrollOffsets[id], range)])
   ) as Record<string, PreviewScrollOffset>, [scrollRanges, scrollOffsets]);
-  const items = useMemo(() => rawItems.map(item => ({
-    ...item, ...previewScrolledPosition(item, effectiveOffsets)
-  })), [rawItems, effectiveOffsets]);
+  const items = useMemo(() => mode === "all"
+    ? rawItems // inspect serialized coordinates, not locally scrolled positions
+    : rawItems.map(item => ({
+        ...item, ...previewScrolledPosition(item, effectiveOffsets)
+      })), [rawItems, effectiveOffsets, mode]);
   const itemById = useMemo(
     () => new Map(items.map(item => [item.control.id, item])),
     [items]
   );
+  const declaredControlCount = useMemo(
+    () => screen ? countDeclaredVisualControls(screen.children) : 0, [screen]
+  );
+  const inspectionRows: InspectVisibilityRecord[] = useMemo(() =>
+    mode === "all" ? items.map(item => ({
+      id: item.control.id, name: item.control.name,
+      controlType: item.control.controlType,
+      own: item.ownVisibility, effective: item.effectiveVisibility,
+      templateDefinition: item.templateDefinition,
+      condition: typeof item.control.properties.Visible === "string"
+        ? item.control.properties.Visible : null,
+      x: item.x, y: item.y, width: item.width, height: item.height,
+      geometryVerified: !item.dynamic
+    })) : [],
+    [items, mode]
+  );
+  const filteredInspectionRows = useMemo(() =>
+    filterInspectionRecords(inspectionRows, inspectFilter, inspectQuery),
+    [inspectionRows, inspectFilter, inspectQuery]
+  );
+  const extendedCanvas = useMemo(() => {
+    if (mode !== "all") return { x: 0, y: 0, width, height };
+    let x0 = 0, y0 = 0, x1 = width, y1 = height;
+    for (const item of items) {
+      if (![item.x, item.y, item.width, item.height].every(Number.isFinite) ||
+          item.width <= 0 || item.height <= 0) continue;
+      x0 = Math.min(x0, Math.max(-width, item.x));
+      y0 = Math.min(y0, Math.max(-height, item.y));
+      x1 = Math.max(x1, Math.min(3 * width, item.x + item.width));
+      y1 = Math.max(y1, Math.min(3 * height, item.y + item.height));
+    }
+    return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+  }, [mode, items, width, height]);
   const formHosts = items.filter(item =>
     /(?:^|\/)(?:editform|displayform|form)(?:@|$)/i.test(item.control.controlType)
   );
@@ -725,7 +767,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
     new Set(Object.keys(scrollRanges))
   );
   const scrollOverlaysAt = new Map<string, DrawItem[]>();
-  for (const [anchorId, hostIds] of scrollOverlayAnchorIds) {
+  for (const [anchorId, hostIds] of (mode === "all" ? [] : scrollOverlayAnchorIds)) {
     scrollOverlaysAt.set(anchorId, hostIds.flatMap(id => {
       const host = itemById.get(id);
       return host ? [host] : [];
@@ -769,7 +811,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
   const screenFillUnknown = screen.properties.Fill != null && resolvedScreenFill === null;
   const fill = resolvedScreenFill ?? "#ffffff";
   const zoomWidth = zoom === "fit" ? "min(100%,1120px)"
-    : `${Math.round(width * Number(zoom) / 100)}px`;
+    : `${Math.round(extendedCanvas.width * Number(zoom) / 100)}px`;
 
   return (
     <main className="preview">
@@ -785,6 +827,8 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
               aria-pressed={mode === "visual"} onClick={() => setMode("visual")}>Visual</button>
             <button type="button" className={mode === "structure" ? "active" : ""}
               aria-pressed={mode === "structure"} onClick={() => setMode("structure")}>Structure</button>
+            <button type="button" className={mode === "all" ? "active" : ""}
+              aria-pressed={mode === "all"} onClick={() => setMode("all")}>All elements</button>
           </div>
           <label className="preview-choice">
             <span>Viewport</span>
@@ -986,10 +1030,15 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
         <div className="canvas-frame" style={{ width: zoomWidth }}>
           <div className="canvas-frame-bar">
             <span>{screen.name}</span>
-            <span>{mode === "visual" ? "Visual approximation" : "Structure inspection"}</span>
+            <span>{mode === "visual" ? "Visual approximation" :
+              mode === "all" ? "All source controls · visibility inspection" : "Structure inspection"}</span>
           </div>
-          <svg ref={screenSvgRef} viewBox={`0 0 ${width} ${height}`}
-            style={{ aspectRatio: `${width} / ${height}` }}
+          <svg ref={screenSvgRef}
+            viewBox={`${extendedCanvas.x} ${extendedCanvas.y} ${extendedCanvas.width} ${extendedCanvas.height}`}
+            style={{ aspectRatio: `${extendedCanvas.width} / ${extendedCanvas.height}` }}
+            data-inspection-mode={mode === "all" ? "all-source-controls" : undefined}
+            data-inspection-declared-controls={mode === "all" ? declaredControlCount : undefined}
+            data-inspection-drawn-controls={mode === "all" ? inspectionRows.length : undefined}
             data-preview-screen-fill-state={screenFillUnknown ? "unknown" : undefined}
             role="img" aria-label={`${screen.name} canvas preview`}>
             <defs>
@@ -1000,7 +1049,13 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
                 </clipPath>
               ))}
             </defs>
+            {mode === "all" && <rect x={extendedCanvas.x} y={extendedCanvas.y}
+              width={extendedCanvas.width} height={extendedCanvas.height}
+              fill="#edf2f7" />}
             <rect width={width} height={height} fill={fill} />
+            {mode === "all" && <rect width={width} height={height}
+              fill="none" stroke="#0f6cbd" strokeWidth={3} strokeDasharray="9 5"
+              pointerEvents="none" />}
             {screenFillUnknown && <title>Screen Fill requires runtime state or is unsupported; white is a preview fallback, not a verified background</title>}
             {visibleItems.map(item => {
               const index = indexById.get(item.control.id) ?? 0;
@@ -1011,6 +1066,10 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
                 previewOverflowMode(item.control.properties.LayoutOverflowY, item.renderSymbols) === "unknown";
               const draw = (
                 <g className="visual-control" key={item.control.id}
+                  data-inspect-effective-visibility={mode === "all" ? item.effectiveVisibility : undefined}
+                  data-inspect-own-visibility={mode === "all" ? item.ownVisibility : undefined}
+                  data-inspect-template={mode === "all" && item.templateDefinition ? "definition" : undefined}
+                  data-inspect-geometry={mode === "all" ? (item.dynamic ? "approximate" : "source-resolved") : undefined}
                   data-preview-overflow-x-state={overflowXUnknown ? "unknown" : undefined}
                   data-preview-overflow-y-state={overflowYUnknown ? "unknown" : undefined}
                   role="button" tabIndex={0}
@@ -1025,7 +1084,42 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
                       selectControl(item);
                     }
                   }}>
-                  {mode === "visual" && showGallerySamples &&
+                  {mode === "all" ? (
+                    <g data-inspect-visual="source-definition">
+                      <g opacity={item.effectiveVisibility === "hidden" ? 0.32 :
+                        item.effectiveVisibility === "unknown" ? 0.58 : 0.85}
+                        pointerEvents="none">
+                        <CanvasVisualControl control={item.control}
+                          simulationSymbols={item.renderSymbols}
+                          mediaAssets={mediaAssets}
+                          x={item.x} y={item.y} width={item.width} height={item.height}
+                          clipId={`${instanceId}-inspect-text-${index}`} />
+                      </g>
+                      <rect x={item.x} y={item.y}
+                        width={item.width} height={item.height}
+                        fill={item.effectiveVisibility === "hidden" ? "#f87171" :
+                          item.effectiveVisibility === "unknown" ? "#facc15" : "#60a5fa"}
+                        fillOpacity={0.06}
+                        stroke={item.effectiveVisibility === "hidden" ? "#dc2626" :
+                          item.effectiveVisibility === "unknown" ? "#a16207" : "#2563eb"}
+                        strokeWidth={selected ? 3 : 1.5}
+                        strokeDasharray={item.effectiveVisibility === "visible" &&
+                          !item.dynamic ? undefined : "5 3"}
+                        pointerEvents="none" />
+                      <text x={item.x + 4}
+                        y={item.y + Math.min(13, Math.max(11, item.height / 2))}
+                        fontSize={10} fontWeight={600}
+                        fill={item.effectiveVisibility === "hidden" ? "#991b1b" :
+                          item.effectiveVisibility === "unknown" ? "#854d0e" : "#1d4ed8"}
+                        pointerEvents="none">
+                        {[item.control.name.slice(0, 22),
+                          item.effectiveVisibility === "hidden" ? "HIDDEN" :
+                          item.effectiveVisibility === "unknown" ? "UNKNOWN" : "VISIBLE",
+                          item.templateDefinition ? "TEMPLATE" : null,
+                          item.dynamic ? "≈" : null].filter(Boolean).join(" · ")}
+                      </text>
+                    </g>
+                  ) : mode === "visual" && showGallerySamples &&
                     galleryRecordsUnknown(item.control) ? (
                     <GallerySamplePreview gallery={item.control} template={item.galleryTemplate}
                       x={item.x} y={item.y} width={item.width} height={item.height}
@@ -1112,7 +1206,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
                   ].filter(Boolean).join(" · ")}</title>
                 </g>
               );
-              const clipped = clipToAncestors(draw, item.ancestors);
+              const clipped = mode === "all" ? draw : clipToAncestors(draw, item.ancestors);
               const template = mode === "structure" &&
                 galleryRecordsUnknown(item.control) && !item.visibilityUnknown
                 ? item.galleryTemplate
@@ -1312,7 +1406,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
             Overlay is withheld until the matching viewport is selected.
           </span>}
         {reference && <span>Reference: {reference.name} · browser-only, no upload or pixel-parity claim</span>}
-        <span>{mode === "visual" ? "Static visual approximation" : "Control structure"}</span>
+        <span>{mode === "visual" ? "Static visual approximation" :
+          mode === "all" ? "All authored controls · conditions and coordinates" :
+            "Control structure"}</span>
         <span>{visibleItems.length} drawn nodes · {unresolved} unresolved layouts</span>
         {mode === "visual" && showGallerySamples && visibleItems.some(item => galleryRecordsUnknown(item.control)) && (
           <span className="preview-unknown-state" role="status">
