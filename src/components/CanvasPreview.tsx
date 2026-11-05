@@ -343,6 +343,9 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
   initialFormSamples = false, initialFormSnapshot, initialScenario = {} }: Props) {
   const [profile, setProfile] = useState<Profile>("desktop");
   const [mode, setMode] = useState<PreviewMode>(initialMode);
+  const [toolsExpanded, setToolsExpanded] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const [canvasOnly, setCanvasOnly] = useState(false);
   const [inspectFilter, setInspectFilter] = useState<VisibilityInspectionFilter>("all");
   const [inspectQuery, setInspectQuery] = useState("");
   const [inspectPage, setInspectPage] = useState(0);
@@ -880,14 +883,28 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
     : `${Math.round(extendedCanvas.width * Number(zoom) / 100)}px`;
 
   return (
-    <main className="preview">
+    <main className={`preview${canvasOnly ? " canvas-only" : ""}`}>
       <div className="preview-toolbar">
         <div className="preview-breadcrumb">
           <span>Screens</span>
           <Icon name="chevron" size={12} />
           <strong>{screen.name}</strong>
         </div>
-        <div className="preview-toolbar-meta preview-actions">
+        <div className="preview-toolbar-toggles">
+          <button type="button" className="preview-panel-toggle"
+            aria-expanded={toolsExpanded} aria-controls="canvas-preview-tools"
+            onClick={() => setToolsExpanded(expanded => !expanded)}>
+            {toolsExpanded ? "Hide controls" : "Show controls"}
+          </button>
+          <button type="button" className="preview-panel-toggle preview-focus-toggle"
+            onClick={() => setCanvasOnly(true)}
+            aria-label="Canvas only view">
+            Canvas only
+          </button>
+        </div>
+        <div id="canvas-preview-tools"
+          className="preview-toolbar-meta preview-actions"
+          hidden={!toolsExpanded}>
           <div className="preview-segment" role="group" aria-label="Preview mode">
             <button type="button" className={mode === "visual" ? "active" : ""}
               aria-pressed={mode === "visual"} onClick={() => setMode("visual")}>Visual</button>
@@ -1110,6 +1127,12 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
           <span className="preview-dimensions">{width} × {height}</span>
         </div>
       </div>
+      {canvasOnly && (
+        <button type="button" className="preview-exit-focus"
+          onClick={() => setCanvasOnly(false)} aria-label="Exit Canvas only view">
+          Exit Canvas only
+        </button>
+      )}
       <div className="canvas-stage">
         <div className="canvas-frame" style={{ width: zoomWidth }}>
           <div className="canvas-frame-bar">
@@ -1357,7 +1380,21 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
           </svg>
         </div>
       </div>
-      <div className="preview-note">
+      <div className="preview-footer">
+        <div className="preview-footer-handle">
+          <button type="button" className="preview-panel-toggle"
+            aria-expanded={detailsExpanded} aria-controls="canvas-preview-details"
+            onClick={() => setDetailsExpanded(expanded => !expanded)}>
+            {detailsExpanded ? "Hide details" : "Show details"}
+          </button>
+          <span className="preview-footer-summary">
+            {visibleItems.length} controls drawn · {unresolved} unresolved
+            {runtimeVisibilityUnknown > 0 ? " · " + runtimeVisibilityUnknown + " visibility unknown" : ""}
+            {interactive && navigationState ? " · " + navigationState.notices.length + " skipped actions" : ""}
+          </span>
+        </div>
+        <div id="canvas-preview-details" className="preview-note"
+          hidden={!detailsExpanded}>
         {mode === "all" && (
           <details className="preview-visibility-audit">
             <summary>
@@ -1679,6 +1716,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
         )}
         <span>Gallery templates are illustrative; runtime records are not evaluated.</span>
         <span>Viewport profiles simulate dimensions; no formulas or connectors are executed.</span>
+        </div>
       </div>
     </main>
   );
