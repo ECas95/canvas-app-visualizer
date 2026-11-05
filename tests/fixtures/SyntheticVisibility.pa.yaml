@@ -1,0 +1,72 @@
+# Fully fictional Canvas source, visibility and nested-template regression.
+# No SQL rows, permissions or user application data.
+Screens:
+  VisibilityLab:
+    Properties:
+      Fill: =RGBA(249, 250, 252, 1)
+    Children:
+      - HiddenPanel:
+          Control: GroupContainer@1.3.0
+          Properties:
+            X: =80
+            Y: =90
+            Width: =260
+            Height: =120
+            Visible: =false
+            Fill: =RGBA(255, 220, 220, 1)
+          Children:
+            - HiddenCaption:
+                Control: Classic/Label@2.5.1
+                Properties:
+                  X: =8
+                  Y: =12
+                  Width: =180
+                  Height: =28
+                  Text: ="Synthetic caption under hidden parent"
+      - ConditionalPanel:
+          Control: Classic/Label@2.5.1
+          Properties:
+            X: =430
+            Y: =110
+            Width: =210
+            Height: =42
+            Visible: =varShow
+            Text: ="Condition requires a local scenario"
+      - ExternalGate:
+          Control: Classic/Label@2.5.1
+          Properties:
+            X: =710
+            Y: =110
+            Width: =250
+            Height: =42
+            Visible: =CountRows(ExternalCatalogue) > 0
+            Text: ="Unknown external runtime state"
+      - TemplateGallery:
+          Control: Classic/VerticalGallery@2.3.0
+          Variant: Vertical
+          Properties:
+            X: =55
+            Y: =280
+            Width: =720
+            Height: =360
+            Items: =ExternalCatalogue
+            WrapCount: =2
+            TemplateSize: =180
+            TemplatePadding: =8
+          Children:
+            - TemplateCaption:
+                Control: Classic/Label@2.5.1
+                Properties:
+                  X: =12
+                  Y: =18
+                  Width: =155
+                  Height: =32
+                  Text: =ThisItem.Title
+      - OutsideViewport:
+          Control: Classic/Button@2.2.0
+          Properties:
+            X: =1450
+            Y: =72
+            Width: =180
+            Height: =40
+            Text: ="Outside viewport control"
