@@ -111,6 +111,31 @@ describe("CanvasPreview All elements source visibility and coordinates", () => {
     );
   });
 
+  it("evaluates Parent.Visible from a verified parent, without confusing inherited visibility", () => {
+    const leaf = control("ParentCondition", "Classic/Label@2.5.1", {
+      X: "=6", Y: "=8", Width: "=80", Height: "=22",
+      Visible: "=Parent.Visible", Text: '="Parent-conditioned"'
+    });
+    const intermediate = control("Intermediate", "GroupContainer@1.3.0", {
+      X: "=15", Y: "=14", Width: "=180", Height: "=90",
+      Visible: "=true"
+    }, [leaf]);
+    const root = control("HiddenAncestor", "GroupContainer@1.3.0", {
+      X: "=10", Y: "=15", Width: "=240", Height: "=160",
+      Visible: "=false"
+    }, [intermediate]);
+    const fixture: CanvasScreen = {
+      id: "ParentVisible", name: "ParentVisible", properties: {},
+      children: [root], sourceFile: "Src/Synthetic.pa.yaml",
+      sourceFormat: "pa-yaml-v3"
+    };
+    const html = renderToStaticMarkup(<CanvasPreview screen={fixture}
+      initialMode="all" onSelect={() => {}} />);
+    expect(html).toMatch(
+      /<g class="visual-control"[^>]*data-inspect-effective-visibility="hidden"[^>]*data-inspect-own-visibility="visible"[^>]*aria-label="Inspect ParentCondition/
+    );
+  });
+
   it("does not lose false controls that AutoLayout excludes from its normal flow", () => {
     const hiddenFlow = control("HiddenFlow", "Classic/Button@2.2.0", {
       Visible: "=false", Width: "=100", Height: "=36", Text: '="Hidden action"'
