@@ -38,6 +38,19 @@ try {
   );
   const svg = page.getByRole("img", { name: "VisualRegression canvas preview" });
   await svg.waitFor({ timeout: 20000 });
+  // A large Canvas preview should be the default, even for complex sources.
+  assert.equal(await page.locator("#canvas-preview-tools").isVisible(), false);
+  assert.equal(await page.locator("#canvas-preview-details").isVisible(), false);
+  const compactStageHeight = await page.locator(".canvas-stage").evaluate(node =>
+    node.getBoundingClientRect().height);
+  await page.getByRole("button", { name: "Show controls" }).click();
+  await page.getByRole("button", { name: "Show details" }).click();
+  assert.equal(await page.locator("#canvas-preview-tools").isVisible(), true);
+  assert.equal(await page.locator("#canvas-preview-details").isVisible(), true);
+  const expandedStageHeight = await page.locator(".canvas-stage").evaluate(node =>
+    node.getBoundingClientRect().height);
+  assert.ok(compactStageHeight > expandedStageHeight + 40,
+    "Collapsing diagnostic and toolbar bands must restore Canvas height");
   const report = [];
 
   for (const profile of profiles) {
@@ -200,6 +213,8 @@ try {
     resolve("tests/fixtures/SyntheticNavigation.pa.yaml")
   );
   await page.getByRole("img", { name: "SampleHome canvas preview" }).waitFor();
+  await page.getByRole("button", { name: "Show controls" }).click();
+  await page.getByRole("button", { name: "Show details" }).click();
   await page.getByRole("checkbox", { name: "Simulate local state" }).check();
   await page.getByRole("button", { name: /Inspect GoDetails/ }).click();
   await page.getByRole("img", { name: "SampleDetails canvas preview" })
@@ -221,6 +236,8 @@ try {
   );
   const lab = page.getByRole("img", { name: "VisibilityLab canvas preview" });
   await lab.waitFor({ timeout: 20000 });
+  await page.getByRole("button", { name: "Show controls" }).click();
+  await page.getByRole("button", { name: "Show details" }).click();
   await page.getByRole("button", { name: "All elements" }).click();
   await lab.locator('[data-inspect-template="definition"]').waitFor();
   assert.equal(await lab.getAttribute("data-inspection-declared-controls"), "7");
@@ -316,6 +333,39 @@ try {
     desktopWorkspaceHeight: Math.round(desktopLayout.workspace.height),
     narrowWorkspaceHeight: Math.round(narrowLayout.workspace.height),
     warningCompact: true, canvasAndPanelsVisible: true });
+
+  // User-reported usability regression: long diagnostics and controls
+  // should never permanently consume the screen. Both can be closed
+  // independently; Canvas-only focus offers an always-visible exit.
+  assert.equal(await page.locator("#canvas-preview-tools").isVisible(), false);
+  assert.equal(await page.locator("#canvas-preview-details").isVisible(), false);
+  const beforeFocus = await page.locator(".canvas-stage").evaluate(node =>
+    node.getBoundingClientRect().height);
+  await page.getByRole("button", { name: "Canvas only" }).click();
+  const focused = page.locator(".preview.canvas-only");
+  await focused.waitFor();
+  assert.equal(await page.locator(".preview-toolbar").isVisible(), false);
+  assert.equal(await page.locator(".preview-footer").isVisible(), false);
+  const focusHeight = await page.locator(".canvas-stage").evaluate(node =>
+    node.getBoundingClientRect().height);
+  assert.ok(focusHeight > beforeFocus + 45);
+  await page.locator(".preview").screenshot({
+    path: resolve(output, "canvas-only-focus.png"), animations: "disabled"
+  });
+  await page.getByRole("button", { name: "Exit Canvas only view" }).click();
+  assert.equal(await focused.count(), 0);
+  await page.getByRole("button", { name: "Show controls" }).click();
+  await page.getByRole("button", { name: "Show details" }).click();
+  assert.equal(await page.locator("#canvas-preview-tools").isVisible(), true);
+  assert.equal(await page.locator("#canvas-preview-details").isVisible(), true);
+  await page.getByRole("button", { name: "Hide details" }).click();
+  assert.equal(await page.locator("#canvas-preview-details").isVisible(), false);
+  assert.equal(await page.locator("#canvas-preview-tools").isVisible(), true);
+  await page.getByRole("button", { name: "Hide controls" }).click();
+  assert.equal(await page.locator("#canvas-preview-tools").isVisible(), false);
+  report.push({ scenario: "compact-canvas-panels",
+    defaultCollapsed: true, independentToggles: true,
+    focusRestoresCanvas: true, focusExitAvailable: true });
 
   await writeFile(resolve(output, "geometry.json"), JSON.stringify(report, null, 2) + "\n");
   console.log("Chromium visual smoke: 3 profiles, 10 screenshots including Gallery, reference, quantitative heatmap and all-controls visibility; source geometry verified.");
