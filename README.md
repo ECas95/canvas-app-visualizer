@@ -11,6 +11,13 @@ Open a modern `.msapp` package or current `.pa.yaml` source and inspect screens,
 
 > Canvas App Visualizer is an independent project and is not affiliated with or endorsed by Microsoft. It does not replace Power Apps Studio or the Power Apps runtime.
 
+## v0.8.1 — Compact Canvas workspace controls
+
+- **Show controls / Hide controls:** expand or collapse the advanced preview toolbar. It starts collapsed so imported Canvas screens get usable space immediately; gallery, reference image, viewport, simulation and source inspection options remain available without losing their state.
+- **Show details / Hide details:** independently expand/collapse the diagnostics band, including source warnings, Gallery template columns, visual differences, geometry review and local navigation/state history. Its collapsed state retains a small summary strip, and expanded content has a bounded scrollable height.
+- **Canvas only / Exit Canvas only:** hide both bands temporarily for a full-height preview, with a visible exit action that restores prior control and diagnostics expansion states.
+- **Regression checks:** synthetic Chromium fixture verifies restored preview height, independently reversible controls, full-height Canvas-only mode and both bands hidden by default. No app data or permissions are inferred.
+
 ## v0.8.0 — Source-complete visibility and conditional control inspection
 
 - **All elements**: a third preview mode that ghosts hidden, conditional, nested, off-viewport and Gallery template-definition controls without changing the safe default Visual mode.
