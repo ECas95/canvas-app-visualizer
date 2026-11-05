@@ -389,6 +389,14 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
   const [simulationMessage, setSimulationMessage] = useState("Simulation off. No behavior formulas are executed.");
   const instanceId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
 
+  // Scenario variables belong to the current imported app, not the browser
+  // session. Keep them across Screen navigation but erase on a new app import.
+  useEffect(() => {
+    setScenarioSymbols({});
+    setScenarioError(null);
+    setInspectPage(0);
+  }, [navigationScreens]);
+
   useEffect(() => {
     // Internal Navigate/Back must preserve the opted-in simulator and global
     // variables. Browsing to another screen also triggers its local OnVisible.
