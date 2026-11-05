@@ -720,7 +720,8 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
   const templateControlCount = inspectionRows.filter(item => item.templateDefinition).length;
   const extendedCanvas = useMemo(() => {
     if (mode !== "all") return { x: 0, y: 0, width, height };
-    let x0 = 0, y0 = 0, x1 = width, y1 = height;
+    let x0: number = 0, y0: number = 0;
+    let x1: number = width, y1: number = height;
     for (const item of items) {
       if (![item.x, item.y, item.width, item.height].every(Number.isFinite) ||
           item.width <= 0 || item.height <= 0) continue;
