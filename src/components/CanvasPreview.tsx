@@ -335,6 +335,7 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
   const [mode, setMode] = useState<PreviewMode>(initialMode);
   const [inspectFilter, setInspectFilter] = useState<VisibilityInspectionFilter>("all");
   const [inspectQuery, setInspectQuery] = useState("");
+  const [inspectPage, setInspectPage] = useState(0);
   const [scenarioSymbols, setScenarioSymbols] = useState<PreviewVariables>({});
   const [scenarioError, setScenarioError] = useState<string | null>(null);
   const [zoom, setZoom] = useState<Zoom>("fit");
@@ -453,6 +454,21 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
     } catch {
       if (referenceRequest.current === request)
         setReferenceError("Could not decode this local screenshot.");
+    }
+  }
+
+  async function loadVisibilityScenario(file: File | undefined) {
+    if (!file) return;
+    if (file.size > MAX_SCENARIO_JSON_BYTES) {
+      setScenarioError("Scenario JSON must be 8 KB or smaller.");
+      return;
+    }
+    try {
+      const parsed = parseVisibilityScenario(await file.text());
+      setScenarioSymbols(parsed);
+      setScenarioError(null);
+    } catch (error) {
+      setScenarioError(error instanceof Error ? error.message : "Invalid scenario JSON.");
     }
   }
 
@@ -692,6 +708,13 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
     filterInspectionRecords(inspectionRows, inspectFilter, inspectQuery),
     [inspectionRows, inspectFilter, inspectQuery]
   );
+  const visibleInspectionPage = filteredInspectionRows.slice(
+    inspectPage * 60, (inspectPage + 1) * 60
+  );
+  const inspectionPages = Math.max(1, Math.ceil(filteredInspectionRows.length / 60));
+  const hiddenControlCount = inspectionRows.filter(item => item.effective === "hidden").length;
+  const unknownControlCount = inspectionRows.filter(item => item.effective === "unknown").length;
+  const templateControlCount = inspectionRows.filter(item => item.templateDefinition).length;
   const extendedCanvas = useMemo(() => {
     if (mode !== "all") return { x: 0, y: 0, width, height };
     let x0 = 0, y0 = 0, x1 = width, y1 = height;
@@ -830,6 +853,23 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
             <button type="button" className={mode === "all" ? "active" : ""}
               aria-pressed={mode === "all"} onClick={() => setMode("all")}>All elements</button>
           </div>
+          {mode === "all" && <label className="preview-choice"
+            title="Load a synthetic scalar variable scenario; source app data is never queried">
+            <span>Scenario variables JSON</span>
+            <input type="file" accept=".json,application/json"
+              aria-label="Load visibility scenario JSON"
+              onChange={event => {
+                const file = event.currentTarget.files?.[0];
+                event.currentTarget.value = "";
+                void loadVisibilityScenario(file);
+              }} />
+          </label>}
+          {mode === "all" && Object.keys(scenarioSymbols).length > 0 &&
+            <button type="button" className="simulation-action"
+              onClick={() => {
+                setScenarioSymbols({});
+                setScenarioError(null);
+              }}>Clear visibility scenario</button>}
           <label className="preview-choice">
             <span>Viewport</span>
             <select aria-label="Simulated viewport" value={profile}
@@ -1274,6 +1314,94 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
         </div>
       </div>
       <div className="preview-note">
+        {mode === "all" && (
+          <details className="preview-visibility-audit">
+            <summary>
+              Visibility inventory: {inspectionRows.length}/{declaredControlCount} controls
+              · {hiddenControlCount} hidden · {unknownControlCount} unresolved
+              · {templateControlCount} template definitions
+            </summary>
+            <div className="preview-visibility-audit-panel"
+              role="region" aria-label="All source control visibility conditions">
+              <p>Visualized controls retain their YAML order and nested parent scope.
+                Hidden nodes are ghosted, not treated as active runtime elements.
+                Template definitions are shown once, not as fabricated data rows.</p>
+              <div className="preview-visibility-filters">
+                <label>
+                  Filter status
+                  <select aria-label="Filter control visibility" value={inspectFilter}
+                    onChange={event => {
+                      setInspectFilter(event.target.value as VisibilityInspectionFilter);
+                      setInspectPage(0);
+                    }}>
+                    <option value="all">All controls</option>
+                    <option value="hidden">Hidden (effective)</option>
+                    <option value="unknown">Condition unresolved</option>
+                    <option value="template">Gallery templates</option>
+                  </select>
+                </label>
+                <input type="search" placeholder="Find control or Visible formula"
+                  aria-label="Search source visibility inventory" value={inspectQuery}
+                  onChange={event => {
+                    setInspectQuery(event.target.value);
+                    setInspectPage(0);
+                  }} />
+              </div>
+              <div className="preview-visibility-rows">
+                {visibleInspectionPage.map(row => (
+                  <button type="button" key={row.id}
+                    className="preview-visibility-row"
+                    onClick={() => {
+                      const item = itemById.get(row.id);
+                      if (item) onSelect(item.control);
+                    }}>
+                    <strong>{row.name}</strong>
+                    <span data-inventory-status={row.effective}>
+                      {row.effective.toUpperCase()}{row.own !== row.effective
+                        ? " (inherited)" : ""}
+                      {row.templateDefinition ? " · TEMPLATE" : ""}
+                    </span>
+                    <span>X {row.x.toFixed(1)} · Y {row.y.toFixed(1)}
+                      · W {row.width.toFixed(1)} · H {row.height.toFixed(1)}
+                      {!row.geometryVerified ? " · estimated" : " · source-resolved"}
+                    </span>
+                    <small title={row.condition ?? "Visible not declared; Canvas default"}>
+                      Visible: {row.condition ?? "(default)"}
+                    </small>
+                  </button>
+                ))}
+              </div>
+              {filteredInspectionRows.length === 0 && <p>No matching controls.</p>}
+              <div className="preview-visibility-pagination">
+                <span>{filteredInspectionRows.length} matches · page
+                  {Math.min(inspectPage + 1, inspectionPages)} of {inspectionPages}</span>
+                <button type="button" disabled={inspectPage === 0}
+                  onClick={() => setInspectPage(current => Math.max(0, current - 1))}>
+                  Previous
+                </button>
+                <button type="button" disabled={inspectPage >= inspectionPages - 1}
+                  onClick={() => setInspectPage(current => Math.min(inspectionPages - 1, current + 1))}>
+                  Next
+                </button>
+              </div>
+              {inspectionRows.length !== declaredControlCount &&
+                <p role="alert">Incomplete coverage: {declaredControlCount - inspectionRows.length}
+                  source controls could not be spatially placed (depth limits or unsupported hierarchy).</p>}
+              <small>All visibility judgments are local and conditional on known
+                scalar variables. Missing SQL, permissions, gallery rows, component
+                runtime bindings or other values remain unresolved.</small>
+            </div>
+          </details>
+        )}
+        {mode === "all" && scenarioError &&
+          <span className="preview-unknown-state" role="alert">
+            Scenario: {scenarioError}
+          </span>}
+        {mode === "all" && Object.keys(scenarioSymbols).length > 0 &&
+          <span className="preview-unknown-state" role="status">
+            Synthetic conditions: {Object.keys(scenarioSymbols).join(", ")}
+            · never sourced from the imported MSAPP
+          </span>}
         {geometryIssues.length > 0 && <details className="preview-geometry-panel">
           <summary>Geometry review: {geometryIssues.length} source hints</summary>
           <div className="preview-geometry-list">
