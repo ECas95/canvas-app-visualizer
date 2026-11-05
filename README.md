@@ -11,6 +11,17 @@ Open a modern `.msapp` package or current `.pa.yaml` source and inspect screens,
 
 > Canvas App Visualizer is an independent project and is not affiliated with or endorsed by Microsoft. It does not replace Power Apps Studio or the Power Apps runtime.
 
+## v0.8.0 — Source-complete visibility and conditional control inspection
+
+- **All elements**: a third preview mode that ghosts hidden, conditional, nested, off-viewport and Gallery template-definition controls without changing the safe default Visual mode.
+- **Three-valued visibility**: independently report each control's own `Visible` condition and effective status inherited from its parent chain (**VISIBLE**, **HIDDEN**, **UNKNOWN**).
+- **Coordinates and confidence**: inspect X/Y/Width/Height per element, with explicit **estimated** flags when runtime formulas or hidden AutoLayout make exact geometry unavailable; nearby outside-screen controls can also be displayed beyond the viewport.
+- **Visibility inventory**: filter/search all source controls, inspect original formulas and select any source control directly from its row or ghost.
+- **Synthetic conditional scenarios**: optionally upload local-only scalar variable JSON to exercise known branches, without querying the MSAPP's data sources or fabricating permissions.
+- **Synthetic regression**: unit and Chromium tests ensure no hidden source controls or template definitions are lost in All elements and normal Visual mode still withholds unknown runtime data.
+
+See [Complete visibility inspection](docs/COMPLETE_VISIBILITY_INSPECTION.md). This feature audits serialized source, **not** full Power Apps runtime execution or verified access to external records.
+
 ## v0.7.0 — Safe multi-screen behavior and deeper diagnostics
 
 - **Navigate, Back and OnVisible**: opt-in, browser-only simulation of safe Power Fx navigation, per-screen contexts and local lifecycle events. Unsupported SQL/connector actions are visibly skipped; OnSelect remains transactional.
