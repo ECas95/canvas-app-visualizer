@@ -84,6 +84,7 @@ describe("CanvasPreview All elements source visibility and coordinates", () => {
     expect(html).toContain('data-inspect-effective-visibility="unknown"');
     expect(html).toContain('data-inspect-template="definition"');
     expect(html).toContain("Synthetic hidden descendant");
+    expect(html).toContain("[Name #1]"); // source-derived Gallery field marker, not SQL data
     expect(html).toContain("Visibility inventory: ");
     expect((html.match(/data-inventory-status="hidden"/g) ?? [])).toHaveLength(2);
     expect(html).toContain("=varPermit");
