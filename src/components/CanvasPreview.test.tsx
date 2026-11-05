@@ -29,6 +29,28 @@ function renderHost(radius: string) {
   return renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
 }
 
+describe("CanvasPreview compact Canvas workspace", () => {
+  it("defaults to compact controls and diagnostic notes, with reversible actions", () => {
+    const screen: CanvasScreen = {
+      id: "CompactFixture", name: "CompactFixture", properties: {},
+      children: [control("Sample", "Classic/Label@2.5.1", {
+        X: "=10", Y: "=20", Width: "=120", Height: "=24",
+        Text: '="Preview remains rendered"'
+      })], sourceFile: "Src/CompactFixture.pa.yaml", sourceFormat: "pa-yaml-v3"
+    };
+    const markup = renderToStaticMarkup(<CanvasPreview screen={screen}
+      onSelect={() => {}} />);
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain("Show controls");
+    expect(markup).toContain("Show details");
+    expect(markup).toContain("Canvas only");
+    expect(markup).toMatch(/id="canvas-preview-tools"[^>]*hidden=""/);
+    expect(markup).toMatch(/id="canvas-preview-details"[^>]*hidden=""/);
+    expect(markup).toContain("Preview remains rendered");
+    expect(markup).toContain("1<!-- --> controls drawn");
+  });
+});
+
 describe("CanvasPreview All elements source visibility and coordinates", () => {
   const nested = control("NestedUnderHidden", "Classic/Label@2.5.1", {
     X: "=8", Y: "=12", Width: "=160", Height: "=28",
