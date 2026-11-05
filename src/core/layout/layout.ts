@@ -29,7 +29,7 @@ export interface PositionedControl {
   control: CanvasControl;
   rect: VisualRect;
   /** Source-only AutoLayout visibility; unknown must not be re-evaluated with fallback geometry. */
-  sourceVisibility?: "visible" | "unknown";
+  sourceVisibility?: "visible" | "hidden" | "unknown";
 }
 
 const DEFAULTS: Record<string, { width: number; height: number }> = {
