@@ -29,6 +29,123 @@ function renderHost(radius: string) {
   return renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
 }
 
+describe("CanvasPreview All elements source visibility and coordinates", () => {
+  const nested = control("NestedUnderHidden", "Classic/Label@2.5.1", {
+    X: "=8", Y: "=12", Width: "=160", Height: "=28",
+    Text: '="Synthetic hidden descendant"'
+  });
+  const hidden = control("HiddenPanel", "GroupContainer@1.3.0", {
+    X: "=80", Y: "=90", Width: "=260", Height: "=120",
+    Visible: "=false", Fill: "=RGBA(255, 230, 230, 1)"
+  }, [nested]);
+  const guarded = control("GuardedLabel", "Classic/Label@2.5.1", {
+    X: "=420", Y: "=80", Width: "=180", Height: "=30",
+    Visible: "=varPermit", Text: '="Conditional synthetic label"'
+  });
+  const responsive = control("ResponsiveIcon", "Classic/Icon@2.5.0", {
+    X: "=640", Y: "=80", Width: "=48", Height: "=48",
+    Visible: "=App.Width > 720", Icon: "=Icon.Settings"
+  });
+  const templateLeaf = control("GalleryTemplateLabel", "Classic/Label@2.5.1", {
+    X: "=14", Y: "=22", Width: "=150", Height: "=24",
+    Text: "=ThisItem.Name"
+  });
+  const gallery = control("InventedCatalogue", "Classic/VerticalGallery@2.3.0", {
+    X: "=40", Y: "=250", Width: "=600", Height: "=300",
+    Items: "=ExternalTable", TemplateSize: "=140",
+    WrapCount: "=2", TemplatePadding: "=8"
+  }, [templateLeaf]);
+  const screen: CanvasScreen = {
+    id: "AllElements", name: "AllElements", properties: {},
+    children: [hidden, guarded, responsive, gallery],
+    sourceFile: "Src/AllElements.pa.yaml", sourceFormat: "pa-yaml-v3"
+  };
+
+  it("preserves safe default runtime preview: no hidden descendants or inferred Gallery rows", () => {
+    const html = renderToStaticMarkup(<CanvasPreview screen={screen} onSelect={() => {}} />);
+    expect(html).not.toContain("Inspect HiddenPanel");
+    expect(html).not.toContain("Inspect NestedUnderHidden");
+    expect(html).not.toContain("Inspect GalleryTemplateLabel");
+    expect(html).toContain("Visible unknown — runtime condition unavailable");
+    expect(html).toContain("Inspect InventedCatalogue");
+  });
+
+  it("audits every visual control, including false, unknown and template definitions", () => {
+    const html = renderToStaticMarkup(<CanvasPreview screen={screen}
+      initialMode="all" onSelect={() => {}} />);
+    expect(html).toContain('data-inspection-mode="all-source-controls"');
+    expect(html).toContain('data-inspection-declared-controls="6"');
+    expect(html).toContain('data-inspection-drawn-controls="6"');
+    for (const name of [
+      "HiddenPanel", "NestedUnderHidden", "GuardedLabel",
+      "ResponsiveIcon", "InventedCatalogue", "GalleryTemplateLabel"
+    ]) expect(html).toContain("Inspect " + name);
+    expect(html).toContain('data-inspect-effective-visibility="hidden"');
+    expect(html).toContain('data-inspect-effective-visibility="unknown"');
+    expect(html).toContain('data-inspect-template="definition"');
+    expect(html).toContain("Synthetic hidden descendant");
+    expect(html).toContain("Visibility inventory: ");
+    expect(html).toContain("4<!-- --> hidden");
+    expect(html).toContain("Visible: <!-- -->=varPermit");
+    expect(html).toContain("X <!-- -->80.0");
+  });
+
+  it("resolves only explicit synthetic scalar scenarios and keeps inherited hidden state", () => {
+    const allowed = renderToStaticMarkup(<CanvasPreview screen={screen}
+      initialMode="all" initialScenario={{ varPermit: true }}
+      onSelect={() => {}} />);
+    expect(allowed).toContain("Synthetic conditions: ");
+    const segment = allowed.slice(
+      allowed.indexOf("Inspect GuardedLabel"),
+      allowed.indexOf("Inspect GuardedLabel") + 600
+    );
+    expect(segment).toContain('data-inspect-effective-visibility="visible"');
+    const hiddenSegment = allowed.slice(
+      allowed.indexOf("Inspect NestedUnderHidden"),
+      allowed.indexOf("Inspect NestedUnderHidden") + 700
+    );
+    expect(hiddenSegment).toContain('data-inspect-effective-visibility="hidden"');
+
+    const denied = renderToStaticMarkup(<CanvasPreview screen={screen}
+      initialMode="all" initialScenario={{ varPermit: false }}
+      onSelect={() => {}} />);
+    const deniedSegment = denied.slice(
+      denied.indexOf("Inspect GuardedLabel"),
+      denied.indexOf("Inspect GuardedLabel") + 600
+    );
+    expect(deniedSegment).toContain('data-inspect-effective-visibility="hidden"');
+  });
+
+  it("does not lose false controls that AutoLayout excludes from its normal flow", () => {
+    const hiddenFlow = control("HiddenFlow", "Classic/Button@2.2.0", {
+      Visible: "=false", Width: "=100", Height: "=36", Text: '="Hidden action"'
+    });
+    const visibleFlow = control("VisibleFlow", "Classic/Label@2.5.1", {
+      Width: "=120", Height: "=36", Text: '="In-flow item"'
+    });
+    const host = {
+      ...control("FlowHost", "GroupContainer@1.3.0", {
+        X: "=20", Y: "=20", Width: "=500", Height: "=120",
+        LayoutDirection: "=LayoutDirection.Horizontal",
+        LayoutGap: "=10"
+      }, [hiddenFlow, visibleFlow]),
+      variant: "AutoLayout"
+    };
+    const fixture: CanvasScreen = {
+      id: "Flow", name: "Flow", properties: {}, children: [host],
+      sourceFile: "Src/SyntheticFlow.pa.yaml", sourceFormat: "pa-yaml-v3"
+    };
+    const normal = renderToStaticMarkup(<CanvasPreview screen={fixture} onSelect={() => {}} />);
+    expect(normal).not.toContain("Inspect HiddenFlow");
+    const inspect = renderToStaticMarkup(<CanvasPreview screen={fixture}
+      initialMode="all" onSelect={() => {}} />);
+    expect(inspect).toContain("Inspect HiddenFlow");
+    expect(inspect).toContain("Inspect VisibleFlow");
+    expect(inspect).toContain('data-inspection-drawn-controls="3"');
+    expect(inspect).toContain('data-inspect-geometry="approximate"');
+  });
+});
+
 describe("CanvasPreview nested host clipping", () => {
   it("uses serialized host corners for the child clipping definition", () => {
     const html = renderHost("=12");
