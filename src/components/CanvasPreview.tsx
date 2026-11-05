@@ -178,6 +178,8 @@ function flatten(
       // the default width of a SQL-dependent parent container.
       ...(parentGeometryVerified ? siblingSymbols : {}),
       "App.Width": appWidth, "App.Height": appHeight,
+      ...(parentOwnVisibility !== "unknown"
+        ? { "Parent.Visible": parentOwnVisibility === "visible" } : {}),
       ...(parentWidthVerified ? { "Parent.Width": parentWidth } : {}),
       ...(parentHeightVerified ? { "Parent.Height": parentHeight } : {}),
       ...simulationSymbols,
