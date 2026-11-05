@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { FileDrop } from "./components/FileDrop";
 import { AppTree } from "./components/AppTree";
+import { ResizableWorkspace } from "./components/ResizableWorkspace";
 import { CanvasPreview } from "./components/CanvasPreview";
 import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { Inspector } from "./components/Inspector";
@@ -279,7 +280,7 @@ export default function App() {
         </div>
       )}
 
-      <div className="workspace">
+      <ResizableWorkspace>
         <AppTree
           app={app}
           selectedId={selectedControl?.id ?? selectedScreenId}
@@ -344,7 +345,7 @@ export default function App() {
             )}
           </div>
         </aside>
-      </div>
+      </ResizableWorkspace>
 
       <footer className="statusbar">
         <div>

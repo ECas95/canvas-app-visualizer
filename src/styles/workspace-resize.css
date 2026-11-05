@@ -1,0 +1,58 @@
+/* Source inspector and explorer widths are browser-local UI state only. */
+.workspace.resizable-workspace{
+  /* Reserve row 3 for the optional warning strip; keep preview in the 1fr row. */
+  grid-row:4;
+  grid-template-columns:var(--explorer-width,266px) 8px minmax(340px,1fr) 8px var(--details-width,380px);
+  gap:0;
+}
+.workbench>.statusbar{grid-row:5}
+.workspace-divider{
+  position:relative;
+  min-width:8px;
+  background:#e3e6eb;
+  border-left:1px solid #d1d7df;
+  border-right:1px solid #d1d7df;
+  cursor:col-resize;
+  touch-action:none;
+  user-select:none;
+}
+.workspace-divider::after{
+  content:"";
+  position:absolute;
+  top:calc(50% - 22px);
+  left:2px;
+  width:2px;
+  height:44px;
+  border-radius:2px;
+  background:#9aa7b8;
+  opacity:.7;
+}
+.workspace-divider:hover,.workspace-divider.active{
+  background:#cfe3f5;
+}
+.workspace-divider:focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:-2px;
+  background:#e2f0fb;
+}
+.workspace.is-resizing{cursor:col-resize;user-select:none}
+.workspace.is-resizing .canvas-stage{pointer-events:none}
+
+@media(max-width:980px){
+  .workbench{
+    height:auto;
+    min-height:100vh;
+    overflow:visible;
+    grid-template-rows:48px auto auto auto;
+  }
+  .workspace.resizable-workspace{display:block}
+  .workspace.resizable-workspace>.workspace-divider{display:none}
+  .workspace.resizable-workspace>.app-tree{
+    min-height:260px;
+    max-height:340px;
+    overflow:auto;
+  }
+  .workspace.resizable-workspace>.preview{min-height:600px}
+  .workspace.resizable-workspace>.right-panel{min-height:380px}
+  .statusbar{display:none}
+}

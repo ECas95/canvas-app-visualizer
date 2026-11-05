@@ -32,3 +32,25 @@
 .finding-jump{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;padding:5px 8px;border:1px solid #b9d2e6;border-radius:5px;background:#f4f9fd;color:#0b5a97;cursor:pointer;font-weight:600;font-size:9px}
 .finding-jump:hover{background:#e5f2fb;border-color:#75aed7}
 .finding-jump:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Inspect serialized source without guessing Power Fx results or Canvas defaults. */
+.inspector-section-heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:13px 0 8px}
+.inspector-section-heading strong{font-size:11px;font-weight:650}
+.inspector-section-heading span{color:var(--text3);font-size:9px;text-align:right}
+.inspector-geometry{padding:10px;margin-bottom:15px;border:1px solid var(--border);border-radius:7px;background:#f7f9fb}
+.inspector-geometry .inspector-section-heading{margin:0 0 9px}
+.inspector-geometry-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:0}
+.inspector-geometry-item{min-width:0;padding:7px 8px;border:1px solid #e2e8f0;border-radius:5px;background:#fff}
+.inspector-geometry-item dt{display:flex;align-items:center;justify-content:space-between;color:var(--text3);font-size:9px;font-weight:650}
+.inspector-geometry-item dt span{color:#456985;font-size:10px}
+.inspector-geometry-item dd{margin:5px 0 0;min-width:0}
+.inspector-geometry-item code{display:block;overflow-wrap:anywhere;white-space:pre-wrap;color:var(--text);font-family:"Cascadia Code",Consolas,monospace;font-size:10px;line-height:1.4}
+.inspector-property-toolbar{display:flex;gap:6px;margin-bottom:9px}
+.inspector-property-toolbar input{flex:1;min-width:0;height:32px;padding:0 8px;border:1px solid var(--border2);border-radius:5px;background:#fff;color:var(--text);font-size:10px}
+.inspector-property-toolbar input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.inspector-property-toolbar button{flex:none;padding:0 8px;border:1px solid var(--border2);border-radius:5px;background:#fff;color:var(--text2);font-size:9px;cursor:pointer}
+.inspector-property-toolbar button.active{background:#e7f2fc;border-color:#8db8dc;color:#0b5a97}
+.inspector-property-toolbar button:focus-visible,.inspector-no-results button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.inspector-property-toolbar button span{margin-left:3px;font-weight:700}
+.inspector-no-results{padding:20px 10px;border:1px dashed var(--border2);border-radius:6px;text-align:center;color:var(--text3);font-size:10px}
+.inspector-no-results button{border:0;background:transparent;color:var(--accent);font-size:10px;cursor:pointer;text-decoration:underline}
