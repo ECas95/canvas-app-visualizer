@@ -212,8 +212,44 @@ try {
     ?.includes("SampleHome"));
   report.push({ scenario: "safe-navigation", navigate: true, back: true,
     lifecycle: true, localOnly: true });
+  // All elements: no private MSAPP data. Inspect hidden, conditional,
+  // nested and gallery-template YAML definitions in their authored geometry.
+  await page.getByRole("button", { name: "Open another" }).click();
+  await page.locator('input[type="file"]').setInputFiles(
+    resolve("tests/fixtures/SyntheticVisibility.pa.yaml")
+  );
+  const lab = page.getByRole("img", { name: "VisibilityLab canvas preview" });
+  await lab.waitFor({ timeout: 20000 });
+  await page.getByRole("button", { name: "All elements" }).click();
+  await lab.locator('[data-inspect-template="definition"]').waitFor();
+  assert.equal(await lab.getAttribute("data-inspection-declared-controls"), "7");
+  assert.equal(await lab.getAttribute("data-inspection-drawn-controls"), "7");
+  const hidden = lab.locator('g[aria-label^="Inspect HiddenCaption"]');
+  const conditional = lab.locator('g[aria-label^="Inspect ConditionalPanel"]');
+  const external = lab.locator('g[aria-label^="Inspect ExternalGate"]');
+  assert.equal(await hidden.getAttribute("data-inspect-effective-visibility"), "hidden");
+  assert.equal(await conditional.getAttribute("data-inspect-effective-visibility"), "unknown");
+  assert.equal(await external.getAttribute("data-inspect-effective-visibility"), "unknown");
+  assert.ok((await lab.getAttribute("viewBox"))?.includes("1630"));
+  await page.getByLabel("Load visibility scenario JSON").setInputFiles(
+    resolve("tests/fixtures/SyntheticVisibilityScenario.json")
+  );
+  await page.getByText("Synthetic conditions:", { exact: false }).waitFor();
+  assert.equal(await conditional.getAttribute("data-inspect-effective-visibility"), "visible");
+  assert.equal(await external.getAttribute("data-inspect-effective-visibility"), "unknown");
+  await page.locator(".canvas-stage").screenshot({
+    path: resolve(output, "all-source-visibility.png"),
+    animations: "disabled"
+  });
+  await page.getByRole("button", { name: "Visual", exact: true }).click();
+  assert.equal(await lab.locator('g[aria-label^="Inspect HiddenCaption"]').count(), 0);
+  assert.equal(await lab.locator('g[aria-label^="Inspect TemplateCaption"]').count(), 0);
+  report.push({ scenario: "all-source-visibility", controls: 7,
+    hidden: true, conditional: true, template: true,
+    offscreen: true, scenarioLocalOnly: true });
+
   await writeFile(resolve(output, "geometry.json"), JSON.stringify(report, null, 2) + "\n");
-  console.log("Chromium visual smoke: 3 profiles, 9 screenshots including Gallery, reference and quantitative heatmap; source geometry verified.");
+  console.log("Chromium visual smoke: 3 profiles, 10 screenshots including Gallery, reference, quantitative heatmap and all-controls visibility; source geometry verified.");
 } finally {
   await browser?.close();
   await server.close();
