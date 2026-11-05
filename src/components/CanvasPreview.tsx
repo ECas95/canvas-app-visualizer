@@ -116,7 +116,8 @@ function flatten(
   parentHeightVerified = true,
   includeSuppressed = false,
   inheritedVisibility: InspectVisibility = "visible",
-  inheritedTemplate = false
+  inheritedTemplate = false,
+  parentOwnVisibility: InspectVisibility = "visible"
 ): DrawItem[] {
   const output: DrawItem[] = [];
   const baseContext = {
@@ -152,6 +153,8 @@ function flatten(
     const dimensionSymbols = {
       ...simulationSymbols,
       "App.Width": appWidth, "App.Height": appHeight,
+      ...(parentOwnVisibility !== "unknown"
+        ? { "Parent.Visible": parentOwnVisibility === "visible" } : {}),
       ...(parentWidthVerified ? { "Parent.Width": parentWidth } : {}),
       ...(parentHeightVerified ? { "Parent.Height": parentHeight } : {})
     };
@@ -199,6 +202,8 @@ function flatten(
     const visibility = sourceVisibility === "unknown"
       ? previewVisibility(control, {
           "App.Width": appWidth, "App.Height": appHeight,
+          ...(parentOwnVisibility !== "unknown"
+            ? { "Parent.Visible": parentOwnVisibility === "visible" } : {}),
           ...simulationSymbols,
           ...(verifiedWidth !== null ? { "Self.Width": verifiedWidth } : {}),
           ...(verifiedHeight !== null ? { "Self.Height": verifiedHeight } : {})
@@ -279,7 +284,8 @@ function flatten(
       editorGroup ? parentHeightVerified : verifiedHeight !== null,
       includeSuppressed,
       effectiveVisibility,
-      inheritedTemplate || galleryRecordsUnknown(control)
+      inheritedTemplate || galleryRecordsUnknown(control),
+      visibility
     ));
   }
   return output;
