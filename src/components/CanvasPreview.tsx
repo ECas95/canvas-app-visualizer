@@ -19,7 +19,7 @@ import {
   type InspectVisibility, type InspectVisibilityRecord,
   type VisibilityInspectionFilter
 } from "../core/layout/visibilityInspection";
-import { staticBoolean, staticNumber } from "../core/powerfx/staticEval";
+import { staticBoolean, staticNumber, staticString } from "../core/powerfx/staticEval";
 import { dependsOnRuntimeGalleryItems, galleryRecordsUnknown } from "../core/layout/previewDataState";
 import { previewScopedSymbols, simulateScopedPreviewBehavior, type PreviewScopedState, type PreviewVariables } from "../core/powerfx/previewBehavior";
 import { previewNavigationSymbols, runPreviewNavigation,
@@ -27,7 +27,7 @@ import { previewNavigationSymbols, runPreviewNavigation,
   type PreviewNavigationState } from "../core/powerfx/previewNavigation";
 import { CanvasVisualControl } from "./CanvasVisualControl";
 import { GallerySamplePreview } from "./GallerySamplePreview";
-import { galleryReferencedFields } from "../core/layout/gallerySchemaPreview";
+import { galleryReferencedFields, galleryTemplatePlaceholderText } from "../core/layout/gallerySchemaPreview";
 import { gallerySampleCells } from "../core/layout/gallerySchemaPreview";
 import { parseGallerySnapshotJson, MAX_GALLERY_JSON_BYTES,
   type GalleryLocalRow } from "../core/layout/galleryLocalSnapshot";
@@ -665,6 +665,29 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
     }
   }
 
+  function inspectionPaintedControl(item: DrawItem): {
+    control: CanvasControl; symbols: PreviewVariables
+  } {
+    const initial = formPreview(item);
+    if (!item.templateDefinition) return initial;
+    // Source-derived example text exists solely in All elements mode.
+    // Gallery data, identity and connector rows are never inferred.
+    const props = initial.control.properties;
+    let copy: Record<string, unknown> | null = null;
+    for (const property of ["Text", "Label", "Default", "Placeholder", "HintText"]) {
+      if (props[property] === undefined ||
+          staticString(props[property], initial.symbols) !== null) continue;
+      const marker = galleryTemplatePlaceholderText(props[property], 0);
+      if (!marker) continue;
+      copy ??= { ...props };
+      copy[property] = '="' + marker.replaceAll('"', '""') + '"';
+    }
+    return {
+      control: copy ? { ...initial.control, properties: copy } : initial.control,
+      symbols: initial.symbols
+    };
+  }
+
   const scrollRanges = useMemo(() => previewScrollRanges(rawItems.map(item => ({
     id: item.control.id, ancestors: item.ancestors, x: item.x, y: item.y,
     width: item.width, height: item.height, dynamic: item.dynamic,
@@ -1134,8 +1157,8 @@ export function CanvasPreview({ screen, selectedId, onSelect, mediaAssets = [],
                       <g opacity={item.effectiveVisibility === "hidden" ? 0.32 :
                         item.effectiveVisibility === "unknown" ? 0.58 : 0.85}
                         pointerEvents="none">
-                        <CanvasVisualControl control={item.control}
-                          simulationSymbols={item.renderSymbols}
+                        <CanvasVisualControl control={inspectionPaintedControl(item).control}
+                          simulationSymbols={inspectionPaintedControl(item).symbols}
                           mediaAssets={mediaAssets}
                           x={item.x} y={item.y} width={item.width} height={item.height}
                           clipId={`${instanceId}-inspect-text-${index}`} />
